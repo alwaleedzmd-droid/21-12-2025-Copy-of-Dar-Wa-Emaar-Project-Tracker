@@ -1,4 +1,5 @@
 
+
 export interface Comment {
   id: string;
   text: string;
@@ -31,6 +32,8 @@ export interface ProjectDetails {
   unitsCount?: number;
   electricityMetersCount?: number;
   waterMetersCount?: number;
+  buildingPermitsCount?: number;
+  occupancyCertificatesCount?: number;
   electricityContractor?: ContractorInfo;
   waterContractor?: ContractorInfo;
   consultantOffice?: ContractorInfo;
@@ -89,6 +92,7 @@ export interface ServiceRequest {
   projectName: string;
   comments?: Comment[];
   // Conveyance fields
+  // Fix: changed clientName from undefined type 'clientName' to 'string'
   clientName?: string;
   mobileNumber?: string;
   idNumber?: string;

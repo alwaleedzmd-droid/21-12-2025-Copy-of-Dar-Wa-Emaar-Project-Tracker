@@ -633,10 +633,12 @@ const AppContent: React.FC = () => {
                             </div>
                         </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-6">
                           <InfoCard icon={Building2} title="عدد الوحدات" value={selectedProject.details?.unitsCount} unit="وحدة" />
                           <InfoCard icon={Zap} title="عدادات الكهرباء" value={selectedProject.details?.electricityMetersCount} unit="عداد" />
                           <InfoCard icon={Droplets} title="عدادات المياة" value={selectedProject.details?.waterMetersCount} unit="عداد" />
+                          <InfoCard icon={FileText} title="رخص البناء" value={selectedProject.details?.buildingPermitsCount} unit="رخصة" />
+                          <InfoCard icon={ShieldCheck} title="شهادات الإشغال" value={selectedProject.details?.occupancyCertificatesCount} unit="شهادة" />
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -843,10 +845,12 @@ const AppContent: React.FC = () => {
              </select>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-             <div><label className="text-xs font-bold text-gray-400 pr-1">عدد الوحدات</label><input type="number" className="w-full p-4 bg-gray-50 rounded-2xl border outline-none" value={tempProjectDetails.unitsCount || ''} onChange={e => setTempProjectDetails({...tempProjectDetails, unitsCount: Number(e.target.value)})} /></div>
-             <div><label className="text-xs font-bold text-gray-400 pr-1">عدد عدادات الكهرباء</label><input type="number" className="w-full p-4 bg-gray-50 rounded-2xl border outline-none" value={tempProjectDetails.electricityMetersCount || ''} onChange={e => setTempProjectDetails({...tempProjectDetails, electricityMetersCount: Number(e.target.value)})} /></div>
-             <div><label className="text-xs font-bold text-gray-400 pr-1">عدد عدادات المياة</label><input type="number" className="w-full p-4 bg-gray-50 rounded-2xl border outline-none" value={tempProjectDetails.waterMetersCount || ''} onChange={e => setTempProjectDetails({...tempProjectDetails, waterMetersCount: Number(e.target.value)})} /></div>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+             <div><label className="text-[10px] font-bold text-gray-400 pr-1">عدد الوحدات</label><input type="number" className="w-full p-4 bg-gray-50 rounded-2xl border outline-none text-sm" value={tempProjectDetails.unitsCount || ''} onChange={e => setTempProjectDetails({...tempProjectDetails, unitsCount: Number(e.target.value)})} /></div>
+             <div><label className="text-[10px] font-bold text-gray-400 pr-1">عدادات الكهرباء</label><input type="number" className="w-full p-4 bg-gray-50 rounded-2xl border outline-none text-sm" value={tempProjectDetails.electricityMetersCount || ''} onChange={e => setTempProjectDetails({...tempProjectDetails, electricityMetersCount: Number(e.target.value)})} /></div>
+             <div><label className="text-[10px] font-bold text-gray-400 pr-1">عدادات المياة</label><input type="number" className="w-full p-4 bg-gray-50 rounded-2xl border outline-none text-sm" value={tempProjectDetails.waterMetersCount || ''} onChange={e => setTempProjectDetails({...tempProjectDetails, waterMetersCount: Number(e.target.value)})} /></div>
+             <div><label className="text-[10px] font-bold text-gray-400 pr-1">رخص البناء</label><input type="number" className="w-full p-4 bg-gray-50 rounded-2xl border outline-none text-sm" value={tempProjectDetails.buildingPermitsCount || ''} onChange={e => setTempProjectDetails({...tempProjectDetails, buildingPermitsCount: Number(e.target.value)})} /></div>
+             <div><label className="text-[10px] font-bold text-gray-400 pr-1">شهادات الإشغال</label><input type="number" className="w-full p-4 bg-gray-50 rounded-2xl border outline-none text-sm" value={tempProjectDetails.occupancyCertificatesCount || ''} onChange={e => setTempProjectDetails({...tempProjectDetails, occupancyCertificatesCount: Number(e.target.value)})} /></div>
           </div>
 
           <div className="space-y-6">
