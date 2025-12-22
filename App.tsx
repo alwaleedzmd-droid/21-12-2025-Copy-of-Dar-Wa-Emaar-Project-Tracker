@@ -127,6 +127,8 @@ const AppContent: React.FC = () => {
         const tasks = grouped[name];
         const done = tasks.filter(t => t.status === 'منجز').length;
         const metadata = projectMetadata[name] || {};
+        const firstRow = data?.find((r: any) => r.client === name);
+        
         return {
           name,
           location: metadata.location || 'الرياض',
@@ -135,7 +137,8 @@ const AppContent: React.FC = () => {
           completedTasks: done,
           progress: tasks.length > 0 ? (done / tasks.length) * 100 : 0,
           isPinned: false,
-          details: metadata
+          details: metadata,
+          imageUrl: firstRow?.image_url // جلب رابط الصورة من قاعدة البيانات
         };
       });
 
@@ -273,7 +276,7 @@ const AppContent: React.FC = () => {
             if (updated.data) {
                 const tasks: Task[] = updated.data.map((r: any) => ({ id: r.id.toString(), project: r.client, description: r.title, reviewer: r.reviewer || '', requester: r.requester || '', notes: r.notes || '', location: 'الرياض', status: r.status, date: r.date, comments: r.comments || [] }));
                 const done = tasks.filter(t => t.status === 'منجز').length;
-                setSelectedProject({ ...selectedProject, tasks, totalTasks: tasks.length, completedTasks: done, progress: tasks.length > 0 ? (done / tasks.length) * 100 : 0, details: projectMetadata[selectedProject.name] || {} });
+                setSelectedProject({ ...selectedProject, tasks, totalTasks: tasks.length, completedTasks: done, progress: tasks.length > 0 ? (done / tasks.length) * 100 : 0, details: projectMetadata[selectedProject.name] || {}, imageUrl: updated.data[0]?.image_url });
             }
         }
         setIsDeleteTaskConfirmOpen(false);
@@ -303,7 +306,7 @@ const AppContent: React.FC = () => {
         if (updated.data) {
             const tasks: Task[] = updated.data.map((r: any) => ({ id: r.id.toString(), project: r.client, description: r.title, reviewer: r.reviewer || '', requester: r.requester || '', notes: r.notes || '', location: 'الرياض', status: r.status, date: r.date, comments: r.comments || [] }));
             const done = tasks.filter(t => t.status === 'منجز').length;
-            setSelectedProject({ ...selectedProject, tasks, totalTasks: tasks.length, completedTasks: done, progress: tasks.length > 0 ? (done / tasks.length) * 100 : 0, details: projectMetadata[selectedProject.name] || {} });
+            setSelectedProject({ ...selectedProject, tasks, totalTasks: tasks.length, completedTasks: done, progress: tasks.length > 0 ? (done / tasks.length) * 100 : 0, details: projectMetadata[selectedProject.name] || {}, imageUrl: updated.data[0]?.image_url });
         }
     }
   };
@@ -757,56 +760,69 @@ const AppContent: React.FC = () => {
               {view === 'PROJECT_DETAIL' && selectedProject && (
                 <div className="space-y-6 animate-in fade-in duration-500 pb-20 text-right">
                     <button onClick={() => setView('DASHBOARD')} className="flex items-center gap-2 text-gray-400 hover:text-[#E95D22] mb-4 transition-colors font-bold"><ArrowLeft size={16} /> العودة للرئيسية</button>
-                    <div className="bg-white rounded-[40px] p-8 md:p-12 shadow-sm border space-y-10">
-                        <div className="flex flex-col md:flex-row justify-between items-start gap-6 border-b pb-10">
-                            <div>
-                                <h2 className="text-4xl font-bold text-[#1B2B48]">{selectedProject.name}</h2>
-                                <p className="text-gray-400 flex items-center gap-2 mt-2"><MapPin size={18} /> {selectedProject.location}</p>
+                    <div className="bg-white rounded-[40px] shadow-sm border overflow-hidden">
+                        {/* رأس الصفحة مع الخلفية */}
+                        <div 
+                          className={`relative flex flex-col justify-end min-h-[350px] transition-all duration-700 ${selectedProject.imageUrl ? 'text-white' : 'bg-[#1B2B48] text-white'}`}
+                          style={selectedProject.imageUrl ? {
+                            backgroundImage: `linear-gradient(to top, rgba(27, 43, 72, 1) 0%, rgba(27, 43, 72, 0.6) 50%, rgba(27, 43, 72, 0.2) 100%), url(${selectedProject.imageUrl})`,
+                            backgroundSize: 'cover',
+                            backgroundPosition: 'center',
+                          } : {}}
+                        >
+                          <div className="p-8 md:p-12 w-full flex flex-col md:flex-row justify-between items-end gap-6">
+                            <div className="space-y-2">
+                                <h2 className="text-4xl md:text-5xl font-bold drop-shadow-lg">{selectedProject.name}</h2>
+                                <p className="flex items-center gap-2 text-gray-200 drop-shadow-md"><MapPin size={18} /> {selectedProject.location}</p>
                             </div>
                             <div className="flex gap-4">
-                                <button onClick={() => { setTempProjectDetails(selectedProject.details || {}); setIsProjectEditModalOpen(true); }} className="bg-gray-50 text-[#1B2B48] p-4 rounded-3xl hover:bg-gray-100 transition-colors border" title="تعديل بيانات المشروع"><Edit2 size={24} /></button>
-                                <button onClick={() => { setProjectToDelete(selectedProject.name); setIsDeleteConfirmOpen(true); }} className="bg-red-50 text-red-500 p-4 rounded-3xl hover:bg-red-100 transition-colors border border-red-100"><Trash2 size={24} /></button>
-                                <div className="bg-[#1B2B48] text-white p-6 rounded-3xl text-center font-bold text-3xl shadow-xl min-w-[100px]">{Math.round(selectedProject.progress)}%</div>
+                                <button onClick={() => { setTempProjectDetails(selectedProject.details || {}); setIsProjectEditModalOpen(true); }} className="bg-white/20 backdrop-blur-md text-white p-4 rounded-3xl hover:bg-white/30 transition-colors border border-white/20" title="تعديل بيانات المشروع"><Edit2 size={24} /></button>
+                                <button onClick={() => { setProjectToDelete(selectedProject.name); setIsDeleteConfirmOpen(true); }} className="bg-red-500/20 backdrop-blur-md text-red-200 p-4 rounded-3xl hover:bg-red-500/40 transition-colors border border-red-500/20"><Trash2 size={24} /></button>
+                                <div className="bg-[#E95D22] text-white p-6 rounded-3xl text-center font-bold text-3xl shadow-2xl min-w-[120px] ring-4 ring-[#E95D22]/20">{Math.round(selectedProject.progress)}%</div>
                             </div>
+                          </div>
                         </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-6">
-                          <InfoCard icon={Building2} title="عدد الوحدات" value={selectedProject.details?.unitsCount} unit="وحدة" />
-                          <InfoCard icon={Zap} title="عدادات الكهرباء" value={selectedProject.details?.electricityMetersCount} unit="عداد" />
-                          <InfoCard icon={Droplets} title="عدادات المياة" value={selectedProject.details?.waterMetersCount} unit="عداد" />
-                          <InfoCard icon={FileText} title="رخص البناء" value={selectedProject.details?.buildingPermitsCount} unit="رخصة" />
-                          <InfoCard icon={ShieldCheck} title="شهادات الإشغال" value={selectedProject.details?.occupancyCertificatesCount} unit="شهادة" />
-                        </div>
+                        {/* محتوى المشروع */}
+                        <div className="p-8 md:p-12 space-y-10">
+                            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-6">
+                              <InfoCard icon={Building2} title="عدد الوحدات" value={selectedProject.details?.unitsCount} unit="وحدة" />
+                              <InfoCard icon={Zap} title="عدادات الكهرباء" value={selectedProject.details?.electricityMetersCount} unit="عداد" />
+                              <InfoCard icon={Droplets} title="عدادات المياة" value={selectedProject.details?.waterMetersCount} unit="عداد" />
+                              <InfoCard icon={FileText} title="رخص البناء" value={selectedProject.details?.buildingPermitsCount} unit="رخصة" />
+                              <InfoCard icon={ShieldCheck} title="شهادات الإشغال" value={selectedProject.details?.occupancyCertificatesCount} unit="شهادة" />
+                            </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                          <ContactCard icon={Zap} type="مقاول الكهرباء" company={selectedProject.details?.electricityContractor?.company} engineer={selectedProject.details?.electricityContractor?.engineer} phone={selectedProject.details?.electricityContractor?.phone} />
-                          <ContactCard icon={Droplets} type="مقاول المياة" company={selectedProject.details?.waterContractor?.company} engineer={selectedProject.details?.waterContractor?.engineer} phone={selectedProject.details?.waterContractor?.phone} />
-                          <ContactCard icon={ShieldCheck} type="المكتب الاستشاري" company={selectedProject.details?.consultantOffice?.company} engineer={selectedProject.details?.consultantOffice?.engineer} phone={selectedProject.details?.consultantOffice?.phone} />
-                        </div>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                              <ContactCard icon={Zap} type="مقاول الكهرباء" company={selectedProject.details?.electricityContractor?.company} engineer={selectedProject.details?.electricityContractor?.engineer} phone={selectedProject.details?.electricityContractor?.phone} />
+                              <ContactCard icon={Droplets} type="مقاول المياة" company={selectedProject.details?.waterContractor?.company} engineer={selectedProject.details?.waterContractor?.engineer} phone={selectedProject.details?.waterContractor?.phone} />
+                              <ContactCard icon={ShieldCheck} type="المكتب الاستشاري" company={selectedProject.details?.consultantOffice?.company} engineer={selectedProject.details?.consultantOffice?.engineer} phone={selectedProject.details?.consultantOffice?.phone} />
+                            </div>
 
-                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-10 pt-10 border-t">
-                            <div className="lg:col-span-1 space-y-6">
-                                <h3 className="text-xl font-bold text-[#1B2B48] flex items-center gap-2"><ListChecks className="text-[#E95D22]" /> قائمة المهام</h3>
-                                <button onClick={() => { setEditingTask(null); setNewTaskData({ status: 'متابعة', description: TECHNICAL_SERVICE_TYPES[0], notes: '' }); setIsTaskModalOpen(true); }} className="w-full bg-[#E95D22] text-white py-5 rounded-[30px] font-bold text-lg shadow-xl hover:scale-[1.02] transition-all flex items-center justify-center gap-2"><Plus size={24} /> إضافة عمل جديد</button>
-                                {completedRequestsForCurrentProject.length > 0 && (
-                                    <div className="mt-8">
-                                        <h4 className="text-sm font-bold text-gray-400 mb-4 flex items-center gap-2"><Briefcase size={16} /> الطلبات الحكومية المنجزة</h4>
-                                        <div className="space-y-3">
-                                            {completedRequestsForCurrentProject.map(req => (
-                                                <div key={req.id} onClick={() => { setSelectedRequestForDetails(req); setIsRequestDetailModalOpen(true); }} className="bg-gray-50 p-4 rounded-2xl border flex justify-between items-center cursor-pointer hover:bg-[#E95D22]/5 transition-colors">
-                                                    <div className="flex items-center gap-3">
-                                                        <div className="p-2 bg-green-100 text-green-700 rounded-lg"><FileCheck size={16} /></div>
-                                                        <span className="text-sm font-bold">{req.type === 'conveyance' ? req.clientName : req.serviceSubType}</span>
+                            <div className="grid grid-cols-1 lg:grid-cols-3 gap-10 pt-10 border-t">
+                                <div className="lg:col-span-1 space-y-6">
+                                    <h3 className="text-xl font-bold text-[#1B2B48] flex items-center gap-2"><ListChecks className="text-[#E95D22]" /> قائمة المهام</h3>
+                                    <button onClick={() => { setEditingTask(null); setNewTaskData({ status: 'متابعة', description: TECHNICAL_SERVICE_TYPES[0], notes: '' }); setIsTaskModalOpen(true); }} className="w-full bg-[#E95D22] text-white py-5 rounded-[30px] font-bold text-lg shadow-xl hover:scale-[1.02] transition-all flex items-center justify-center gap-2"><Plus size={24} /> إضافة عمل جديد</button>
+                                    {completedRequestsForCurrentProject.length > 0 && (
+                                        <div className="mt-8">
+                                            <h4 className="text-sm font-bold text-gray-400 mb-4 flex items-center gap-2"><Briefcase size={16} /> الطلبات الحكومية المنجزة</h4>
+                                            <div className="space-y-3">
+                                                {completedRequestsForCurrentProject.map(req => (
+                                                    <div key={req.id} onClick={() => { setSelectedRequestForDetails(req); setIsRequestDetailModalOpen(true); }} className="bg-gray-50 p-4 rounded-2xl border flex justify-between items-center cursor-pointer hover:bg-[#E95D22]/5 transition-colors">
+                                                        <div className="flex items-center gap-3">
+                                                            <div className="p-2 bg-green-100 text-green-700 rounded-lg"><FileCheck size={16} /></div>
+                                                            <span className="text-sm font-bold">{req.type === 'conveyance' ? req.clientName : req.serviceSubType}</span>
+                                                        </div>
+                                                        <ChevronLeft size={14} className="text-gray-300" />
                                                     </div>
-                                                    <ChevronLeft size={14} className="text-gray-300" />
-                                                </div>
-                                            ))}
+                                                ))}
+                                            </div>
                                         </div>
-                                    </div>
-                                )}
-                            </div>
-                            <div className="lg:col-span-2 space-y-4">
-                                {selectedProject.tasks.map(task => <TaskCard key={task.id} task={task} onEdit={t => { setEditingTask(t); setNewTaskData(t); setIsTaskModalOpen(true); }} onOpenComments={t => { setSelectedTaskForComments(t); setIsCommentsModalOpen(true); }} onDelete={t => { setTaskToDelete(t); setIsDeleteTaskConfirmOpen(true); }} canManage={canUserCommentOnTasks} />)}
+                                    )}
+                                </div>
+                                <div className="lg:col-span-2 space-y-4">
+                                    {selectedProject.tasks.map(task => <TaskCard key={task.id} task={task} onEdit={t => { setEditingTask(t); setNewTaskData(t); setIsTaskModalOpen(true); }} onOpenComments={t => { setSelectedTaskForComments(t); setIsCommentsModalOpen(true); }} onDelete={t => { setTaskToDelete(t); setIsDeleteTaskConfirmOpen(true); }} canManage={canUserCommentOnTasks} />)}
+                                </div>
                             </div>
                         </div>
                     </div>
