@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, ReactNode, Component } from 'react';
+import React, { useState, useEffect, ReactNode } from 'react';
 import { 
   LayoutDashboard, Users, FileText, Settings, LogOut, 
   Plus, ArrowLeft, Loader2, Send, AlertTriangle, UserPlus, 
@@ -18,6 +18,7 @@ import Modal from './components/Modal';
 
 const STORAGE_KEYS = {
     SIDEBAR_COLLAPSED: 'dar_persistent_v1_sidebar_collapsed',
+    USER_CACHE: 'dar_user_profile_cache_v2'
 };
 
 const safeStorage = {
@@ -26,6 +27,9 @@ const safeStorage = {
   },
   setItem: (key: string, value: string): void => {
     try { localStorage.setItem(key, value); } catch {}
+  },
+  removeItem: (key: string): void => {
+    try { localStorage.removeItem(key); } catch {}
   }
 };
 
@@ -37,8 +41,8 @@ interface ErrorBoundaryState {
   hasError: boolean;
 }
 
-// Fixed ErrorBoundary: Use Component directly and remove redundant constructor to ensure 'props' is recognized by TypeScript
-class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+// Fix: Using React.Component explicitly ensures TypeScript correctly recognizes inherited properties like 'this.props'
+class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
   public state: ErrorBoundaryState = { hasError: false };
 
   static getDerivedStateFromError(_: any): ErrorBoundaryState {
@@ -65,7 +69,10 @@ const AppContent: React.FC = () => {
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [isDbLoading, setIsDbLoading] = useState(true);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [currentUser, setCurrentUser] = useState<User | null>(() => {
+    const cached = safeStorage.getItem(STORAGE_KEYS.USER_CACHE);
+    return cached ? JSON.parse(cached) : null;
+  });
   const [view, setView] = useState<ViewState>('LOGIN');
   const [profiles, setProfiles] = useState<any[]>([]);
   
@@ -81,14 +88,14 @@ const AppContent: React.FC = () => {
     role: 'PR_OFFICER' as UserRole
   });
 
-  // وظيفة جلب بيانات البروفايل الكاملة مع أولوية لقاعدة البيانات
-  const fetchFullUserProfile = async (sessionUser: any): Promise<User> => {
+  // جلب سريع للبروفايل مع تحديث الكاش
+  const syncUserProfile = async (sessionUser: any) => {
     const adminEmail = 'adaldawsari@darwaemaar.com';
     let userRole: UserRole = sessionUser.user_metadata?.role || 'PR_OFFICER';
     let userName: string = sessionUser.user_metadata?.name || 'مستخدم';
 
-    // محاولة جلب البيانات من جدول profiles
     try {
+      // جلب مباشر وبسيط من الجدول
       const { data, error } = await supabase
         .from('profiles')
         .select('role, name')
@@ -97,60 +104,91 @@ const AppContent: React.FC = () => {
       
       if (data && !error) {
         if (data.role) userRole = data.role as UserRole;
-        if (data.name) userName = data.name; // الأولوية للاسم المخزن في الجدول
+        if (data.name) userName = data.name;
       }
     } catch (e) {
-      console.warn("Profiles fetch failed, using session metadata");
+      console.warn("Profile sync in background failed");
     }
 
-    // فرض صلاحيات المدير والاسم الجديد لهذا الإيميل تحديداً في حال عدم وجود بيانات بالجدول
+    // تأكيد صلاحية الأدمن للإيميل المحدد
     if (sessionUser.email === adminEmail) {
       userRole = 'ADMIN';
-      // إذا كان الاسم لا يزال "مستخدم" أو قادم من ميتادات قديمة، نستخدم الاسم المطلوب
-      if (userName === 'مستخدم' || userName === 'عبدالرحمن الدوسري') {
-        userName = 'الوليد الدوسري';
-      }
+      if (!userName || userName === 'مستخدم') userName = 'الوليد الدوسري';
     }
 
-    return {
+    const updatedUser: User = {
       id: sessionUser.id,
       name: userName,
       email: sessionUser.email || '',
       role: userRole
     };
+
+    setCurrentUser(updatedUser);
+    safeStorage.setItem(STORAGE_KEYS.USER_CACHE, JSON.stringify(updatedUser));
+    return updatedUser;
   };
 
   useEffect(() => {
+    let authTimeout: any;
+
     const checkSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.user) {
-        const userData = await fetchFullUserProfile(session.user);
-        setCurrentUser(userData);
-        updateInitialView(userData.role);
+      // بدء مؤقت الأمان (3 ثوانٍ) لضمان عدم التعليق
+      authTimeout = setTimeout(() => {
+        if (isAuthLoading) {
+          console.warn("Auth check timed out, proceeding with cached/default data");
+          setIsAuthLoading(false);
+          if (currentUser) updateInitialView(currentUser.role);
+        }
+      }, 3000);
+
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user) {
+          // جلب البيانات وتحديث الكاش في الخلفية
+          const updatedUser = await syncUserProfile(session.user);
+          updateInitialView(updatedUser.role);
+        } else {
+          setCurrentUser(null);
+          safeStorage.removeItem(STORAGE_KEYS.USER_CACHE);
+          setView('LOGIN');
+        }
+      } catch (e) {
+        console.error("Session check failed");
+      } finally {
+        clearTimeout(authTimeout);
+        setIsAuthLoading(false);
       }
-      setIsAuthLoading(false);
     };
 
     checkSession();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (session?.user) {
-        const userData = await fetchFullUserProfile(session.user);
-        setCurrentUser(userData);
-        updateInitialView(userData.role);
+        const updatedUser = await syncUserProfile(session.user);
+        updateInitialView(updatedUser.role);
+        setIsAuthLoading(false);
       } else {
         setCurrentUser(null);
+        safeStorage.removeItem(STORAGE_KEYS.USER_CACHE);
         setView('LOGIN');
+        setIsAuthLoading(false);
       }
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      subscription.unsubscribe();
+      clearTimeout(authTimeout);
+    };
   }, []);
 
   const updateInitialView = (role: UserRole) => {
-    if (role === 'TECHNICAL' || role === 'CONVEYANCE') setView('SERVICE_ONLY');
-    else if (role === 'FINANCE') setView('REQUESTS');
-    else setView('DASHBOARD');
+    if (view !== 'LOGIN' && view !== 'DASHBOARD' && view !== 'PROJECT_DETAIL' && view !== 'USERS') {
+        if (role === 'TECHNICAL' || role === 'CONVEYANCE') setView('SERVICE_ONLY');
+        else if (role === 'FINANCE') setView('REQUESTS');
+        else setView('DASHBOARD');
+    } else if (view === 'LOGIN') {
+        setView('DASHBOARD');
+    }
   };
 
   const fetchProjects = async () => {
@@ -220,7 +258,7 @@ const AppContent: React.FC = () => {
       fetchProjects();
       if (currentUser.role === 'ADMIN') fetchProfiles();
     }
-  }, [currentUser, view]);
+  }, [currentUser?.id, view]);
 
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => safeStorage.getItem(STORAGE_KEYS.SIDEBAR_COLLAPSED) === 'true');
   const [selectedProject, setSelectedProject] = useState<any | null>(null);
@@ -236,12 +274,15 @@ const AppContent: React.FC = () => {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsAuthLoading(true);
-    const { error } = await supabase.auth.signInWithPassword({ 
+    const { data, error } = await supabase.auth.signInWithPassword({ 
       email: loginData.email, 
       password: loginData.password 
     });
-    if (error) alert('بيانات الدخول غير صحيحة أو الحساب غير موجود');
-    setIsAuthLoading(false);
+    if (error) {
+      alert('بيانات الدخول غير صحيحة');
+      setIsAuthLoading(false);
+    }
+    // النجاح سيتم معالجته عبر onAuthStateChange
   };
 
   const handleAddNewUser = async (e: React.FormEvent) => {
@@ -278,6 +319,7 @@ const AppContent: React.FC = () => {
   const handleLogout = async () => {
     await supabase.auth.signOut();
     setCurrentUser(null);
+    safeStorage.removeItem(STORAGE_KEYS.USER_CACHE);
     setView('LOGIN');
   };
 
@@ -309,10 +351,11 @@ const AppContent: React.FC = () => {
     <div className={`${className} flex flex-col items-center justify-center`}><img src={DAR_LOGO} className="w-full h-full object-contain" alt="Logo" /></div>
   );
 
+  // شاشة التحميل تظهر فقط إذا لم يكن هناك مستخدم في الكاش
   if (isAuthLoading && !currentUser) return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-[#f8f9fa] gap-4">
       <Loader2 className="animate-spin w-12 h-12 text-[#E95D22]" />
-      <p className="font-cairo font-bold">جاري تحميل الملف الشخصي...</p>
+      <p className="font-cairo font-bold text-[#1B2B48]">جاري التحقق من الهوية...</p>
     </div>
   );
 
@@ -327,7 +370,7 @@ const AppContent: React.FC = () => {
         <form onSubmit={handleLogin} className="p-10 bg-white space-y-6 rounded-t-[50px] text-right">
           <div><label className="text-xs font-bold text-gray-400">البريد الإلكتروني الرسمي</label><input type="email" required className="w-full p-4 bg-gray-50 rounded-2xl border outline-none focus:border-[#E95D22]" value={loginData.email} onChange={e => setLoginData({...loginData, email: e.target.value})} /></div>
           <div><label className="text-xs font-bold text-gray-400">كلمة السر</label><input type="password" required className="w-full p-4 bg-gray-50 rounded-2xl border outline-none focus:border-[#E95D22]" value={loginData.password} onChange={e => setLoginData({...loginData, password: e.target.value})} /></div>
-          <button className="w-full bg-[#E95D22] text-white py-5 rounded-[30px] font-bold text-xl hover:bg-[#d8551f] transition-all">دخول النظام</button>
+          <button type="submit" className="w-full bg-[#E95D22] text-white py-5 rounded-[30px] font-bold text-xl hover:bg-[#d8551f] transition-all">دخول النظام</button>
           <div className="pt-4"><p className="text-center text-xs text-gray-400">جميع الحقوق محفوظة - دار وإعمار © 2025</p></div>
         </form>
       </div>
@@ -379,14 +422,11 @@ const AppContent: React.FC = () => {
 
         {view === 'USERS' && currentUser?.role === 'ADMIN' && (
           <div className="max-w-5xl mx-auto space-y-8">
-            <div className="flex justify-between items-center">
-              <h2 className="text-3xl font-bold text-[#1B2B48]">إدارة الموظفين</h2>
-            </div>
-            
+            <h2 className="text-3xl font-bold text-[#1B2B48]">إدارة الموظفين</h2>
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
               <div className="lg:col-span-1">
                 <div className="bg-white p-8 rounded-[30px] shadow-sm border sticky top-8">
-                   <h3 className="text-lg font-bold mb-6 flex items-center gap-2 text-[#E95D22]"><UserPlus size={20} /> إضافة موظف جديد</h3>
+                   <h3 className="text-lg font-bold mb-6 flex items-center gap-2 text-[#E95D22]"><UserPlus size={20} /> إضافة موظف</h3>
                    <form onSubmit={handleAddNewUser} className="space-y-4 text-right">
                       <div><label className="text-xs font-bold text-gray-400 block mb-1">الاسم</label><input type="text" required className="w-full p-3 bg-gray-50 rounded-xl border outline-none" value={newUserForm.name} onChange={e => setNewUserForm({...newUserForm, name: e.target.value})} /></div>
                       <div><label className="text-xs font-bold text-gray-400 block mb-1">البريد</label><input type="email" required className="w-full p-3 bg-gray-50 rounded-xl border outline-none" value={newUserForm.email} onChange={e => setNewUserForm({...newUserForm, email: e.target.value})} /></div>
@@ -401,7 +441,7 @@ const AppContent: React.FC = () => {
                           <option value="FINANCE">مالية</option>
                         </select>
                       </div>
-                      <button type="submit" className="w-full bg-[#1B2B48] text-white py-4 rounded-xl font-bold shadow-lg hover:bg-[#152136] transition-all">تأكيد الإضافة</button>
+                      <button type="submit" className="w-full bg-[#1B2B48] text-white py-4 rounded-xl font-bold shadow-lg hover:bg-[#152136] transition-all">حفظ الموظف</button>
                    </form>
                 </div>
               </div>
@@ -409,7 +449,7 @@ const AppContent: React.FC = () => {
               <div className="lg:col-span-2">
                 <div className="bg-white rounded-[30px] shadow-sm border overflow-hidden">
                   <div className="p-6 border-b bg-gray-50/50">
-                    <h3 className="font-bold text-[#1B2B48]">قائمة الموظفين المسجلين</h3>
+                    <h3 className="font-bold text-[#1B2B48]">قائمة الموظفين</h3>
                   </div>
                   <div className="divide-y">
                     {profiles.map((p: any) => (
@@ -418,16 +458,11 @@ const AppContent: React.FC = () => {
                           <p className="font-bold text-sm text-[#1B2B48]">{p.name || 'مستخدم بلا اسم'}</p>
                           <p className="text-xs text-gray-400">{p.email}</p>
                         </div>
-                        <div className="text-left">
-                          <span className={`px-3 py-1 rounded-full text-[10px] font-bold ${p.role === 'ADMIN' ? 'bg-red-100 text-red-600' : 'bg-blue-100 text-blue-600'}`}>
-                            {p.role}
-                          </span>
-                        </div>
+                        <span className={`px-3 py-1 rounded-full text-[10px] font-bold ${p.role === 'ADMIN' ? 'bg-red-100 text-red-600' : 'bg-blue-100 text-blue-600'}`}>
+                          {p.role}
+                        </span>
                       </div>
                     ))}
-                    {profiles.length === 0 && (
-                      <div className="p-10 text-center text-gray-400 text-sm">لا توجد بيانات في جدول profiles حالياً</div>
-                    )}
                   </div>
                 </div>
               </div>
@@ -447,9 +482,8 @@ const AppContent: React.FC = () => {
                       <span className="text-sm">{selectedProject.location}</span>
                     </div>
                   </div>
-                  <button onClick={() => { setEditingTask(null); setNewTaskData({ status: 'متابعة' }); setIsTaskModalOpen(true); }} className="bg-[#E95D22] text-white px-6 py-3 rounded-2xl font-bold hover:bg-[#d8551f] transition-all">+ إضافة عمل جديد</button>
+                  <button onClick={() => { setEditingTask(null); setNewTaskData({ status: 'متابعة' }); setIsTaskModalOpen(true); }} className="bg-[#E95D22] text-white px-6 py-3 rounded-2xl font-bold hover:bg-[#d8551f] transition-all">+ إضافة عمل</button>
                </div>
-               
                <div className="grid grid-cols-1 gap-4">
                   {selectedProject.tasks.map((task: any) => (
                     <TaskCard 
@@ -466,19 +500,20 @@ const AppContent: React.FC = () => {
         )}
       </main>
 
+      {/* مودالات الإضافة والتعديل */}
       <Modal isOpen={isProjectModalOpen} onClose={() => setIsProjectModalOpen(false)} title="إضافة مشروع جديد">
         <div className="space-y-4 font-cairo text-right">
-          <div><label className="text-xs font-bold text-gray-400">اسم المشروع / العميل</label><input type="text" className="w-full p-4 bg-gray-50 rounded-2xl border outline-none" value={newProject.name} onChange={e => setNewProject({...newProject, name: e.target.value})} /></div>
-          <div><label className="text-xs font-bold text-gray-400">الموقع الجغرافي</label><select className="w-full p-4 bg-gray-50 rounded-2xl border outline-none" value={newProject.location} onChange={e => setNewProject({...newProject, location: e.target.value})}>{LOCATIONS_ORDER.map(l => <option key={l} value={l}>{l}</option>)}</select></div>
-          <button onClick={handleCreateProject} className="w-full bg-[#E95D22] text-white py-4 rounded-2xl font-bold hover:bg-[#d8551f] shadow-lg">حفظ المشروع</button>
+          <div><label className="text-xs font-bold text-gray-400">اسم العميل</label><input type="text" className="w-full p-4 bg-gray-50 rounded-2xl border outline-none" value={newProject.name} onChange={e => setNewProject({...newProject, name: e.target.value})} /></div>
+          <div><label className="text-xs font-bold text-gray-400">المدينة</label><select className="w-full p-4 bg-gray-50 rounded-2xl border outline-none" value={newProject.location} onChange={e => setNewProject({...newProject, location: e.target.value})}>{LOCATIONS_ORDER.map(l => <option key={l} value={l}>{l}</option>)}</select></div>
+          <button onClick={handleCreateProject} className="w-full bg-[#E95D22] text-white py-4 rounded-2xl font-bold hover:bg-[#d8551f] shadow-lg">حفظ</button>
         </div>
       </Modal>
 
-      <Modal isOpen={isTaskModalOpen} onClose={() => setIsTaskModalOpen(false)} title="بيانات العمل">
+      <Modal isOpen={isTaskModalOpen} onClose={() => setIsTaskModalOpen(false)} title="تفاصيل العمل">
         <div className="space-y-4 font-cairo text-right">
-          <div><label className="text-xs font-bold text-gray-400">بيان العمل</label><select className="w-full p-4 bg-gray-50 rounded-2xl border outline-none" value={newTaskData.description || ''} onChange={e => setNewTaskData({...newTaskData, description: e.target.value})}>{TECHNICAL_SERVICE_TYPES.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
-          <div><label className="text-xs font-bold text-gray-400">حالة الإنجاز</label><select className="w-full p-4 bg-gray-50 rounded-2xl border outline-none" value={newTaskData.status || 'متابعة'} onChange={e => setNewTaskData({...newTaskData, status: e.target.value})}><option value="متابعة">قيد المتابعة</option><option value="منجز">منجز بالكامل</option></select></div>
-          <button onClick={handleSaveTask} className="w-full bg-[#1B2B48] text-white py-4 rounded-2xl font-bold hover:bg-[#152136] shadow-lg">تحديث البيانات</button>
+          <div><label className="text-xs font-bold text-gray-400">نوع العمل</label><select className="w-full p-4 bg-gray-50 rounded-2xl border outline-none" value={newTaskData.description || ''} onChange={e => setNewTaskData({...newTaskData, description: e.target.value})}>{TECHNICAL_SERVICE_TYPES.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
+          <div><label className="text-xs font-bold text-gray-400">الحالة</label><select className="w-full p-4 bg-gray-50 rounded-2xl border outline-none" value={newTaskData.status || 'متابعة'} onChange={e => setNewTaskData({...newTaskData, status: e.target.value})}><option value="متابعة">قيد المتابعة</option><option value="منجز">منجز</option></select></div>
+          <button onClick={handleSaveTask} className="w-full bg-[#1B2B48] text-white py-4 rounded-2xl font-bold shadow-lg">حفظ</button>
         </div>
       </Modal>
 
@@ -486,11 +521,10 @@ const AppContent: React.FC = () => {
         <div className="h-[50vh] flex flex-col font-cairo text-right">
             <div className="flex-1 overflow-y-auto space-y-4 mb-4 p-2">
               {selectedTaskForComments?.comments?.map(c => <div key={c.id} className="bg-gray-50 p-4 rounded-2xl border"><div className="flex justify-between items-center mb-1"><span className="text-xs font-bold text-[#E95D22]">{c.author}</span><span className="text-[10px] text-gray-400">{new Date(c.timestamp).toLocaleDateString('ar-SA')}</span></div><p className="text-sm text-gray-700">{c.text}</p></div>)}
-              {(!selectedTaskForComments?.comments || selectedTaskForComments.comments.length === 0) && <p className="text-center text-gray-400 py-10">لا توجد ملاحظات</p>}
             </div>
             <div className="flex gap-2 border-t pt-4">
               <input type="text" placeholder="اكتب ملاحظة..." className="flex-1 p-4 bg-gray-50 rounded-2xl border outline-none focus:border-[#E95D22]" value={newCommentText} onChange={e => setNewCommentText(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAddComment()} />
-              <button onClick={handleAddComment} className="p-4 bg-[#E95D22] text-white rounded-2xl hover:bg-[#d8551f] shadow-lg"><Send size={20} /></button>
+              <button onClick={handleAddComment} className="p-4 bg-[#E95D22] text-white rounded-2xl shadow-lg"><Send size={20} /></button>
             </div>
         </div>
       </Modal>
