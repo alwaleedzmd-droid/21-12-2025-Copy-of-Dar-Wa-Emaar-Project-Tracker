@@ -37,20 +37,15 @@ interface ErrorBoundaryState {
   hasError: boolean;
 }
 
-// Fix: Explicitly use React.Component with generics and property initializer for state to resolve missing props/state errors in TypeScript
-class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
+// Fixed ErrorBoundary: Use Component directly and remove redundant constructor to ensure 'props' is recognized by TypeScript
+class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   public state: ErrorBoundaryState = { hasError: false };
-
-  constructor(props: ErrorBoundaryProps) {
-    super(props);
-  }
 
   static getDerivedStateFromError(_: any): ErrorBoundaryState {
     return { hasError: true };
   }
 
   render() {
-    // Fix: Access state safely via this.state
     if (this.state.hasError) {
       return (
         <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4 text-center" dir="rtl">
@@ -62,7 +57,6 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
         </div>
       );
     }
-    // Fix: Access props safely via this.props
     return this.props.children;
   }
 }
@@ -87,54 +81,50 @@ const AppContent: React.FC = () => {
     role: 'PR_OFFICER' as UserRole
   });
 
-  // وظيفة لفرض صلاحيات المدير للمستخدم المحدد والتأكد من وجود البروفايل
-  const ensureAndGetRole = async (sessionUser: any): Promise<UserRole> => {
+  // وظيفة جلب بيانات البروفايل الكاملة مع أولوية لقاعدة البيانات
+  const fetchFullUserProfile = async (sessionUser: any): Promise<User> => {
     const adminEmail = 'adaldawsari@darwaemaar.com';
-    
-    // 1. أولوية قصوى: إذا كان البريد هو بريد العميل، فهو ADMIN دائماً
-    if (sessionUser.email === adminEmail) {
-      // محاولة تحديث/إنشاء السجل في جدول profiles ليكون مرجعاً مستقبلياً
-      try {
-        await supabase.from('profiles').upsert({
-          id: sessionUser.id,
-          email: adminEmail,
-          role: 'ADMIN',
-          name: sessionUser.user_metadata?.name || 'عبدالرحمن الدوسري'
-        });
-      } catch (e) {
-        console.warn("Could not upsert profile, falling back to session logic");
-      }
-      return 'ADMIN';
-    }
+    let userRole: UserRole = sessionUser.user_metadata?.role || 'PR_OFFICER';
+    let userName: string = sessionUser.user_metadata?.name || 'مستخدم';
 
-    // 2. محاولة جلب الصلاحية من جدول profiles لبقية المستخدمين
+    // محاولة جلب البيانات من جدول profiles
     try {
       const { data, error } = await supabase
         .from('profiles')
-        .select('role')
+        .select('role, name')
         .eq('id', sessionUser.id)
         .single();
       
-      if (data && !error) return data.role as UserRole;
+      if (data && !error) {
+        if (data.role) userRole = data.role as UserRole;
+        if (data.name) userName = data.name; // الأولوية للاسم المخزن في الجدول
+      }
     } catch (e) {
-      console.warn("Profiles table check failed");
+      console.warn("Profiles fetch failed, using session metadata");
     }
 
-    // 3. الحل الأخير: استخدام Metadata
-    return sessionUser.user_metadata?.role || 'PR_OFFICER';
+    // فرض صلاحيات المدير والاسم الجديد لهذا الإيميل تحديداً في حال عدم وجود بيانات بالجدول
+    if (sessionUser.email === adminEmail) {
+      userRole = 'ADMIN';
+      // إذا كان الاسم لا يزال "مستخدم" أو قادم من ميتادات قديمة، نستخدم الاسم المطلوب
+      if (userName === 'مستخدم' || userName === 'عبدالرحمن الدوسري') {
+        userName = 'الوليد الدوسري';
+      }
+    }
+
+    return {
+      id: sessionUser.id,
+      name: userName,
+      email: sessionUser.email || '',
+      role: userRole
+    };
   };
 
   useEffect(() => {
     const checkSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.user) {
-        const role = await ensureAndGetRole(session.user);
-        const userData: User = {
-          id: session.user.id,
-          name: session.user.user_metadata.name || 'مستخدم',
-          email: session.user.email || '',
-          role: role
-        };
+        const userData = await fetchFullUserProfile(session.user);
         setCurrentUser(userData);
         updateInitialView(userData.role);
       }
@@ -145,13 +135,7 @@ const AppContent: React.FC = () => {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       if (session?.user) {
-        const role = await ensureAndGetRole(session.user);
-        const userData: User = {
-          id: session.user.id,
-          name: session.user.user_metadata.name || 'مستخدم',
-          email: session.user.email || '',
-          role: role
-        };
+        const userData = await fetchFullUserProfile(session.user);
         setCurrentUser(userData);
         updateInitialView(userData.role);
       } else {
@@ -265,7 +249,6 @@ const AppContent: React.FC = () => {
     if (!newUserForm.email || !newUserForm.password || !newUserForm.name) return alert('يرجى إكمال البيانات');
     setIsAuthLoading(true);
     
-    // 1. إنشاء الحساب في Auth
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email: newUserForm.email,
       password: newUserForm.password,
@@ -275,7 +258,6 @@ const AppContent: React.FC = () => {
     if (authError) {
       alert('خطأ في إضافة المستخدم: ' + authError.message);
     } else if (authData.user) {
-      // 2. محاولة إضافة السجل في جدول profiles
       try {
         await supabase.from('profiles').insert({
           id: authData.user.id,
@@ -287,7 +269,7 @@ const AppContent: React.FC = () => {
         setNewUserForm({ name: '', email: '', password: '', role: 'PR_OFFICER' });
         fetchProfiles();
       } catch (e) {
-        alert('تم إنشاء الحساب ولكن تعذر تحديث جدول البروفايلات. تأكد من وجود الجدول في Supabase.');
+        alert('تم إنشاء الحساب ولكن تعذر تحديث جدول البروفايلات.');
       }
     }
     setIsAuthLoading(false);
@@ -330,7 +312,7 @@ const AppContent: React.FC = () => {
   if (isAuthLoading && !currentUser) return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-[#f8f9fa] gap-4">
       <Loader2 className="animate-spin w-12 h-12 text-[#E95D22]" />
-      <p className="font-cairo font-bold">جاري التحقق من الصلاحيات...</p>
+      <p className="font-cairo font-bold">جاري تحميل الملف الشخصي...</p>
     </div>
   );
 
@@ -346,7 +328,7 @@ const AppContent: React.FC = () => {
           <div><label className="text-xs font-bold text-gray-400">البريد الإلكتروني الرسمي</label><input type="email" required className="w-full p-4 bg-gray-50 rounded-2xl border outline-none focus:border-[#E95D22]" value={loginData.email} onChange={e => setLoginData({...loginData, email: e.target.value})} /></div>
           <div><label className="text-xs font-bold text-gray-400">كلمة السر</label><input type="password" required className="w-full p-4 bg-gray-50 rounded-2xl border outline-none focus:border-[#E95D22]" value={loginData.password} onChange={e => setLoginData({...loginData, password: e.target.value})} /></div>
           <button className="w-full bg-[#E95D22] text-white py-5 rounded-[30px] font-bold text-xl hover:bg-[#d8551f] transition-all">دخول النظام</button>
-          <div className="pt-4"><p className="text-center text-xs text-gray-400">إذا واجهت مشكلة في الدخول، يرجى مراجعة الدعم الفني</p></div>
+          <div className="pt-4"><p className="text-center text-xs text-gray-400">جميع الحقوق محفوظة - دار وإعمار © 2025</p></div>
         </form>
       </div>
     </div>
@@ -377,7 +359,7 @@ const AppContent: React.FC = () => {
             <div className="flex justify-between items-center">
               <div>
                 <h2 className="text-3xl font-bold text-[#1B2B48]">لوحة المشاريع</h2>
-                <p className="text-gray-400 text-sm">نظرة عامة على جميع المواقع النشطة</p>
+                <p className="text-gray-400 text-sm">أهلاً بك، {currentUser?.name}</p>
               </div>
               {currentUser?.role === 'ADMIN' && (
                 <button onClick={() => setIsProjectModalOpen(true)} className="bg-[#E95D22] text-white px-6 py-3 rounded-2xl flex items-center gap-2 font-bold shadow-lg hover:scale-[1.02] transition-all"><Plus size={20} /> إضافة مشروع</button>
@@ -478,9 +460,6 @@ const AppContent: React.FC = () => {
                       canManage={currentUser?.role === 'ADMIN'} 
                     />
                   ))}
-                  {selectedProject.tasks.length === 0 && (
-                    <div className="py-20 text-center text-gray-300">لا توجد أعمال مضافة لهذا المشروع</div>
-                  )}
                </div>
             </div>
           </div>
