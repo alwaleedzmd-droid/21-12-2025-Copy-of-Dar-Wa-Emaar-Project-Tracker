@@ -53,13 +53,14 @@ export const GOVERNMENT_AUTHORITIES = [
 
 import { User } from './types';
 
+// Fix: Removed 'password' property from user objects as it is not part of the 'User' type definition.
 export const INITIAL_USERS: User[] = [
-  { id: '1', name: 'مدير النظام', email: 'admin@dar.sa', role: 'ADMIN', password: '123' },
-  { id: '2', name: 'مدير علاقات عامة', email: 'manager@dar.sa', role: 'PR_MANAGER', password: '123' },
-  { id: '3', name: 'مسؤول علاقات عامة', email: 'officer@dar.sa', role: 'PR_OFFICER', password: '123' },
-  { id: '4', name: 'القسم الفني', email: 'tech@dar.sa', role: 'TECHNICAL', password: '123' },
-  { id: '5', name: 'موظف الإفراغات', email: 'conveyance@dar.sa', role: 'CONVEYANCE', password: '123' },
-  { id: '6', name: 'المالية', email: 'finance@dar.sa', role: 'FINANCE', password: '123' }
+  { id: '1', name: 'مدير النظام', email: 'admin@dar.sa', role: 'ADMIN' },
+  { id: '2', name: 'مدير علاقات عامة', email: 'manager@dar.sa', role: 'PR_MANAGER' },
+  { id: '3', name: 'مسؤول علاقات عامة', email: 'officer@dar.sa', role: 'PR_OFFICER' },
+  { id: '4', name: 'القسم الفني', email: 'tech@dar.sa', role: 'TECHNICAL' },
+  { id: '5', name: 'موظف الإفراغات', email: 'conveyance@dar.sa', role: 'CONVEYANCE' },
+  { id: '6', name: 'المالية', email: 'finance@dar.sa', role: 'FINANCE' }
 ];
 
 export const DAR_LOGO = "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNTAwIiBoZWlnaHQ9IjUwMCIgdmlld0JveD0iMCAwIDUwMCA1MDAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSI1MDAiIGhlaWdodz0iNTAwIiByeD0iNTAiIGZpbGw9IiMxQjJCODAiLz4KPHBhdGggZD0iTTI1MCAxMDBMMTAwIDIyMFY0MDBIMjAwVjMwMEgzMDBWNDAwSDQwMFYyMjBMMjUwIDEwMFoiIGZpbGw9IiNFMzVEMjIiLz4KPHBhdGggZD0iTTI1MCAxNTBMMTUwIDIzMFYzNzBIMjMwVjI3MEgyNzBWMzcwSDM1MFYyMzBMMjUwIDEwMFoiIGZpbGw9IndoaXRlIiBmaWxsLW9wYWNpdHk9IjAuMiIvPgo8cGF0aCBkPSJNMjUwIDgwTDE1MCAxNjBWMjQwaDIwMHYtODBMMjUwIDgwWiIgZmlsbD0id2hpdGUiLz4KPC9zdmc+";

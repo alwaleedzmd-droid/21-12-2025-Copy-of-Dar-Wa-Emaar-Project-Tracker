@@ -20,36 +20,24 @@ export interface Task {
   comments?: Comment[];
 }
 
-export interface ContractorInfo {
-  company: string;
-  engineer: string;
-  phone: string;
-}
-
-export interface ProjectDetails {
-  location?: string;
-  unitsCount?: number;
-  electricityMetersCount?: number;
-  waterMetersCount?: number;
-  buildingPermitsCount?: number;
-  occupancyCertificatesCount?: number;
-  electricityContractor?: ContractorInfo;
-  waterContractor?: ContractorInfo;
-  consultantOffice?: ContractorInfo;
-}
-
 export interface ProjectSummary {
   id: string;
   name: string;
   location: string;
   totalTasks: number;
   completedTasks: number;
-  progress: number; // 0-100
+  progress: number;
   tasks: Task[];
-  imageUrl?: string;
+  image_url?: string; // التوافق مع اسم العمود في قاعدة البيانات
   isPinned?: boolean;
-  details?: ProjectDetails;
   allIds?: string[];
+  details?: {
+    unitsCount?: number;
+    electricityMetersCount?: number;
+    waterMetersCount?: number;
+    buildingPermitsCount?: number;
+    occupancyCertificatesCount?: number;
+  };
 }
 
 export type ViewState = 
@@ -69,44 +57,31 @@ export interface User {
   name: string;
   email: string;
   role: UserRole;
-  password?: string;
 }
 
-export type RequestStatus = 
-  | 'new'               
-  | 'pending_finance'   
-  | 'pending_pr'        
-  | 'completed'         
-  | 'rejected'
-  | 'revision';         
-
-export interface RequestHistory {
-  action: string;
-  by: string;
-  role: string;
-  timestamp: string;
-  notes?: string;
-}
-
-export interface ServiceRequest {
+export interface MaintenanceRequest {
   id: string;
-  name: string;
-  type: 'technical' | 'conveyance';
+  project_name: string;
+  client_name: string;
+  mobile: string;
   details: string;
-  submittedBy: string;
-  role: string;
-  status: RequestStatus;
-  date: string;
-  history: RequestHistory[];
-  projectName: string;
-  comments?: Comment[];
-  clientName?: string;
-  mobileNumber?: string;
-  idNumber?: string;
-  deedNumber?: string;
-  propertyValue?: string;
-  unitNumber?: string;
-  bank?: string;
-  serviceSubType?: string;
-  authority?: string;
+  status: 'new' | 'pending' | 'completed' | 'rejected';
+  submitted_by: string;
+  created_at: string;
+}
+
+export interface ClearanceRequest {
+  id: string;
+  project_name: string;
+  client_name: string;
+  deed_number: string;
+  id_number: string;
+  property_value: string;
+  // حقول سير العمل الجديدة
+  status: 'new' | 'finance_approved' | 'finance_rejected' | 'manager_approved' | 'completed' | 'rejected';
+  finance_note?: string;
+  manager_note?: string;
+  bulk_data?: any; // لتخزين بيانات الإكسل المرفوع
+  submitted_by: string;
+  created_at: string;
 }
