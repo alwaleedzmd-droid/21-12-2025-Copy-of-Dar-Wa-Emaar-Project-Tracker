@@ -1,3 +1,4 @@
+
 export interface Comment {
   id: string;
   text: string;
@@ -38,6 +39,7 @@ export interface ProjectDetails {
 }
 
 export interface ProjectSummary {
+  id: string;
   name: string;
   location: string;
   totalTasks: number;
@@ -47,9 +49,18 @@ export interface ProjectSummary {
   imageUrl?: string;
   isPinned?: boolean;
   details?: ProjectDetails;
+  allIds?: string[];
 }
 
-export type ViewState = 'LOGIN' | 'DASHBOARD' | 'PROJECT_DETAIL' | 'USERS' | 'SERVICE_ONLY' | 'REQUESTS' | 'STATISTICS';
+export type ViewState = 
+  | 'LOGIN' 
+  | 'DASHBOARD' 
+  | 'PROJECT_DETAIL' 
+  | 'USERS' 
+  | 'TECHNICAL_SERVICES' 
+  | 'CONVEYANCE_SERVICES' 
+  | 'FINANCE_APPROVALS' 
+  | 'STATISTICS';
 
 export type UserRole = 'ADMIN' | 'PR_MANAGER' | 'PR_OFFICER' | 'FINANCE' | 'TECHNICAL' | 'CONVEYANCE';
 
@@ -89,7 +100,6 @@ export interface ServiceRequest {
   history: RequestHistory[];
   projectName: string;
   comments?: Comment[];
-  // Conveyance fields
   clientName?: string;
   mobileNumber?: string;
   idNumber?: string;
@@ -97,7 +107,6 @@ export interface ServiceRequest {
   propertyValue?: string;
   unitNumber?: string;
   bank?: string;
-  // Technical fields
   serviceSubType?: string;
   authority?: string;
 }

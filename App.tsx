@@ -1,9 +1,10 @@
 
-import React, { useState, useEffect, ReactNode, Component } from 'react';
+import React, { useState, useEffect, ReactNode } from 'react';
 import { 
   LayoutDashboard, Users, FileText, Settings, LogOut, 
   Plus, ArrowLeft, Loader2, Send, AlertTriangle, UserPlus, 
-  MapPin, FolderOpen, Building2, Zap, Droplets, Clock, MessageSquare, Edit3, Trash2
+  MapPin, FolderOpen, Building2, Zap, Droplets, Clock, MessageSquare, 
+  Edit3, Trash2, ClipboardCheck, WalletCards, BarChart3
 } from 'lucide-react';
 import { supabase } from './supabaseClient';
 import { 
@@ -41,11 +42,8 @@ interface ErrorBoundaryState {
   hasError: boolean;
 }
 
-/**
- * Fixed ErrorBoundary by adding a constructor and explicitly using the Component type
- * from React to ensure 'props' and 'state' are correctly recognized by the TypeScript compiler.
- */
-class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+// Fixed ErrorBoundary by using React.Component explicitly to ensure state and props are recognized by the compiler
+class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
   constructor(props: ErrorBoundaryProps) {
     super(props);
     this.state = { hasError: false };
@@ -75,19 +73,16 @@ const AppContent: React.FC = () => {
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [isDbLoading, setIsDbLoading] = useState(true);
   
-  // استعادة المستخدم من الكاش فوراً
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
     const cached = safeStorage.getItem(STORAGE_KEYS.USER_CACHE);
     return cached ? JSON.parse(cached) : null;
   });
 
-  // تحديد الواجهة بناءً على وجود مستخدم في الكاش
   const [view, setView] = useState<ViewState>(() => {
     const cached = safeStorage.getItem(STORAGE_KEYS.USER_CACHE);
     return cached ? 'DASHBOARD' : 'LOGIN';
   });
 
-  // حالة التحميل لا تعطل الواجهة إذا كان المستخدم موجوداً
   const [isAuthLoading, setIsAuthLoading] = useState(!currentUser);
   const [profiles, setProfiles] = useState<any[]>([]);
   
@@ -96,21 +91,12 @@ const AppContent: React.FC = () => {
     password: '' 
   });
 
-  const [newUserForm, setNewUserForm] = useState({
-    name: '',
-    email: '',
-    password: '',
-    role: 'PR_OFFICER' as UserRole
-  });
-
-  // جلب البيانات بسرعة قصوى بالاعتماد على الـ Index
   const syncUserProfile = async (sessionUser: any) => {
     const adminEmail = 'adaldawsari@darwaemaar.com';
     let userRole: UserRole = sessionUser.user_metadata?.role || 'PR_OFFICER';
     let userName: string = sessionUser.user_metadata?.name || 'مستخدم';
 
     try {
-      // استعلام مباشر وسريع جداً (Indexed)
       const { data, error } = await supabase
         .from('profiles')
         .select('role, name')
@@ -148,7 +134,6 @@ const AppContent: React.FC = () => {
         const { data: { session } } = await supabase.auth.getSession();
         if (session?.user) {
           const user = await syncUserProfile(session.user);
-          // إذا كنا في صفحة الدخول، ننتقل للرئيسية
           if (view === 'LOGIN') setView('DASHBOARD');
         } else {
           setCurrentUser(null);
@@ -307,7 +292,12 @@ const AppContent: React.FC = () => {
     <div className={`${className} flex flex-col items-center justify-center`}><img src={DAR_LOGO} className="w-full h-full object-contain" alt="Logo" /></div>
   );
 
-  // شاشة التحميل تظهر فقط إذا لم يكن هناك كاش نهائياً (المرة الأولى فقط)
+  const isAdmin = currentUser?.role === 'ADMIN';
+  const isPr = currentUser?.role === 'PR_MANAGER' || currentUser?.role === 'PR_OFFICER';
+  const isTech = currentUser?.role === 'TECHNICAL';
+  const isConv = currentUser?.role === 'CONVEYANCE';
+  const isFin = currentUser?.role === 'FINANCE';
+
   if (isAuthLoading && !currentUser) return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-[#f8f9fa] gap-4">
       <Loader2 className="animate-spin w-10 h-10 text-[#E95D22]" />
@@ -335,10 +325,47 @@ const AppContent: React.FC = () => {
     <div className="flex h-screen bg-[#f8f9fa] font-cairo overflow-hidden" dir="rtl">
       <aside className={`bg-[#1B2B48] text-white flex flex-col transition-all duration-300 ${isSidebarCollapsed ? 'w-20' : 'w-72'}`}>
         <div className="p-6 border-b border-white/5 flex flex-col items-center"><Logo className={isSidebarCollapsed ? 'h-12' : 'h-24'} /></div>
-        <nav className="flex-1 p-4 space-y-2">
-            <button onClick={() => setView('DASHBOARD')} className={`w-full flex items-center gap-4 p-4 rounded-2xl ${view === 'DASHBOARD' ? 'bg-[#E95D22]' : 'text-gray-400 hover:bg-white/5'}`}><LayoutDashboard size={20} /> {!isSidebarCollapsed && 'الرئيسية'}</button>
-            {currentUser?.role === 'ADMIN' && (
-              <button onClick={() => setView('USERS')} className={`w-full flex items-center gap-4 p-4 rounded-2xl ${view === 'USERS' ? 'bg-[#E95D22]' : 'text-gray-400 hover:bg-white/5'}`}><Users size={20} /> {!isSidebarCollapsed && 'إدارة الموظفين'}</button>
+        <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
+            {/* Dashboard Link - Visible to Admin, PR, and others as home */}
+            {(isAdmin || isPr || isTech || isConv || isFin) && (
+              <button onClick={() => setView('DASHBOARD')} className={`w-full flex items-center gap-4 p-4 rounded-2xl transition-all ${view === 'DASHBOARD' ? 'bg-[#E95D22] shadow-lg shadow-orange-500/20' : 'text-gray-400 hover:bg-white/5'}`}>
+                <LayoutDashboard size={20} /> {!isSidebarCollapsed && 'لوحة المشاريع'}
+              </button>
+            )}
+
+            {/* Technical Services - Admin & Technical & PR Manager */}
+            {(isAdmin || isTech || isPr) && (
+              <button onClick={() => setView('TECHNICAL_SERVICES')} className={`w-full flex items-center gap-4 p-4 rounded-2xl transition-all ${view === 'TECHNICAL_SERVICES' ? 'bg-[#E95D22] shadow-lg shadow-orange-500/20' : 'text-gray-400 hover:bg-white/5'}`}>
+                <Zap size={20} /> {!isSidebarCollapsed && 'الخدمات الفنية'}
+              </button>
+            )}
+
+            {/* Conveyance Services - Admin & Conveyance & PR Manager */}
+            {(isAdmin || isConv || isPr) && (
+              <button onClick={() => setView('CONVEYANCE_SERVICES')} className={`w-full flex items-center gap-4 p-4 rounded-2xl transition-all ${view === 'CONVEYANCE_SERVICES' ? 'bg-[#E95D22] shadow-lg shadow-orange-500/20' : 'text-gray-400 hover:bg-white/5'}`}>
+                <FileText size={20} /> {!isSidebarCollapsed && 'طلبات الإفراغ'}
+              </button>
+            )}
+
+            {/* Finance Approvals - Admin & Finance & PR Manager */}
+            {(isAdmin || isFin || isPr) && (
+              <button onClick={() => setView('FINANCE_APPROVALS')} className={`w-full flex items-center gap-4 p-4 rounded-2xl transition-all ${view === 'FINANCE_APPROVALS' ? 'bg-[#E95D22] shadow-lg shadow-orange-500/20' : 'text-gray-400 hover:bg-white/5'}`}>
+                <ClipboardCheck size={20} /> {!isSidebarCollapsed && 'الموافقات المالية'}
+              </button>
+            )}
+
+            {/* Statistics - Admin & PR Manager */}
+            {(isAdmin || isPr) && (
+              <button onClick={() => setView('STATISTICS')} className={`w-full flex items-center gap-4 p-4 rounded-2xl transition-all ${view === 'STATISTICS' ? 'bg-[#E95D22] shadow-lg shadow-orange-500/20' : 'text-gray-400 hover:bg-white/5'}`}>
+                <BarChart3 size={20} /> {!isSidebarCollapsed && 'الإحصائيات'}
+              </button>
+            )}
+
+            {/* User Management - ADMIN ONLY */}
+            {isAdmin && (
+              <button onClick={() => setView('USERS')} className={`w-full flex items-center gap-4 p-4 rounded-2xl transition-all ${view === 'USERS' ? 'bg-[#E95D22] shadow-lg shadow-orange-500/20' : 'text-gray-400 hover:bg-white/5'}`}>
+                <Users size={20} /> {!isSidebarCollapsed && 'إدارة الموظفين'}
+              </button>
             )}
         </nav>
         <div className="p-4 border-t border-white/5 bg-[#16233a]">
@@ -355,10 +382,10 @@ const AppContent: React.FC = () => {
           <div className="space-y-8 animate-in fade-in duration-500">
             <div className="flex justify-between items-center">
               <div>
-                <h2 className="text-3xl font-bold text-[#1B2B48]">لوحة المشاريع</h2>
+                <h2 className="text-3xl font-bold text-[#1B2B48]">لوحة المشاريع والمهام</h2>
                 <p className="text-gray-400 text-sm">مرحباً بك مجدداً، {currentUser?.name}</p>
               </div>
-              {currentUser?.role === 'ADMIN' && (
+              {isAdmin && (
                 <button onClick={() => setIsProjectModalOpen(true)} className="bg-[#E95D22] text-white px-6 py-3 rounded-2xl flex items-center gap-2 font-bold shadow-lg hover:scale-[1.02] transition-all"><Plus size={20} /> إضافة مشروع</button>
               )}
             </div>
@@ -367,7 +394,7 @@ const AppContent: React.FC = () => {
               {projects.length === 0 && !isDbLoading && (
                 <div className="col-span-full py-20 text-center bg-white rounded-[40px] border border-dashed">
                   <FolderOpen className="w-16 h-16 text-gray-200 mx-auto mb-4" />
-                  <p className="text-gray-400">لا توجد مشاريع مسجلة</p>
+                  <p className="text-gray-400">لا توجد مشاريع مسجلة حالياً</p>
                 </div>
               )}
             </div>
@@ -383,18 +410,20 @@ const AppContent: React.FC = () => {
                     <h2 className="text-4xl font-bold text-[#1B2B48] mb-2">{selectedProject.name}</h2>
                     <div className="flex items-center gap-2 text-gray-400"><MapPin size={16} /><span className="text-sm">{selectedProject.location}</span></div>
                   </div>
-                  <button onClick={() => { setEditingTask(null); setNewTaskData({ status: 'متابعة' }); setIsTaskModalOpen(true); }} className="bg-[#E95D22] text-white px-6 py-3 rounded-2xl font-bold hover:bg-[#d8551f] transition-all">+ إضافة عمل جديد</button>
+                  {(isAdmin || isPr) && (
+                    <button onClick={() => { setEditingTask(null); setNewTaskData({ status: 'متابعة' }); setIsTaskModalOpen(true); }} className="bg-[#E95D22] text-white px-6 py-3 rounded-2xl font-bold hover:bg-[#d8551f] transition-all">+ إضافة عمل جديد</button>
+                  )}
                </div>
                <div className="grid grid-cols-1 gap-4">
                   {selectedProject.tasks.map((task: any) => (
-                    <TaskCard key={task.id} task={task} onEdit={t => { setEditingTask(t); setNewTaskData(t); setIsTaskModalOpen(true); }} onOpenComments={t => { setSelectedTaskForComments(t); setIsCommentsModalOpen(true); }} canManage={currentUser?.role === 'ADMIN'} />
+                    <TaskCard key={task.id} task={task} onEdit={t => { setEditingTask(t); setNewTaskData(t); setIsTaskModalOpen(true); }} onOpenComments={t => { setSelectedTaskForComments(t); setIsCommentsModalOpen(true); }} canManage={isAdmin} />
                   ))}
                </div>
             </div>
           </div>
         )}
 
-        {view === 'USERS' && currentUser?.role === 'ADMIN' && (
+        {view === 'USERS' && isAdmin && (
            <div className="max-w-5xl mx-auto space-y-8 animate-in fade-in">
               <h2 className="text-3xl font-bold text-[#1B2B48]">إدارة الموظفين</h2>
               <div className="bg-white rounded-[30px] shadow-sm border overflow-hidden">
@@ -409,8 +438,56 @@ const AppContent: React.FC = () => {
               </div>
            </div>
         )}
+
+        {/* New Sections Placeholders */}
+        {view === 'TECHNICAL_SERVICES' && (
+           <div className="space-y-8 animate-in fade-in">
+              <div className="flex justify-between items-center">
+                <h2 className="text-3xl font-bold text-[#1B2B48]">الخدمات الفنية</h2>
+                <button className="bg-[#E95D22] text-white px-6 py-3 rounded-2xl font-bold shadow-lg">+ طلب فني جديد</button>
+              </div>
+              <div className="bg-white rounded-[40px] p-12 text-center border border-dashed border-gray-300">
+                <Zap className="w-16 h-16 text-gray-200 mx-auto mb-4" />
+                <p className="text-gray-400">قسم متابعة الخدمات الفنية (قيد التطوير)</p>
+              </div>
+           </div>
+        )}
+
+        {view === 'CONVEYANCE_SERVICES' && (
+           <div className="space-y-8 animate-in fade-in">
+              <div className="flex justify-between items-center">
+                <h2 className="text-3xl font-bold text-[#1B2B48]">طلبات الإفراغ</h2>
+                <button className="bg-[#E95D22] text-white px-6 py-3 rounded-2xl font-bold shadow-lg">+ طلب إفراغ جديد</button>
+              </div>
+              <div className="bg-white rounded-[40px] p-12 text-center border border-dashed border-gray-300">
+                <FileText className="w-16 h-16 text-gray-200 mx-auto mb-4" />
+                <p className="text-gray-400">قسم إدارة الإفراغات والبيوع (قيد التطوير)</p>
+              </div>
+           </div>
+        )}
+
+        {view === 'FINANCE_APPROVALS' && (
+           <div className="space-y-8 animate-in fade-in">
+              <h2 className="text-3xl font-bold text-[#1B2B48]">الموافقات المالية</h2>
+              <div className="bg-white rounded-[40px] p-12 text-center border border-dashed border-gray-300">
+                <WalletCards className="w-16 h-16 text-gray-200 mx-auto mb-4" />
+                <p className="text-gray-400">قسم الاعتمادات والمدفوعات المالية (قيد التطوير)</p>
+              </div>
+           </div>
+        )}
+
+        {view === 'STATISTICS' && (
+           <div className="space-y-8 animate-in fade-in">
+              <h2 className="text-3xl font-bold text-[#1B2B48]">إحصائيات الأداء</h2>
+              <div className="bg-white rounded-[40px] p-12 text-center border border-dashed border-gray-300">
+                <BarChart3 className="w-16 h-16 text-gray-200 mx-auto mb-4" />
+                <p className="text-gray-400">لوحة تحليل البيانات والتقارير (قيد التطوير)</p>
+              </div>
+           </div>
+        )}
       </main>
 
+      {/* Modals */}
       <Modal isOpen={isProjectModalOpen} onClose={() => setIsProjectModalOpen(false)} title="إضافة مشروع">
         <div className="space-y-4 font-cairo text-right">
           <div><label className="text-xs font-bold text-gray-400">العميل</label><input type="text" className="w-full p-4 bg-gray-50 rounded-2xl border outline-none" value={newProject.name} onChange={e => setNewProject({...newProject, name: e.target.value})} /></div>
