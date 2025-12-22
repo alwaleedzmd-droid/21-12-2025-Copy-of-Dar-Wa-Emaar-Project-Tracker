@@ -11,7 +11,7 @@ import {
   ListChecks, AlertTriangle, RotateCcw, ThumbsUp, ThumbsDown,
   Building2, SortAsc, SortDesc, Edit2, CreditCard, Landmark, Hash, Phone, FileUp,
   ClipboardList, CheckCircle as CheckIcon, XCircle as CloseIcon, RefreshCw, FileDown,
-  HardHat, Droplets, Zap, Info, Briefcase
+  HardHat, Droplets, Zap, Info, Briefcase, Mail, Key, Shield
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { supabase } from './supabaseClient';
@@ -170,6 +170,8 @@ const AppContent: React.FC = () => {
   const [isRequestDetailModalOpen, setIsRequestDetailModalOpen] = useState(false);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [isDeleteTaskConfirmOpen, setIsDeleteTaskConfirmOpen] = useState(false);
+  const [isUserModalOpen, setIsUserModalOpen] = useState(false);
+  
   const [projectToDelete, setProjectToDelete] = useState<string | null>(null);
   const [taskToDelete, setTaskToDelete] = useState<Task | null>(null);
 
@@ -179,6 +181,7 @@ const AppContent: React.FC = () => {
   const [newTaskData, setNewTaskData] = useState<Partial<Task>>({ status: 'متابعة' });
   const [newCommentText, setNewCommentText] = useState('');
   const [newRequest, setNewRequest] = useState<Partial<ServiceRequest>>({ projectName: '', type: 'technical' });
+  const [newUser, setNewUser] = useState<Partial<User>>({ role: 'PR_OFFICER' });
 
   const [tempProjectDetails, setTempProjectDetails] = useState<ProjectDetails>({});
 
@@ -191,6 +194,32 @@ const AppContent: React.FC = () => {
       else if (user.role === 'FINANCE') setView('REQUESTS');
       else setView('DASHBOARD');
     } else alert('بيانات الدخول غير صحيحة');
+  };
+
+  const handleCreateUser = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newUser.name || !newUser.email || !newUser.password) return alert('يرجى تعبئة كافة الحقول');
+    if (users.find(u => u.email === newUser.email)) return alert('هذا البريد الإلكتروني مسجل مسبقاً');
+
+    const createdUser: User = {
+        id: Date.now().toString(),
+        name: newUser.name,
+        email: newUser.email,
+        password: newUser.password,
+        role: newUser.role as UserRole
+    };
+
+    setUsers([...users, createdUser]);
+    setIsUserModalOpen(false);
+    setNewUser({ role: 'PR_OFFICER' });
+    alert('تم إنشاء الحساب بنجاح');
+  };
+
+  const handleDeleteUser = (userId: string) => {
+    if (userId === '1') return alert('لا يمكن حذف حساب مدير النظام الرئيسي');
+    if (confirm('هل أنت متأكد من حذف هذا الحساب؟')) {
+        setUsers(users.filter(u => u.id !== userId));
+    }
   };
 
   const handleCreateProject = async () => {
@@ -500,6 +529,13 @@ const AppContent: React.FC = () => {
     return serviceRequests.filter(req => req.submittedBy === currentUser.name);
   }, [serviceRequests, currentUser]);
 
+  const filteredUsers = useMemo(() => {
+    return users.filter(u => 
+        u.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+        u.email.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+  }, [users, searchQuery]);
+
   const completedRequestsForCurrentProject = useMemo(() => {
     if (!selectedProject) return [];
     return serviceRequests.filter(req => req.projectName === selectedProject.name && req.status === 'completed');
@@ -516,6 +552,18 @@ const AppContent: React.FC = () => {
         case 'rejected': return { text: 'مرفوض', color: 'bg-red-100 text-red-700' };
         case 'revision': return { text: 'يحتاج تعديل', color: 'bg-orange-100 text-orange-700' };
         default: return { text: 'تحت الإجراء', color: 'bg-gray-100 text-gray-700' };
+    }
+  };
+
+  const getRoleLabel = (role: UserRole) => {
+    switch (role) {
+        case 'ADMIN': return { text: 'مدير نظام', color: 'bg-indigo-100 text-indigo-700' };
+        case 'PR_MANAGER': return { text: 'مدير علاقات', color: 'bg-purple-100 text-purple-700' };
+        case 'PR_OFFICER': return { text: 'مسؤول علاقات', color: 'bg-blue-100 text-blue-700' };
+        case 'TECHNICAL': return { text: 'قسم فني', color: 'bg-orange-100 text-orange-700' };
+        case 'CONVEYANCE': return { text: 'موظف إفراغات', color: 'bg-emerald-100 text-emerald-700' };
+        case 'FINANCE': return { text: 'المالية', color: 'bg-rose-100 text-rose-700' };
+        default: return { text: role, color: 'bg-gray-100 text-gray-700' };
     }
   };
 
@@ -563,6 +611,7 @@ const AppContent: React.FC = () => {
   const sidebarItems = [ 
     { id: 'DASHBOARD', label: 'الرئيسية', icon: LayoutDashboard, roles: ['ADMIN', 'PR_MANAGER', 'PR_OFFICER'] }, 
     { id: 'REQUESTS', label: 'الطلبات', icon: FileText, roles: ['ADMIN', 'PR_MANAGER', 'PR_OFFICER', 'FINANCE', 'TECHNICAL', 'CONVEYANCE'] }, 
+    { id: 'USERS', label: 'المستخدمين', icon: Users, roles: ['ADMIN'] },
     { id: 'SERVICE_ONLY', label: 'طلب جديد', icon: Plus, roles: ['TECHNICAL', 'CONVEYANCE', 'ADMIN', 'PR_MANAGER', 'PR_OFFICER'] }
   ].filter(i => i.roles.includes(currentUser?.role || ''));
 
@@ -824,12 +873,151 @@ const AppContent: React.FC = () => {
                   </div>
                 </div>
               )}
+
+              {view === 'USERS' && currentUser?.role === 'ADMIN' && (
+                <div className="space-y-8 animate-in fade-in duration-500">
+                    <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+                        <h2 className="text-3xl font-bold text-[#1B2B48] flex items-center gap-3">
+                            <Users className="text-[#E95D22]" /> إدارة المستخدمين
+                        </h2>
+                        <div className="flex gap-3 w-full md:w-auto">
+                            <div className="relative flex-1 md:flex-initial">
+                                <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
+                                <input type="text" placeholder="بحث عن مستخدم..." className="pr-10 pl-4 py-2.5 rounded-xl border w-full md:w-64 text-right font-cairo outline-none focus:ring-2 ring-orange-500/20 shadow-sm bg-white" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} />
+                            </div>
+                            <button onClick={() => setIsUserModalOpen(true)} className="bg-[#E95D22] text-white px-6 py-2.5 rounded-xl flex items-center gap-2 shadow-lg hover:bg-opacity-90 transition-all font-bold">
+                                <UserPlus size={20} /> إضافة حساب
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="bg-white rounded-[40px] shadow-sm border overflow-hidden">
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-right">
+                                <thead className="bg-gray-50 border-b">
+                                    <tr>
+                                        <th className="px-6 py-5 text-gray-400 font-bold text-sm">المستخدم</th>
+                                        <th className="px-6 py-5 text-gray-400 font-bold text-sm">البريد الإلكتروني</th>
+                                        <th className="px-6 py-5 text-gray-400 font-bold text-sm">الصلاحية</th>
+                                        <th className="px-6 py-5 text-gray-400 font-bold text-sm text-center">الإجراءات</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y">
+                                    {filteredUsers.map(user => {
+                                        const roleInfo = getRoleLabel(user.role);
+                                        return (
+                                            <tr key={user.id} className="hover:bg-gray-50 transition-colors group">
+                                                <td className="px-6 py-5">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center text-[#1B2B48]">
+                                                            <UserIcon size={18} />
+                                                        </div>
+                                                        <span className="font-bold text-[#1B2B48]">{user.name}</span>
+                                                    </div>
+                                                </td>
+                                                <td className="px-6 py-5 text-gray-600 text-sm font-medium">{user.email}</td>
+                                                <td className="px-6 py-5">
+                                                    <span className={`px-4 py-1 rounded-full text-xs font-bold ${roleInfo.color}`}>
+                                                        {roleInfo.text}
+                                                    </span>
+                                                </td>
+                                                <td className="px-6 py-5 text-center">
+                                                    <button 
+                                                        onClick={() => handleDeleteUser(user.id)}
+                                                        disabled={user.id === '1'}
+                                                        className={`p-2 rounded-xl transition-all ${user.id === '1' ? 'text-gray-200 cursor-not-allowed' : 'text-gray-400 hover:text-red-500 hover:bg-red-50'}`}
+                                                    >
+                                                        <Trash2 size={18} />
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
+                        {filteredUsers.length === 0 && (
+                            <div className="p-20 text-center text-gray-400">
+                                <Search size={48} className="mx-auto mb-4 opacity-10" />
+                                <p className="font-bold">لا يوجد نتائج لهذا البحث</p>
+                            </div>
+                        )}
+                    </div>
+                </div>
+              )}
             </>
           )}
         </div>
       </main>
 
       {/* --- Modals --- */}
+
+      <Modal isOpen={isUserModalOpen} onClose={() => setIsUserModalOpen(false)} title="إنشاء حساب مستخدم جديد">
+        <form onSubmit={handleCreateUser} className="space-y-6 text-right font-cairo">
+            <div className="space-y-4">
+                <div>
+                    <label className="text-sm font-bold text-[#1B2B48] mb-2 flex items-center gap-2">
+                        <UserIcon size={16} className="text-[#E95D22]" /> الاسم الكامل
+                    </label>
+                    <input 
+                        type="text" 
+                        required
+                        placeholder="أدخل اسم الموظف..."
+                        className="w-full p-4 bg-gray-50 rounded-2xl border outline-none font-cairo focus:ring-2 ring-orange-500/20" 
+                        value={newUser.name || ''} 
+                        onChange={e => setNewUser({...newUser, name: e.target.value})}
+                    />
+                </div>
+                <div>
+                    <label className="text-sm font-bold text-[#1B2B48] mb-2 flex items-center gap-2">
+                        <Mail size={16} className="text-[#E95D22]" /> البريد الإلكتروني
+                    </label>
+                    <input 
+                        type="email" 
+                        required
+                        placeholder="email@dar.sa"
+                        className="w-full p-4 bg-gray-50 rounded-2xl border outline-none font-cairo focus:ring-2 ring-orange-500/20" 
+                        value={newUser.email || ''} 
+                        onChange={e => setNewUser({...newUser, email: e.target.value})}
+                    />
+                </div>
+                <div>
+                    <label className="text-sm font-bold text-[#1B2B48] mb-2 flex items-center gap-2">
+                        <Key size={16} className="text-[#E95D22]" /> كلمة المرور
+                    </label>
+                    <input 
+                        type="password" 
+                        required
+                        placeholder="أدخل كلمة مرور قوية..."
+                        className="w-full p-4 bg-gray-50 rounded-2xl border outline-none font-cairo focus:ring-2 ring-orange-500/20" 
+                        value={newUser.password || ''} 
+                        onChange={e => setNewUser({...newUser, password: e.target.value})}
+                    />
+                </div>
+                <div>
+                    <label className="text-sm font-bold text-[#1B2B48] mb-2 flex items-center gap-2">
+                        <Shield size={16} className="text-[#E95D22]" /> نوع الحساب / الصلاحية
+                    </label>
+                    <select 
+                        required
+                        className="w-full p-4 bg-gray-50 rounded-2xl border outline-none font-cairo focus:ring-2 ring-orange-500/20 appearance-none" 
+                        value={newUser.role || 'PR_OFFICER'} 
+                        onChange={e => setNewUser({...newUser, role: e.target.value as UserRole})}
+                    >
+                        <option value="ADMIN">مدير نظام</option>
+                        <option value="PR_MANAGER">مدير علاقات عامة</option>
+                        <option value="PR_OFFICER">مسؤول علاقات عامة</option>
+                        <option value="TECHNICAL">القسم الفني</option>
+                        <option value="CONVEYANCE">موظف إفراغات</option>
+                        <option value="FINANCE">المالية</option>
+                    </select>
+                </div>
+            </div>
+            <button type="submit" className="w-full bg-[#1B2B48] text-white py-5 rounded-3xl font-bold text-xl shadow-xl hover:bg-opacity-95 transition-all flex items-center justify-center gap-3">
+                <UserPlus size={24} /> إنشاء الحساب الآن
+            </button>
+        </form>
+      </Modal>
 
       <Modal isOpen={isProjectEditModalOpen} onClose={() => setIsProjectEditModalOpen(false)} title="تحديث بيانات المشروع">
         <div className="space-y-8 text-right font-cairo">
