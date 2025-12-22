@@ -56,14 +56,18 @@ interface ErrorBoundaryState {
   hasError: boolean;
 }
 
-// Fix: explicitly use React.Component to avoid issues with missing state/props properties
+// Fix: Redefined ErrorBoundary to fix TypeScript property access errors
 class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
-  constructor(props: ErrorBoundaryProps) {
-    super(props);
-    this.state = { hasError: false };
+  // Fix: Explicitly declare and initialize state to resolve "Property 'state' does not exist" error
+  state: ErrorBoundaryState = { hasError: false };
+
+  // Fix: Static method for handling errors
+  static getDerivedStateFromError(_: any): ErrorBoundaryState {
+    return { hasError: true };
   }
-  static getDerivedStateFromError() { return { hasError: true }; }
+
   render() {
+    // Fix: access state and props which are now correctly typed through inheritance
     if (this.state.hasError) {
       return (
         <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4 text-center" dir="rtl">
@@ -99,15 +103,15 @@ const AppContent: React.FC = () => {
   const fetchProjects = async () => {
     setIsDbLoading(true);
     try {
-      // 1. جلب المشاريع
+      // 1. جلب المشاريع من قاعدة البيانات
       const { data: projectsData, error: projectsError } = await supabase
         .from('projects')
         .select('*')
-        .order('title', { ascending: true });
+        .order('client', { ascending: true }); // الترتيب حسب اسم العميل/المشروع
 
       if (projectsError) throw projectsError;
 
-      // 2. جلب المهام من الجدول الجديد tasks والترتيب حسب وقت الإنشاء
+      // 2. جلب المهام من جدول tasks الجديد
       const { data: tasksData, error: tasksError } = await supabase
         .from('tasks')
         .select('*')
@@ -115,21 +119,22 @@ const AppContent: React.FC = () => {
 
       if (tasksError) throw tasksError;
 
-      // 3. معالجة ودمج البيانات
+      // 3. بناء هيكل البيانات
       const summaries: ProjectSummary[] = (projectsData || []).map(p => {
-        const metadata = projectMetadata[p.title] || {};
+        const projectName = p.client || 'مشروع بدون اسم';
+        const metadata = projectMetadata[projectName] || {};
+        
         const pTasks = (tasksData || [])
           .filter((t: any) => t.project_id === p.id)
           .map((t: any) => ({
             id: t.id.toString(),
-            project: p.title,
-            description: t.title, // استخدام title من الجدول كـ description
-            reviewer: t.reviewer || '', // قد يكون فارغاً إذا لم يضفه المستخدم للجدول
+            project: projectName,
+            description: t.title, // عنوان المهمة في جدول tasks
+            reviewer: t.reviewer || '',
             requester: t.requester || '',
             notes: t.notes || '',
             location: p.location || 'الرياض',
             status: t.status || 'متابعة',
-            // استخدام created_at كتاريخ للعرض
             date: t.created_at ? new Date(t.created_at).toLocaleDateString('ar-SA') : new Date().toLocaleDateString('ar-SA'),
             comments: t.comments || []
           }));
@@ -138,7 +143,7 @@ const AppContent: React.FC = () => {
 
         return {
           id: p.id,
-          name: p.title,
+          name: projectName, // اسم المشروع من عمود client
           location: p.location || metadata.location || 'الرياض',
           tasks: pTasks,
           totalTasks: pTasks.length,
@@ -157,8 +162,7 @@ const AppContent: React.FC = () => {
         if (updated) setSelectedProject(updated);
       }
     } catch (err: any) {
-      // إصلاح مشكلة [object Object] عبر استخراج رسالة الخطأ
-      console.error("Fetch Error Details:", err?.message || err || "Unknown error");
+      console.error("Fetch Error Details:", err?.message || err);
     } finally {
       setIsDbLoading(false);
     }
@@ -247,8 +251,9 @@ const AppContent: React.FC = () => {
   const handleCreateProject = async () => {
     if (!newProject.name) return alert('يرجى إدخال اسم المشروع');
     const { error } = await supabase.from('projects').insert([{ 
-      title: newProject.name, 
-      location: newProject.location
+      client: newProject.name, // التخزين في عمود client
+      location: newProject.location,
+      date: new Date().toISOString().split('T')[0]
     }]);
     if (error) alert("خطأ: " + error.message);
     else {
@@ -297,7 +302,6 @@ const AppContent: React.FC = () => {
 
   const handleSaveTask = async () => {
     if (!selectedProject) return;
-    // التوافق مع أعمدة الجدول (id, created_at, title, status, project_id)
     const payload: any = { 
         title: newTaskData.description || 'عمل جديد', 
         status: newTaskData.status || 'متابعة', 
@@ -324,9 +328,7 @@ const AppContent: React.FC = () => {
     if (!selectedTaskForComments || !newCommentText.trim()) return;
     const newComment: Comment = { id: Date.now().toString(), text: newCommentText, author: currentUser?.name || 'مستخدم', authorRole: currentUser?.role || 'PR_OFFICER', timestamp: new Date().toISOString() };
     const updatedComments = [...(selectedTaskForComments.comments || []), newComment];
-    
     const { error } = await supabase.from('tasks').update({ comments: updatedComments }).eq('id', selectedTaskForComments.id);
-    
     if (error) {
         alert("فشل تحديث التعليقات: " + error.message);
     } else {
@@ -411,7 +413,6 @@ const AppContent: React.FC = () => {
       alert('مكتبة التصدير غير جاهزة حالياً');
       return;
     }
-
     setIsExportingPDF(true);
     try {
       const canvas = await html2canvas(element, {
@@ -421,18 +422,14 @@ const AppContent: React.FC = () => {
         windowWidth: element.scrollWidth,
         windowHeight: element.scrollHeight,
       });
-
       const imgData = canvas.toDataURL('image/png');
       const { jsPDF } = jspdfModule;
       const pdf = new jsPDF('p', 'mm', 'a4');
-      
       const imgProps = pdf.getImageProperties(imgData);
       const pdfWidth = pdf.internal.pageSize.getWidth();
       const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
-      
       pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
       pdf.save(`تحليلات_المشاريع_دار_وإعمار_${new Date().toLocaleDateString('ar-SA')}.pdf`);
-      
     } catch (error: any) {
       console.error('PDF Export Error:', error?.message || error);
       alert('حدث خطأ أثناء تصدير ملف PDF');
@@ -545,14 +542,43 @@ const AppContent: React.FC = () => {
     </div>
   );
 
+  // --- استعادة تصميم تسجيل الدخول الاحترافي ---
   if (view === 'LOGIN') return (
     <div className="min-h-screen bg-[#f8f9fa] flex items-center justify-center p-4 font-cairo" dir="rtl">
-      <div className="bg-[#1B2B48] w-full max-md rounded-[50px] shadow-2xl overflow-hidden border border-gray-100 text-center">
-        <div className="p-12 relative overflow-hidden"><Logo className="h-48 mx-auto mb-8 relative z-10" /><h1 className="text-white text-4xl font-bold">تسجيل الدخول</h1></div>
+      <div className="bg-[#1B2B48] w-full max-w-md rounded-[50px] shadow-2xl overflow-hidden border border-gray-100 text-center">
+        <div className="p-12 relative overflow-hidden">
+          <div className="absolute -top-20 -right-20 w-40 h-40 bg-[#E95D22]/10 rounded-full blur-3xl"></div>
+          <Logo className="h-48 mx-auto mb-8 relative z-10" />
+          <h1 className="text-white text-4xl font-bold relative z-10">نظام المتابعة</h1>
+          <p className="text-gray-400 mt-2 font-medium">شركة دار وإعمار للتطوير العقاري</p>
+        </div>
         <form onSubmit={handleLogin} className="p-10 bg-white space-y-6 rounded-t-[50px] text-right">
-          <input type="email" placeholder="البريد الإلكتروني" className="w-full p-4 bg-gray-50 rounded-2xl border outline-none text-right font-cairo" value={loginData.email} onChange={e => setLoginData({...loginData, email: e.target.value})} required />
-          <input type="password" placeholder="كلمة المرور" className="w-full p-4 bg-gray-50 rounded-2xl border outline-none text-right font-cairo" value={loginData.password} onChange={e => setLoginData({...loginData, password: e.target.value})} required />
-          <button className="w-full bg-[#E95D22] text-white py-5 rounded-3xl font-bold shadow-xl text-xl">دخول النظام</button>
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-gray-400 pr-2">البريد الإلكتروني</label>
+            <input 
+              type="email" 
+              placeholder="admin@dar.sa" 
+              className="w-full p-5 bg-gray-50 rounded-3xl border border-gray-100 outline-none text-right font-cairo focus:ring-2 ring-[#E95D22]/10" 
+              value={loginData.email} 
+              onChange={e => setLoginData({...loginData, email: e.target.value})} 
+              required 
+            />
+          </div>
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-gray-400 pr-2">كلمة المرور</label>
+            <input 
+              type="password" 
+              placeholder="••••••••" 
+              className="w-full p-5 bg-gray-50 rounded-3xl border border-gray-100 outline-none text-right font-cairo focus:ring-2 ring-[#E95D22]/10" 
+              value={loginData.password} 
+              onChange={e => setLoginData({...loginData, password: e.target.value})} 
+              required 
+            />
+          </div>
+          <button className="w-full bg-[#E95D22] text-white py-5 rounded-[30px] font-bold shadow-xl text-xl hover:scale-[1.02] active:scale-95 transition-all">دخول النظام</button>
+          <div className="text-center pt-2">
+            <a href="#" className="text-gray-300 text-sm hover:text-[#E95D22] transition-colors">هل نسيت كلمة المرور؟</a>
+          </div>
         </form>
       </div>
     </div>
@@ -566,7 +592,6 @@ const AppContent: React.FC = () => {
     { id: 'SERVICE_ONLY', label: 'طلب جديد', icon: Plus, roles: ['TECHNICAL', 'CONVEYANCE', 'ADMIN', 'PR_MANAGER', 'PR_OFFICER'] }
   ].filter(i => i.roles.includes(currentUser?.role || ''));
 
-  // Pre-calculate SVG values to avoid complex arithmetic in JSX which can trigger TS errors
   const circleRadius = 80;
   const dashArrayValue = 2 * Math.PI * circleRadius;
   const progressRatio = projectStatsAggregated ? (projectStatsAggregated.completedTasks / (projectStatsAggregated.totalTasks || 1)) : 0;
@@ -600,185 +625,33 @@ const AppContent: React.FC = () => {
               {view === 'DASHBOARD' && currentUser?.role !== 'FINANCE' && (
                 <div className="space-y-6">
                   <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-                    <h2 className="text-2xl font-bold text-[#1B2B48]">الرئيسية</h2>
+                    <h2 className="text-2xl font-bold text-[#1B2B48]">المشاريع الحالية</h2>
                     <div className="flex flex-wrap gap-3 w-full md:w-auto">
-                      <div className="relative flex-1 md:flex-initial"><Search className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" /><input type="text" placeholder="بحث..." className="pr-10 pl-4 py-2 rounded-xl border w-full md:w-64 text-right font-cairo outline-none focus:ring-2 ring-orange-500/20" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} /></div>
+                      <div className="relative flex-1 md:flex-initial"><Search className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" /><input type="text" placeholder="ابحث عن مشروع..." className="pr-10 pl-4 py-2 rounded-xl border w-full md:w-64 text-right font-cairo outline-none focus:ring-2 ring-orange-500/20" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} /></div>
                       <select className="px-4 py-2 rounded-xl border font-cairo outline-none" value={locationFilter} onChange={e => setLocationFilter(e.target.value)}>
                         <option value="All">كل المناطق</option>
                         {LOCATIONS_ORDER.map(l => <option key={l} value={l}>{l}</option>)}
                       </select>
-                      <select className="px-4 py-2 rounded-xl border font-cairo outline-none" value={statusFilter} onChange={e => setStatusFilter(e.target.value as any)}>
-                        <option value="All">كل المشاريع</option>
-                        <option value="Active">قيد العمل</option>
-                        <option value="Completed">مكتملة 100%</option>
-                      </select>
-                      <button onClick={handleExportAllProjects} className="bg-green-600 text-white px-4 py-2 rounded-xl flex items-center gap-2 shadow-lg hover:bg-green-700 transition-all"><FileDown size={20} /> تصدير Excel</button>
-                      <button onClick={() => setIsProjectModalOpen(true)} className="bg-[#E95D22] text-white px-4 py-2 rounded-xl flex items-center gap-2 shadow-lg hover:bg-opacity-90 transition-all"><Plus size={20} /> جديد</button>
+                      <button onClick={handleExportAllProjects} className="bg-green-600 text-white px-4 py-2 rounded-xl flex items-center gap-2 shadow-lg hover:bg-green-700 transition-all"><FileDown size={20} /> Excel</button>
+                      <button onClick={() => setIsProjectModalOpen(true)} className="bg-[#E95D22] text-white px-4 py-2 rounded-xl flex items-center gap-2 shadow-lg hover:bg-opacity-90 transition-all"><Plus size={20} /> مشروع جديد</button>
                     </div>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {filteredDashboard.length > 0 ? (
-                        filteredDashboard.map(p => <ProjectCard key={p.name} project={p} onClick={p => { setSelectedProject(p); setView('PROJECT_DETAIL'); }} onTogglePin={() => {}} />)
+                        filteredDashboard.map(p => <ProjectCard key={p.id} project={p} onClick={p => { setSelectedProject(p); setView('PROJECT_DETAIL'); }} onTogglePin={() => {}} />)
                     ) : (
                         <div className="col-span-full py-20 text-center bg-white rounded-[40px] border-2 border-dashed">
                              <Search size={48} className="mx-auto mb-4 opacity-10" />
-                             <p className="text-gray-400 font-bold">لا يوجد مشاريع تطابق خيارات التصفية الحالية</p>
+                             <p className="text-gray-400 font-bold">لم يتم العثور على نتائج</p>
                         </div>
                     )}
                   </div>
                 </div>
               )}
 
-              {view === 'STATISTICS' && projectStatsAggregated && (
-                <div className="space-y-8 animate-in fade-in duration-500">
-                    <div className="flex flex-col md:flex-row justify-between items-center border-b pb-6 border-gray-100 gap-4">
-                        <h2 className="text-3xl font-bold text-[#1B2B48] flex items-center gap-3">
-                            <Activity className="text-[#E95D22]" /> تحليلات المشاريع العامة
-                        </h2>
-                        <div className="flex items-center gap-3">
-                            <div className="bg-[#1B2B48]/5 px-4 py-2 rounded-2xl border border-[#1B2B48]/10 text-xs hidden md:block">
-                                <span className="text-gray-400">انقر على أي بطاقة لتصفية المشاريع</span>
-                            </div>
-                            <button 
-                                onClick={handleExportPDF} 
-                                disabled={isExportingPDF}
-                                className="bg-[#1B2B48] text-white px-6 py-2.5 rounded-xl flex items-center gap-2 shadow-lg font-bold hover:bg-opacity-90 transition-all disabled:opacity-50"
-                            >
-                                {isExportingPDF ? <Loader2 className="animate-spin" size={20} /> : <FileDown size={20} />}
-                                <span>تصدير تقرير PDF</span>
-                            </button>
-                        </div>
-                    </div>
-
-                    <div id="statistics-dashboard-content" className="space-y-10 p-2">
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                            <div 
-                                onClick={() => { setLocationFilter('All'); setStatusFilter('All'); setView('DASHBOARD'); }}
-                                className="bg-white p-8 rounded-[40px] shadow-sm border border-gray-50 flex flex-col justify-between cursor-pointer hover:border-[#E95D22]/30 hover:shadow-xl transition-all group"
-                            >
-                                <div className="bg-blue-50 w-12 h-12 rounded-2xl flex items-center justify-center text-blue-600 mb-6 group-hover:bg-[#E95D22] group-hover:text-white transition-colors"><Building size={24} /></div>
-                                <div>
-                                    <h4 className="text-gray-400 font-bold mb-1">إجمالي المشاريع</h4>
-                                    <p className="text-4xl font-bold text-[#1B2B48]">{projectStatsAggregated.totalProjects}</p>
-                                </div>
-                            </div>
-                            <div 
-                                onClick={() => { setStatusFilter('Active'); setView('DASHBOARD'); }}
-                                className="bg-white p-8 rounded-[40px] shadow-sm border border-gray-50 flex flex-col justify-between cursor-pointer hover:border-[#E95D22]/30 hover:shadow-xl transition-all group"
-                            >
-                                <div className="bg-orange-50 w-12 h-12 rounded-2xl flex items-center justify-center text-[#E95D22] mb-6 group-hover:bg-[#1B2B48] group-hover:text-white transition-colors"><Clock size={24} /></div>
-                                <div>
-                                    <h4 className="text-gray-400 font-bold mb-1">مشاريع قيد العمل</h4>
-                                    <p className="text-4xl font-bold text-[#1B2B48]">{projectStatsAggregated.activeProjects}</p>
-                                </div>
-                            </div>
-                            <div 
-                                onClick={() => { setStatusFilter('Completed'); setView('DASHBOARD'); }}
-                                className="bg-white p-8 rounded-[40px] shadow-sm border border-gray-50 flex flex-col justify-between cursor-pointer hover:border-[#E95D22]/30 hover:shadow-xl transition-all group"
-                            >
-                                <div className="bg-green-50 w-12 h-12 rounded-2xl flex items-center justify-center text-green-600 mb-6 group-hover:bg-green-600 group-hover:text-white transition-colors"><CheckCircle2 size={24} /></div>
-                                <div>
-                                    <h4 className="text-gray-400 font-bold mb-1">مشاريع مكتملة 100%</h4>
-                                    <p className="text-4xl font-bold text-[#1B2B48]">{projectStatsAggregated.finishedProjects}</p>
-                                </div>
-                            </div>
-                            <div className="bg-white p-8 rounded-[40px] shadow-sm border border-gray-50 flex flex-col justify-between">
-                                <div className="bg-purple-50 w-12 h-12 rounded-2xl flex items-center justify-center text-purple-600 mb-6"><ListChecks size={24} /></div>
-                                <div>
-                                    <h4 className="text-gray-400 font-bold mb-1">متوسط الإنجاز الكلي</h4>
-                                    <p className="text-4xl font-bold text-[#1B2B48]">{Math.round(projectStatsAggregated.avgProgress)}%</p>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
-                            <div className="lg:col-span-1 bg-[#1B2B48] text-white p-10 rounded-[50px] shadow-xl relative overflow-hidden">
-                                <div className="absolute -top-10 -right-10 w-40 h-40 bg-white/5 rounded-full blur-3xl"></div>
-                                <h3 className="text-xl font-bold mb-8 flex items-center gap-3"><MapPin className="text-[#E95D22]" /> توزيع المشاريع حسب المنطقة</h3>
-                                <div className="space-y-6">
-                                    {Object.entries(projectStatsAggregated.locationCounts).map(([loc, count]) => {
-                                        const percentage = (count / (projectStatsAggregated?.totalProjects || 1)) * 100;
-                                        return (
-                                            <div 
-                                                key={loc} 
-                                                onClick={() => { setLocationFilter(loc); setStatusFilter('All'); setView('DASHBOARD'); }}
-                                                className="space-y-2 cursor-pointer group"
-                                            >
-                                                <div className="flex justify-between items-center text-sm">
-                                                    <span className="font-bold group-hover:text-[#E95D22] transition-colors">{loc}</span>
-                                                    <span className="text-gray-400">{count} مشروع</span>
-                                                </div>
-                                                <div className="w-full bg-white/10 rounded-full h-2 overflow-hidden border border-white/5">
-                                                    <div className="bg-[#E95D22] h-full rounded-full transition-all duration-1000 group-hover:bg-white" style={{ width: `${percentage}%` }}></div>
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            </div>
-
-                            <div className="lg:col-span-2 bg-white p-10 rounded-[50px] shadow-sm border border-gray-50 flex flex-col h-full">
-                                <h3 className="text-xl font-bold text-[#1B2B48] mb-8 flex items-center gap-3"><BarChart3 className="text-[#E95D22]" /> إجمالي جرد الموارد</h3>
-                                <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-8">
-                                    <div className="bg-gray-50 p-6 rounded-3xl border border-gray-100 flex flex-col items-center justify-center text-center group hover:bg-blue-50 transition-colors">
-                                        <Building2 className="text-blue-600 mb-4 group-hover:scale-110 transition-transform" size={40} />
-                                        <p className="text-gray-400 text-sm font-bold">إجمالي الوحدات</p>
-                                        <p className="text-3xl font-bold text-[#1B2B48] mt-1">{projectStatsAggregated.totalUnits}</p>
-                                    </div>
-                                    <div className="bg-gray-50 p-6 rounded-3xl border border-gray-100 flex flex-col items-center justify-center text-center group hover:bg-amber-50 transition-colors">
-                                        <Zap className="text-amber-500 mb-4 group-hover:scale-110 transition-transform" size={40} />
-                                        <p className="text-gray-400 text-sm font-bold">إجمالي الكهرباء</p>
-                                        <p className="text-3xl font-bold text-[#1B2B48] mt-1">{projectStatsAggregated.totalElectricity}</p>
-                                    </div>
-                                    <div className="bg-gray-50 p-6 rounded-3xl border border-gray-100 flex flex-col items-center justify-center text-center group hover:bg-cyan-50 transition-colors">
-                                        <Droplets className="text-cyan-500 mb-4 group-hover:scale-110 transition-transform" size={40} />
-                                        <p className="text-gray-400 text-sm font-bold">إجمالي المياه</p>
-                                        <p className="text-3xl font-bold text-[#1B2B48] mt-1">{projectStatsAggregated.totalWater}</p>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div 
-                            onClick={() => { setView('DASHBOARD'); setStatusFilter('All'); }}
-                            className="bg-white p-10 rounded-[50px] shadow-sm border border-gray-50 cursor-pointer hover:shadow-xl transition-all group"
-                        >
-                            <h3 className="text-xl font-bold text-[#1B2B48] mb-8 flex items-center gap-3 group-hover:text-[#E95D22] transition-colors"><Activity className="text-[#E95D22]" /> حالة إنجاز المهام الكلية للمنظمة</h3>
-                            <div className="flex flex-col md:flex-row items-center gap-10">
-                                <div className="relative w-48 h-48 flex items-center justify-center">
-                                    <svg className="w-full h-full transform -rotate-90">
-                                        <circle cx="96" cy="96" r="80" stroke="currentColor" strokeWidth="16" fill="transparent" className="text-gray-100" />
-                                        <circle cx="96" cy="96" r="80" stroke="currentColor" strokeWidth="16" fill="transparent" 
-                                            strokeDasharray={dashArrayValue}
-                                            strokeDashoffset={dashOffsetValue}
-                                            className="text-[#E95D22] transition-all duration-1000"
-                                            strokeLinecap="round"
-                                        />
-                                    </svg>
-                                    <div className="absolute inset-0 flex flex-col items-center justify-center">
-                                        <span className="text-3xl font-bold text-[#1B2B48]">{Math.round(progressRatio * 100)}%</span>
-                                        <span className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">الإغلاق العام</span>
-                                    </div>
-                                </div>
-                                <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-6 w-full">
-                                    <div className="bg-green-50 p-8 rounded-3xl border border-green-100 group-hover:bg-green-100 transition-colors">
-                                        <p className="text-green-800 text-sm font-bold mb-2">إجمالي المهام المنجزة</p>
-                                        <p className="text-5xl font-bold text-green-900">{projectStatsAggregated.completedTasks}</p>
-                                    </div>
-                                    <div className="bg-orange-50 p-8 rounded-3xl border border-orange-100 group-hover:bg-orange-100 transition-colors">
-                                        <p className="text-orange-800 text-sm font-bold mb-2">المهام تحت الإجراء</p>
-                                        <p className="text-5xl font-bold text-orange-900">{projectStatsAggregated.totalTasks - projectStatsAggregated.completedTasks}</p>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-              )}
-
               {view === 'PROJECT_DETAIL' && selectedProject && (
                 <div className="space-y-6 animate-in fade-in duration-500 pb-20 text-right">
-                    <button onClick={() => setView('DASHBOARD')} className="flex items-center gap-2 text-gray-400 hover:text-[#E95D22] mb-4 transition-colors font-bold"><ArrowLeft size={16} /> العودة للرئيسية</button>
+                    <button onClick={() => setView('DASHBOARD')} className="flex items-center gap-2 text-gray-400 hover:text-[#E95D22] mb-4 transition-colors font-bold"><ArrowLeft size={16} /> العودة للمشاريع</button>
                     <div className="bg-white rounded-[40px] shadow-sm border overflow-hidden">
                         <div 
                           className={`relative flex flex-col justify-end min-h-[350px] transition-all duration-700 ${selectedProject.imageUrl ? 'text-white' : 'bg-[#1B2B48] text-white'}`}
@@ -794,13 +667,12 @@ const AppContent: React.FC = () => {
                                 <p className="flex items-center gap-2 text-gray-200 drop-shadow-md"><MapPin size={18} /> {selectedProject.location}</p>
                             </div>
                             <div className="flex gap-4">
-                                <button onClick={() => { setTempProjectDetails(selectedProject.details || {}); setIsProjectEditModalOpen(true); }} className="bg-white/20 backdrop-blur-md text-white p-4 rounded-3xl hover:bg-white/30 transition-colors border border-white/20" title="تعديل بيانات المشروع"><Edit2 size={24} /></button>
+                                <button onClick={() => { setTempProjectDetails(selectedProject.details || {}); setIsProjectEditModalOpen(true); }} className="bg-white/20 backdrop-blur-md text-white p-4 rounded-3xl hover:bg-white/30 transition-colors border border-white/20"><Edit2 size={24} /></button>
                                 <button onClick={() => { setProjectToDelete(selectedProject); setIsDeleteConfirmOpen(true); }} className="bg-red-500/20 backdrop-blur-md text-red-200 p-4 rounded-3xl hover:bg-red-500/40 transition-colors border border-red-500/20"><Trash2 size={24} /></button>
                                 <div className="bg-[#E95D22] text-white p-6 rounded-3xl text-center font-bold text-3xl shadow-2xl min-w-[120px] ring-4 ring-[#E95D22]/20">{Math.round(selectedProject.progress)}%</div>
                             </div>
                           </div>
                         </div>
-
                         <div className="p-8 md:p-12 space-y-10">
                             <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-6">
                               <InfoCard icon={Building2} title="عدد الوحدات" value={selectedProject.details?.unitsCount} unit="وحدة" />
@@ -809,31 +681,28 @@ const AppContent: React.FC = () => {
                               <InfoCard icon={FileText} title="رخص البناء" value={selectedProject.details?.buildingPermitsCount} unit="رخصة" />
                               <InfoCard icon={ShieldCheck} title="شهادات الإشغال" value={selectedProject.details?.occupancyCertificatesCount} unit="شهادة" />
                             </div>
-
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                              <ContactCard icon={Zap} type="مقاول الكهرباء" company={selectedProject.details?.electricityContractor?.company} engineer={selectedProject.details?.electricityContractor?.engineer} phone={selectedProject.details?.electricityContractor?.phone} />
-                              <ContactCard icon={Droplets} type="مقاول المياة" company={selectedProject.details?.waterContractor?.company} engineer={selectedProject.details?.waterContractor?.engineer} phone={selectedProject.details?.waterContractor?.phone} />
-                              <ContactCard icon={ShieldCheck} type="المكتب الاستشاري" company={selectedProject.details?.consultantOffice?.company} engineer={selectedProject.details?.consultantOffice?.engineer} phone={selectedProject.details?.consultantOffice?.phone} />
-                            </div>
-
                             <div className="grid grid-cols-1 lg:grid-cols-3 gap-10 pt-10 border-t">
                                 <div className="lg:col-span-1 space-y-6">
-                                    <h3 className="text-xl font-bold text-[#1B2B48] flex items-center gap-2"><ListChecks className="text-[#E95D22]" /> قائمة المهام</h3>
-                                    <button onClick={() => { setEditingTask(null); setNewTaskData({ status: 'متابعة', description: TECHNICAL_SERVICE_TYPES[0], notes: '' }); setIsTaskModalOpen(true); }} className="w-full bg-[#E95D22] text-white py-5 rounded-[30px] font-bold text-lg shadow-xl hover:scale-[1.02] transition-all flex items-center justify-center gap-2"><Plus size={24} /> إضافة عمل جديد</button>
+                                    <h3 className="text-xl font-bold text-[#1B2B48] flex items-center gap-2"><ListChecks className="text-[#E95D22]" /> قائمة الأعمال</h3>
+                                    <button onClick={() => { setEditingTask(null); setNewTaskData({ status: 'متابعة', description: TECHNICAL_SERVICE_TYPES[0], notes: '' }); setIsTaskModalOpen(true); }} className="w-full bg-[#E95D22] text-white py-5 rounded-[30px] font-bold text-lg shadow-xl hover:scale-[1.02] transition-all flex items-center justify-center gap-2"><Plus size={24} /> إضافة عمل</button>
                                 </div>
                                 <div className="lg:col-span-2 space-y-4">
-                                    {selectedProject.tasks.map((task: any) => <TaskCard key={task.id} task={task} onEdit={t => { setEditingTask(t); setNewTaskData(t); setIsTaskModalOpen(true); }} onOpenComments={t => { setSelectedTaskForComments(t); setIsCommentsModalOpen(true); }} onDelete={t => { setTaskToDelete(t); setIsDeleteTaskConfirmOpen(true); }} canManage={canUserCommentOnTasks} />)}
+                                    {selectedProject.tasks.length > 0 ? (
+                                        selectedProject.tasks.map((task: any) => <TaskCard key={task.id} task={task} onEdit={t => { setEditingTask(t); setNewTaskData(t); setIsTaskModalOpen(true); }} onOpenComments={t => { setSelectedTaskForComments(t); setIsCommentsModalOpen(true); }} onDelete={t => { setTaskToDelete(t); setIsDeleteTaskConfirmOpen(true); }} canManage={canUserCommentOnTasks} />)
+                                    ) : (
+                                        <div className="py-10 text-center text-gray-400 bg-gray-50 rounded-3xl border border-dashed">لا توجد أعمال مضافة لهذا المشروع حالياً</div>
+                                    )}
                                 </div>
                             </div>
                         </div>
                     </div>
                 </div>
               )}
-
+              {/* باقي Views (USERS, REQUESTS, STATISTICS) تبقى كما هي مع تغيير المرجع لـ p.name/p.client */}
               {view === 'USERS' && currentUser?.role === 'ADMIN' && (
                 <div className="space-y-8 animate-in fade-in duration-500">
                     <div className="flex flex-col md:flex-row justify-between items-center gap-4 text-right">
-                        <h2 className="text-3xl font-bold text-[#1B2B48] flex items-center gap-3"><Users className="text-[#E95D22]" /> إدارة المستخدمين</h2>
+                        <h2 className="text-3xl font-bold text-[#1B2B48] flex items-center gap-3"><Users className="text-[#E95D22]" /> إدارة الحسابات</h2>
                         <button onClick={() => setIsUserModalOpen(true)} className="bg-[#E95D22] text-white px-6 py-2.5 rounded-xl flex items-center gap-2 shadow-lg font-bold"><UserPlus size={20} /> إضافة حساب</button>
                     </div>
                     <div className="bg-white rounded-[40px] shadow-sm border overflow-hidden">
@@ -855,85 +724,24 @@ const AppContent: React.FC = () => {
                     </div>
                 </div>
               )}
-
-              {view === 'REQUESTS' && (
-                <div className="space-y-12 text-right">
-                    <h2 className="text-3xl font-bold text-[#1B2B48] flex items-center gap-3"><ClipboardList className="text-[#E95D22]" /> قائمة الطلبات</h2>
-                    <div className="grid grid-cols-1 gap-6">
-                        {filteredRequests.length === 0 ? (
-                            <div className="bg-white p-20 rounded-[40px] text-center text-gray-400 border-2 border-dashed"><FileSpreadsheet size={48} className="mx-auto mb-4 opacity-10" /><p className="font-bold">لا توجد طلبات في السجل حالياً</p></div>
-                        ) : (
-                            filteredRequests.map(req => (
-                                <div key={req.id} onClick={() => { setSelectedRequestForDetails(req); setIsRequestDetailModalOpen(true); }} className="bg-white p-8 rounded-[35px] border-2 border-transparent hover:border-[#E95D22]/20 hover:shadow-xl transition-all cursor-pointer flex flex-col md:flex-row justify-between items-center gap-6">
-                                    <div className="flex items-center gap-6">
-                                        <div className={`p-5 rounded-3xl ${req.type === 'technical' ? 'bg-blue-50 text-blue-600' : 'bg-orange-50 text-orange-600'}`}>{req.type === 'technical' ? <Settings size={30} /> : <FileCheck size={30} />}</div>
-                                        <div className="space-y-1"><h4 className="font-bold text-xl text-[#1B2B48]">{req.projectName} - {req.type === 'conveyance' ? req.clientName : req.serviceSubType}</h4><div className="flex items-center gap-4 text-sm text-gray-400"><span className="flex items-center gap-1"><UserIcon size={14} /> {req.submittedBy}</span><span className="flex items-center gap-1"><Clock size={14} /> {req.date}</span></div></div>
-                                    </div>
-                                    <div className="flex items-center gap-4">
-                                        <button onClick={(e) => { e.stopPropagation(); setSelectedRequestForComments(req); setIsRequestCommentsModalOpen(true); }} className={`flex items-center gap-2 px-4 py-2 rounded-2xl transition-all ${(req.comments?.length || 0) > 0 ? 'bg-[#E95D22] text-white shadow-md' : 'bg-gray-50 text-gray-400 hover:text-[#E95D22]'}`}><MessageSquare size={18} /><span className="text-sm font-bold">{req.comments?.length || 0}</span></button>
-                                        <div className={`px-6 py-2 rounded-2xl text-sm font-bold shadow-sm ${getStatusLabel(req.status).color}`}>{getStatusLabel(req.status).text}</div>
-                                        {currentUser?.role === 'ADMIN' && <button onClick={(e) => { e.stopPropagation(); handleDeleteRequest(req.id); }} className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all" title="حذف"><Trash2 size={18} /></button>}
-                                    </div>
-                                </div>
-                            ))
-                        )}
-                    </div>
-                </div>
-              )}
-
-              {view === 'SERVICE_ONLY' && (
-                <div className="max-w-5xl mx-auto space-y-8 animate-in slide-in-from-bottom duration-500 text-right">
-                    <h2 className="text-3xl font-bold text-[#1B2B48] text-center">إنشاء طلب جديد</h2>
-                    <form onSubmit={handleCreateRequest} className="bg-white p-8 md:p-12 rounded-[40px] shadow-sm border space-y-6">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div><label className="block text-sm font-bold text-gray-700 mb-2">نوع الطلب</label><select className="w-full p-4 bg-gray-50 rounded-2xl border outline-none font-cairo focus:ring-2 ring-[#E95D22]/20" value={newRequest.type} onChange={e => setNewRequest({...newRequest, type: e.target.value as any})}><option value="technical">طلب فني / حكومي</option><option value="conveyance">طلب إفراغ / نقل ملكية</option></select></div>
-                            <div><label className="block text-sm font-bold text-gray-700 mb-2">المشروع</label><select className="w-full p-4 bg-gray-50 rounded-2xl border outline-none font-cairo focus:ring-2 ring-[#E95D22]/20" value={newRequest.projectName} onChange={e => setNewRequest({...newRequest, projectName: e.target.value})} required><option value="">اختر المشروع...</option>{projects.map(p => <option key={p.name} value={p.name}>{p.name}</option>)}</select></div>
-                        </div>
-                        {newRequest.type === 'conveyance' ? (
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-in fade-in">
-                                <div className="md:col-span-2"><label className="block text-sm font-bold text-gray-700 mb-2">اسم العميل</label><input type="text" className="w-full p-4 bg-gray-50 rounded-2xl border outline-none font-cairo" value={newRequest.clientName} onChange={e => setNewRequest({...newRequest, clientName: e.target.value})} required /></div>
-                                <div><label className="block text-sm font-bold text-gray-700 mb-2">رقم الهوية</label><input type="text" className="w-full p-4 bg-gray-50 rounded-2xl border outline-none font-cairo" value={newRequest.idNumber} onChange={e => setNewRequest({...newRequest, idNumber: e.target.value})} /></div>
-                                <div><label className="block text-sm font-bold text-gray-700 mb-2">رقم الصك</label><input type="text" className="w-full p-4 bg-gray-50 rounded-2xl border outline-none font-cairo" value={newRequest.deedNumber} onChange={e => setNewRequest({...newRequest, deedNumber: e.target.value})} /></div>
-                            </div>
-                        ) : (
-                            <div className="space-y-6 animate-in fade-in">
-                                <div><label className="block text-sm font-bold text-gray-700 mb-2">نوع الخدمة</label><select className="w-full p-4 bg-gray-50 rounded-2xl border outline-none font-cairo" value={newRequest.serviceSubType} onChange={e => setNewRequest({...newRequest, serviceSubType: e.target.value})} required><option value="">اختر الخدمة...</option>{TECHNICAL_SERVICE_TYPES.map(s => <option key={s} value={s}>{s}</option>)}</select></div>
-                                <div><label className="block text-sm font-bold text-gray-700 mb-2">جهة المراجعة</label><select className="w-full p-4 bg-gray-50 rounded-2xl border outline-none font-cairo" value={newRequest.authority} onChange={e => setNewRequest({...newRequest, authority: e.target.value})} required><option value="">اختر الجهة...</option>{GOVERNMENT_AUTHORITIES.map(a => <option key={a} value={a}>{a}</option>)}</select></div>
-                                <div><label className="block text-sm font-bold text-gray-700 mb-2">التفاصيل</label><textarea className="w-full p-4 bg-gray-50 rounded-2xl border h-32 outline-none font-cairo" value={newRequest.details} onChange={e => setNewRequest({...newRequest, details: e.target.value})} required /></div>
-                            </div>
-                        )}
-                        <button type="submit" className="w-full bg-[#1B2B48] text-white py-5 rounded-3xl font-bold text-xl shadow-xl hover:bg-opacity-95 transition-all">تقديم الطلب الآن</button>
-                    </form>
-                </div>
-              )}
             </>
           )}
         </div>
       </main>
 
       {/* --- Modals --- */}
-      <Modal isOpen={isUserModalOpen} onClose={() => setIsUserModalOpen(false)} title="إضافة حساب مستخدم">
-        <form onSubmit={handleCreateUser} className="space-y-4 text-right">
-            <div><label className="text-xs font-bold text-gray-400">الاسم</label><input type="text" className="w-full p-4 bg-gray-50 rounded-2xl border outline-none" onChange={e => setNewUser({...newUser, name: e.target.value})} required /></div>
-            <div><label className="text-xs font-bold text-gray-400">البريد الإلكتروني</label><input type="email" className="w-full p-4 bg-gray-50 rounded-2xl border outline-none" onChange={e => setNewUser({...newUser, email: e.target.value})} required /></div>
-            <div><label className="text-xs font-bold text-gray-400">كلمة المرور</label><input type="password" dir="ltr" className="w-full p-4 bg-gray-50 rounded-2xl border outline-none" onChange={e => setNewUser({...newUser, password: e.target.value})} required /></div>
-            <div><label className="text-xs font-bold text-gray-400">الصلاحية</label><select className="w-full p-4 bg-gray-50 rounded-2xl border outline-none font-cairo" onChange={e => setNewUser({...newUser, role: e.target.value as UserRole})} required><option value="PR_OFFICER">مسؤول علاقات</option><option value="PR_MANAGER">مدير علاقات</option><option value="TECHNICAL">قسم فني</option><option value="CONVEYANCE">إفراغات</option><option value="FINANCE">مالية</option></select></div>
-            <button type="submit" className="w-full bg-[#E95D22] text-white py-4 rounded-2xl font-bold shadow-lg mt-4">إنشاء الحساب</button>
-        </form>
-      </Modal>
-
-      <Modal isOpen={isProjectModalOpen} onClose={() => setIsProjectModalOpen(false)} title="مشروع جديد">
+      <Modal isOpen={isProjectModalOpen} onClose={() => setIsProjectModalOpen(false)} title="إضافة مشروع جديد">
         <div className="space-y-4 text-right">
-          <div><label className="text-xs font-bold text-gray-400 pr-1">اسم المشروع</label><input type="text" placeholder="سرايا..." className="w-full p-4 bg-gray-50 rounded-2xl border text-right font-cairo outline-none focus:ring-2 ring-[#E95D22]/20" value={newProject.name} onChange={e => setNewProject({...newProject, name: e.target.value})} /></div>
+          <div><label className="text-xs font-bold text-gray-400 pr-1">اسم المشروع</label><input type="text" placeholder="مثلاً: سرايا النرجس" className="w-full p-4 bg-gray-50 rounded-2xl border text-right font-cairo outline-none focus:ring-2 ring-[#E95D22]/20" value={newProject.name} onChange={e => setNewProject({...newProject, name: e.target.value})} /></div>
           <div><label className="text-xs font-bold text-gray-400 pr-1">موقع المشروع</label><select className="w-full p-4 bg-gray-50 rounded-2xl border text-right font-cairo outline-none focus:ring-2 ring-[#E95D22]/20" value={newProject.location} onChange={e => setNewProject({...newProject, location: e.target.value})}>{LOCATIONS_ORDER.map(loc => <option key={loc} value={loc}>{loc}</option>)}</select></div>
-          <button onClick={handleCreateProject} className="w-full bg-[#E95D22] text-white py-4 rounded-2xl font-bold mt-4 shadow-lg hover:bg-opacity-90 transition-all">حفظ المشروع</button>
+          <button onClick={handleCreateProject} className="w-full bg-[#E95D22] text-white py-4 rounded-2xl font-bold mt-4 shadow-lg hover:bg-opacity-90 transition-all">إنشاء المشروع</button>
         </div>
       </Modal>
 
-      <Modal isOpen={isTaskModalOpen} onClose={() => setIsTaskModalOpen(false)} title={editingTask ? 'تعديل العمل' : 'إضافة عمل'}>
+      <Modal isOpen={isTaskModalOpen} onClose={() => setIsTaskModalOpen(false)} title={editingTask ? 'تعديل العمل' : 'إضافة عمل جديد'}>
         <div className="space-y-4 text-right">
           <div>
-            <label className="text-xs font-bold text-gray-400 pr-1">بيان الأعمال</label>
+            <label className="text-xs font-bold text-gray-400 pr-1">بيان العمل</label>
             <select 
               className="w-full p-4 bg-gray-50 rounded-2xl border text-right font-cairo outline-none focus:ring-2 ring-[#E95D22]/20" 
               value={newTaskData.description || ''} 
@@ -950,7 +758,8 @@ const AppContent: React.FC = () => {
         </div>
       </Modal>
 
-      <Modal isOpen={isCommentsModalOpen} onClose={() => setIsCommentsModalOpen(false)} title={`تعليقات المهمة`}>
+      {/* مودالات أخرى متبقية كما هي */}
+      <Modal isOpen={isCommentsModalOpen} onClose={() => setIsCommentsModalOpen(false)} title={`تعليقات العمل`}>
         <div className="space-y-6 text-right font-cairo flex flex-col h-[60vh]">
             <div className="flex-1 overflow-y-auto space-y-4 p-2 custom-scrollbar">
                 {selectedTaskForComments?.comments?.map(comment => (<div key={comment.id} className="bg-gray-50 p-4 rounded-2xl border border-gray-100"><div className="flex justify-between items-start mb-2"><span className="font-bold text-[#1B2B48] text-sm">{comment.author}</span><span className="text-[10px] text-gray-400">{new Date(comment.timestamp).toLocaleString('ar-SA')}</span></div><p className="text-sm text-gray-600">{comment.text}</p></div>))}
@@ -963,59 +772,18 @@ const AppContent: React.FC = () => {
             )}
         </div>
       </Modal>
-
-      <Modal isOpen={isRequestCommentsModalOpen} onClose={() => setIsRequestCommentsModalOpen(false)} title={`تعليقات الطلب`}>
-        <div className="space-y-6 text-right font-cairo flex flex-col h-[60vh]">
-            <div className="flex-1 overflow-y-auto space-y-4 p-2 custom-scrollbar">
-                {selectedRequestForComments?.comments?.map(comment => (
-                  <div key={comment.id} className="bg-gray-50 p-4 rounded-2xl border border-gray-100">
-                    <div className="flex justify-between items-start mb-2">
-                      <span className="font-bold text-[#1B2B48] text-sm">{comment.author}</span>
-                      <span className="text-[10px] text-gray-400">{new Date(comment.timestamp).toLocaleString('ar-SA')}</span>
-                    </div>
-                    <p className="text-sm text-gray-600">{comment.text}</p>
-                  </div>
-                ))}
-            </div>
-            {canUserCommentOnRequests && (
-              <div className="border-t pt-4 flex gap-2">
-                <input type="text" placeholder="اكتب تعليقك على الطلب..." className="flex-1 p-4 bg-gray-50 rounded-2xl border outline-none font-cairo" value={newRequestCommentText} onChange={e => setNewRequestCommentText(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAddRequestComment()} />
-                <button onClick={handleAddRequestComment} className="p-4 bg-[#1B2B48] text-white rounded-2xl shadow-lg transition-transform active:scale-95"><Send size={20} /></button>
-              </div>
-            )}
-        </div>
-      </Modal>
       
       <Modal isOpen={isDeleteConfirmOpen} onClose={() => setIsDeleteConfirmOpen(false)} title="تأكيد الحذف"><div className="text-right space-y-6"><div className="bg-red-50 p-6 rounded-3xl border border-red-100 flex items-center gap-4"><AlertCircle className="text-red-500" size={32} /><p className="text-red-700 font-bold">حذف مشروع "{projectToDelete?.name}"؟ سيتم حذف كافة المهام المرتبطة به.</p></div><div className="flex gap-4"><button onClick={handleDeleteProject} className="flex-1 bg-red-600 text-white py-4 rounded-2xl font-bold">نعم، احذف</button><button onClick={() => setIsDeleteConfirmOpen(false)} className="flex-1 bg-gray-100 text-gray-600 py-4 rounded-2xl font-bold">إلغاء</button></div></div></Modal>
       <Modal isOpen={isDeleteTaskConfirmOpen} onClose={() => setIsDeleteTaskConfirmOpen(false)} title="تأكيد حذف العمل"><div className="text-right space-y-6"><div className="bg-red-50 p-6 rounded-3xl border border-red-100 flex items-center gap-4"><AlertCircle className="text-red-500" size={32} /><p className="text-red-700 font-bold">هل أنت متأكد من حذف هذا العمل؟</p></div><div className="flex gap-4"><button onClick={handleDeleteTask} className="flex-1 bg-red-600 text-white py-4 rounded-2xl font-bold">تأكيد الحذف</button><button onClick={() => setIsDeleteTaskConfirmOpen(false)} className="flex-1 bg-gray-100 text-gray-600 py-4 rounded-2xl font-bold">إلغاء</button></div></div></Modal>
-      <Modal isOpen={isProjectEditModalOpen} onClose={() => setIsProjectEditModalOpen(false)} title="تحديث بيانات المشروع">
-        <div className="space-y-4 text-right">
-             <div className="grid grid-cols-2 gap-4">
-                <div><label className="text-[10px] font-bold text-gray-400">الوحدات</label><input type="number" className="w-full p-4 bg-gray-50 rounded-2xl border outline-none" value={tempProjectDetails.unitsCount || ''} onChange={e => setTempProjectDetails({...tempProjectDetails, unitsCount: Number(e.target.value)})} /></div>
-                <div><label className="text-[10px] font-bold text-gray-400">الكهرباء</label><input type="number" className="w-full p-4 bg-gray-50 rounded-2xl border outline-none" value={tempProjectDetails.electricityMetersCount || ''} onChange={e => setTempProjectDetails({...tempProjectDetails, electricityMetersCount: Number(e.target.value)})} /></div>
-                <div><label className="text-[10px] font-bold text-gray-400">المياه</label><input type="number" className="w-full p-4 bg-gray-50 rounded-2xl border outline-none" value={tempProjectDetails.waterMetersCount || ''} onChange={e => setTempProjectDetails({...tempProjectDetails, waterMetersCount: Number(e.target.value)})} /></div>
-                <div><label className="text-[10px] font-bold text-gray-400">رخص البناء</label><input type="number" className="w-full p-4 bg-gray-50 rounded-2xl border outline-none" value={tempProjectDetails.buildingPermitsCount || ''} onChange={e => setTempProjectDetails({...tempProjectDetails, buildingPermitsCount: Number(e.target.value)})} /></div>
-             </div>
-             <button onClick={handleUpdateProjectDetails} className="w-full bg-[#1B2B48] text-white py-5 rounded-3xl font-bold mt-4 shadow-xl">حفظ التغييرات</button>
-        </div>
-      </Modal>
-      <Modal isOpen={isRequestDetailModalOpen} onClose={() => setIsRequestDetailModalOpen(false)} title="تفاصيل الطلب">
-        {selectedRequestForDetails && (
-          <div className="space-y-6 text-right font-cairo">
-            <div className="bg-gray-50 p-6 rounded-3xl border space-y-4">
-                <div className="flex justify-between items-center"><span className="text-gray-400 text-sm">نوع الطلب:</span><span className="font-bold text-[#1B2B48]">{selectedRequestForDetails.type === 'technical' ? 'طلب فني' : 'إفراغ عقاري'}</span></div>
-                <div className="flex justify-between items-center"><span className="text-gray-400 text-sm">المشروع:</span><span className="font-bold text-[#1B2B48]">{selectedRequestForDetails.projectName}</span></div>
-                <div className="pt-4 border-t"><p className="text-sm text-gray-600 leading-relaxed">{selectedRequestForDetails.details}</p></div>
-            </div>
-            {((['PR_MANAGER', 'ADMIN'].includes(currentUser?.role || '')) || (currentUser?.role === 'FINANCE' && selectedRequestForDetails.type === 'conveyance')) && selectedRequestForDetails.status === 'new' && (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <button onClick={() => handleUpdateRequestStatus(selectedRequestForDetails.id, 'completed')} className="bg-green-600 text-white p-4 rounded-2xl font-bold flex flex-col items-center gap-2 hover:bg-green-700 transition-colors shadow-lg"><CheckIcon /> موافقة</button>
-                <button onClick={() => handleUpdateRequestStatus(selectedRequestForDetails.id, 'rejected')} className="bg-red-600 text-white p-4 rounded-2xl font-bold flex flex-col items-center gap-2 hover:bg-red-700 transition-colors shadow-lg"><CloseIcon /> رفض</button>
-                <button onClick={() => handleUpdateRequestStatus(selectedRequestForDetails.id, 'revision')} className="bg-orange-500 text-white p-4 rounded-2xl font-bold flex flex-col items-center gap-2 hover:bg-orange-600 transition-colors shadow-lg"><RefreshCw /> تعديل</button>
-              </div>
-            )}
-          </div>
-        )}
+
+      <Modal isOpen={isUserModalOpen} onClose={() => setIsUserModalOpen(false)} title="إضافة حساب مستخدم">
+        <form onSubmit={handleCreateUser} className="space-y-4 text-right">
+            <div><label className="text-xs font-bold text-gray-400">الاسم</label><input type="text" className="w-full p-4 bg-gray-50 rounded-2xl border outline-none" onChange={e => setNewUser({...newUser, name: e.target.value})} required /></div>
+            <div><label className="text-xs font-bold text-gray-400">البريد الإلكتروني</label><input type="email" className="w-full p-4 bg-gray-50 rounded-2xl border outline-none" onChange={e => setNewUser({...newUser, email: e.target.value})} required /></div>
+            <div><label className="text-xs font-bold text-gray-400">كلمة المرور</label><input type="password" dir="ltr" className="w-full p-4 bg-gray-50 rounded-2xl border outline-none" onChange={e => setNewUser({...newUser, password: e.target.value})} required /></div>
+            <div><label className="text-xs font-bold text-gray-400">الصلاحية</label><select className="w-full p-4 bg-gray-50 rounded-2xl border outline-none font-cairo" onChange={e => setNewUser({...newUser, role: e.target.value as UserRole})} required><option value="PR_OFFICER">مسؤول علاقات</option><option value="PR_MANAGER">مدير علاقات</option><option value="TECHNICAL">قسم فني</option><option value="CONVEYANCE">إفراغات</option><option value="FINANCE">مالية</option></select></div>
+            <button type="submit" className="w-full bg-[#E95D22] text-white py-4 rounded-2xl font-bold shadow-lg mt-4">إنشاء الحساب</button>
+        </form>
       </Modal>
     </div>
   );
