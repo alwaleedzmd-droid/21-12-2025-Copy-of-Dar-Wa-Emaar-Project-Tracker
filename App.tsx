@@ -183,6 +183,7 @@ const AppContent: React.FC = () => {
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [newTaskData, setNewTaskData] = useState<Partial<Task>>({ status: 'متابعة' });
   const [newCommentText, setNewCommentText] = useState('');
+  const [newRequestCommentText, setNewRequestCommentText] = useState('');
   const [newRequest, setNewRequest] = useState<Partial<ServiceRequest>>({ projectName: '', type: 'technical' });
   const [newUser, setNewUser] = useState<Partial<User>>({ role: 'PR_OFFICER' });
 
@@ -283,7 +284,15 @@ const AppContent: React.FC = () => {
 
   const handleSaveTask = async () => {
     if (!selectedProject) return;
-    const payload = { title: newTaskData.description || 'عمل جديد', status: newTaskData.status || 'متابعة', reviewer: newTaskData.reviewer || '', requester: newTaskData.requester || '', notes: newTaskData.notes || '', client: selectedProject.name, date: new Date().toISOString().split('T')[0] };
+    const payload = { 
+        title: newTaskData.description || 'عمل جديد', 
+        status: newTaskData.status || 'متابعة', 
+        reviewer: newTaskData.reviewer || '', 
+        requester: newTaskData.requester || '', 
+        notes: newTaskData.notes || '', 
+        client: selectedProject.name, 
+        date: new Date().toISOString().split('T')[0] 
+    };
     if (editingTask) await supabase.from('projects').update(payload).eq('id', editingTask.id);
     else await supabase.from('projects').insert([payload]);
     await fetchProjects();
@@ -307,6 +316,31 @@ const AppContent: React.FC = () => {
     setSelectedTaskForComments({ ...selectedTaskForComments, comments: updatedComments });
     setNewCommentText('');
     await fetchProjects();
+  };
+
+  const handleAddRequestComment = () => {
+    if (!selectedRequestForComments || !newRequestCommentText.trim()) return;
+    const newComment: Comment = { 
+      id: Date.now().toString(), 
+      text: newRequestCommentText, 
+      author: currentUser?.name || 'مستخدم', 
+      authorRole: currentUser?.role || 'PR_OFFICER', 
+      timestamp: new Date().toISOString() 
+    };
+    
+    setServiceRequests(prev => prev.map(req => {
+      if (req.id === selectedRequestForComments.id) {
+        const updated = {
+          ...req,
+          comments: [...(req.comments || []), newComment]
+        };
+        setSelectedRequestForComments(updated);
+        return updated;
+      }
+      return req;
+    }));
+    
+    setNewRequestCommentText('');
   };
 
   const handleCreateRequest = (e: React.FormEvent) => {
@@ -459,7 +493,13 @@ const AppContent: React.FC = () => {
     }
   };
 
-  const canUserManageTasks = useMemo(() => ['ADMIN', 'PR_MANAGER', 'PR_OFFICER'].includes(currentUser?.role || ''), [currentUser]);
+  const canUserCommentOnTasks = useMemo(() => ['ADMIN', 'PR_MANAGER', 'PR_OFFICER'].includes(currentUser?.role || ''), [currentUser]);
+  const canUserCommentOnRequests = useMemo(() => {
+    if (!currentUser) return false;
+    if (['ADMIN', 'PR_MANAGER'].includes(currentUser.role)) return true;
+    if (['TECHNICAL', 'CONVEYANCE', 'FINANCE'].includes(currentUser.role)) return true;
+    return false;
+  }, [currentUser]);
 
   const InfoCard = ({ icon: Icon, title, value, unit, onClick }: { icon: any, title: string, value: any, unit?: string, onClick?: () => void }) => (
     <div 
@@ -747,7 +787,7 @@ const AppContent: React.FC = () => {
                         <div className="grid grid-cols-1 lg:grid-cols-3 gap-10 pt-10 border-t">
                             <div className="lg:col-span-1 space-y-6">
                                 <h3 className="text-xl font-bold text-[#1B2B48] flex items-center gap-2"><ListChecks className="text-[#E95D22]" /> قائمة المهام</h3>
-                                <button onClick={() => { setEditingTask(null); setNewTaskData({ status: 'متابعة' }); setIsTaskModalOpen(true); }} className="w-full bg-[#E95D22] text-white py-5 rounded-[30px] font-bold text-lg shadow-xl hover:scale-[1.02] transition-all flex items-center justify-center gap-2"><Plus size={24} /> إضافة عمل جديد</button>
+                                <button onClick={() => { setEditingTask(null); setNewTaskData({ status: 'متابعة', description: TECHNICAL_SERVICE_TYPES[0], notes: '' }); setIsTaskModalOpen(true); }} className="w-full bg-[#E95D22] text-white py-5 rounded-[30px] font-bold text-lg shadow-xl hover:scale-[1.02] transition-all flex items-center justify-center gap-2"><Plus size={24} /> إضافة عمل جديد</button>
                                 {completedRequestsForCurrentProject.length > 0 && (
                                     <div className="mt-8">
                                         <h4 className="text-sm font-bold text-gray-400 mb-4 flex items-center gap-2"><Briefcase size={16} /> الطلبات الحكومية المنجزة</h4>
@@ -766,7 +806,7 @@ const AppContent: React.FC = () => {
                                 )}
                             </div>
                             <div className="lg:col-span-2 space-y-4">
-                                {selectedProject.tasks.map(task => <TaskCard key={task.id} task={task} onEdit={t => { setEditingTask(t); setNewTaskData(t); setIsTaskModalOpen(true); }} onOpenComments={t => { setSelectedTaskForComments(t); setIsCommentsModalOpen(true); }} onDelete={t => { setTaskToDelete(t); setIsDeleteTaskConfirmOpen(true); }} canManage={canUserManageTasks} />)}
+                                {selectedProject.tasks.map(task => <TaskCard key={task.id} task={task} onEdit={t => { setEditingTask(t); setNewTaskData(t); setIsTaskModalOpen(true); }} onOpenComments={t => { setSelectedTaskForComments(t); setIsCommentsModalOpen(true); }} onDelete={t => { setTaskToDelete(t); setIsDeleteTaskConfirmOpen(true); }} canManage={canUserCommentOnTasks} />)}
                             </div>
                         </div>
                     </div>
@@ -875,12 +915,31 @@ const AppContent: React.FC = () => {
 
       <Modal isOpen={isTaskModalOpen} onClose={() => setIsTaskModalOpen(false)} title={editingTask ? 'تعديل العمل' : 'إضافة عمل'}>
         <div className="space-y-4 text-right">
-          <div><label className="text-xs font-bold text-gray-400 pr-1">بيان الأعمال</label><textarea className="w-full p-4 bg-gray-50 rounded-2xl border outline-none font-cairo h-20" value={newTaskData.description || ''} onChange={e => setNewTaskData({...newTaskData, description: e.target.value})} /></div>
+          <div>
+            <label className="text-xs font-bold text-gray-400 pr-1">بيان الأعمال</label>
+            <select 
+              className="w-full p-4 bg-gray-50 rounded-2xl border text-right font-cairo outline-none focus:ring-2 ring-[#E95D22]/20" 
+              value={newTaskData.description || ''} 
+              onChange={e => setNewTaskData({...newTaskData, description: e.target.value})}
+            >
+              <option value="">اختر نوع العمل...</option>
+              {TECHNICAL_SERVICE_TYPES.map(type => <option key={type} value={type}>{type}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs font-bold text-gray-400 pr-1">وصف الأعمال (اختياري)</label>
+            <textarea 
+              className="w-full p-4 bg-gray-50 rounded-2xl border outline-none font-cairo h-24" 
+              placeholder="اكتب تفاصيل العمل هنا..."
+              value={newTaskData.notes || ''} 
+              onChange={e => setNewTaskData({...newTaskData, notes: e.target.value})} 
+            />
+          </div>
           <div className="grid grid-cols-2 gap-4">
             <div><label className="text-xs font-bold text-gray-400 pr-1">جهة المراجعة</label><select className="w-full p-4 bg-gray-50 rounded-2xl border text-right font-cairo outline-none" value={newTaskData.reviewer || ''} onChange={e => setNewTaskData({...newTaskData, reviewer: e.target.value})}><option value="">اختر جهة...</option>{GOVERNMENT_AUTHORITIES.map(auth => <option key={auth} value={auth}>{auth}</option>)}</select></div>
             <div><label className="text-xs font-bold text-gray-400 pr-1">الحالة</label><select className="w-full p-4 bg-gray-50 rounded-2xl border text-right font-cairo outline-none" value={newTaskData.status || 'متابعة'} onChange={e => setNewTaskData({...newTaskData, status: e.target.value})}><option value="متابعة">متابعة</option><option value="منجز">منجز</option></select></div>
           </div>
-          <button onClick={handleSaveTask} className="w-full bg-[#1B2B48] text-white py-4 rounded-2xl font-bold shadow-lg mt-4">حفظ العمل</button>
+          <button onClick={handleSaveTask} className="w-full bg-[#1B2B48] text-white py-4 rounded-2xl font-bold shadow-lg mt-4 hover:bg-opacity-95 transition-all">حفظ العمل</button>
         </div>
       </Modal>
 
@@ -889,7 +948,40 @@ const AppContent: React.FC = () => {
             <div className="flex-1 overflow-y-auto space-y-4 p-2 custom-scrollbar">
                 {selectedTaskForComments?.comments?.map(comment => (<div key={comment.id} className="bg-gray-50 p-4 rounded-2xl border border-gray-100"><div className="flex justify-between items-start mb-2"><span className="font-bold text-[#1B2B48] text-sm">{comment.author}</span><span className="text-[10px] text-gray-400">{new Date(comment.timestamp).toLocaleString('ar-SA')}</span></div><p className="text-sm text-gray-600">{comment.text}</p></div>))}
             </div>
-            <div className="border-t pt-4 flex gap-2"><input type="text" placeholder="اكتب تعليقك..." className="flex-1 p-4 bg-gray-50 rounded-2xl border outline-none font-cairo" value={newCommentText} onChange={e => setNewCommentText(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAddComment()} /><button onClick={handleAddComment} className="p-4 bg-[#E95D22] text-white rounded-2xl shadow-lg"><Send size={20} /></button></div>
+            {canUserCommentOnTasks && (
+              <div className="border-t pt-4 flex gap-2">
+                <input type="text" placeholder="اكتب تعليقك..." className="flex-1 p-4 bg-gray-50 rounded-2xl border outline-none font-cairo" value={newCommentText} onChange={e => setNewCommentText(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAddComment()} />
+                <button onClick={handleAddComment} className="p-4 bg-[#E95D22] text-white rounded-2xl shadow-lg transition-transform active:scale-95"><Send size={20} /></button>
+              </div>
+            )}
+        </div>
+      </Modal>
+
+      <Modal isOpen={isRequestCommentsModalOpen} onClose={() => setIsRequestCommentsModalOpen(false)} title={`تعليقات الطلب`}>
+        <div className="space-y-6 text-right font-cairo flex flex-col h-[60vh]">
+            <div className="flex-1 overflow-y-auto space-y-4 p-2 custom-scrollbar">
+                {selectedRequestForComments?.comments?.map(comment => (
+                  <div key={comment.id} className="bg-gray-50 p-4 rounded-2xl border border-gray-100">
+                    <div className="flex justify-between items-start mb-2">
+                      <span className="font-bold text-[#1B2B48] text-sm">{comment.author}</span>
+                      <span className="text-[10px] text-gray-400">{new Date(comment.timestamp).toLocaleString('ar-SA')}</span>
+                    </div>
+                    <p className="text-sm text-gray-600">{comment.text}</p>
+                  </div>
+                ))}
+                {(!selectedRequestForComments?.comments || selectedRequestForComments.comments.length === 0) && (
+                  <div className="h-full flex flex-col items-center justify-center text-gray-300 opacity-50">
+                    <MessageSquare size={40} className="mb-2" />
+                    <p className="text-sm font-bold">لا يوجد تعليقات حتى الآن</p>
+                  </div>
+                )}
+            </div>
+            {canUserCommentOnRequests && (
+              <div className="border-t pt-4 flex gap-2">
+                <input type="text" placeholder="اكتب تعليقك على الطلب..." className="flex-1 p-4 bg-gray-50 rounded-2xl border outline-none font-cairo" value={newRequestCommentText} onChange={e => setNewRequestCommentText(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAddRequestComment()} />
+                <button onClick={handleAddRequestComment} className="p-4 bg-[#1B2B48] text-white rounded-2xl shadow-lg transition-transform active:scale-95"><Send size={20} /></button>
+              </div>
+            )}
         </div>
       </Modal>
       
