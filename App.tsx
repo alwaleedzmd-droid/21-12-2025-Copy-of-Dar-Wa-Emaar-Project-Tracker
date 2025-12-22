@@ -56,6 +56,7 @@ interface ErrorBoundaryState {
   hasError: boolean;
 }
 
+// Fix: explicitly use React.Component to avoid issues with missing state/props properties
 class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
   constructor(props: ErrorBoundaryProps) {
     super(props);
@@ -98,53 +99,66 @@ const AppContent: React.FC = () => {
   const fetchProjects = async () => {
     setIsDbLoading(true);
     try {
-      const { data, error } = await supabase
+      // 1. جلب المشاريع
+      const { data: projectsData, error: projectsError } = await supabase
         .from('projects')
         .select('*')
-        .order('date', { ascending: false });
+        .order('title', { ascending: true });
 
-      if (error) throw error;
+      if (projectsError) throw projectsError;
 
-      const grouped: Record<string, Task[]> = {};
-      data?.forEach((row: any) => {
-        const task: Task = {
-          id: row.id.toString(),
-          project: row.client,
-          description: row.title,
-          reviewer: row.reviewer || '', 
-          requester: row.requester || '',
-          notes: row.notes || '',
-          location: 'الرياض', 
-          status: row.status || 'متابعة',
-          date: row.date || new Date().toISOString().split('T')[0],
-          comments: row.comments || []
-        };
-        if (!grouped[row.client]) grouped[row.client] = [];
-        grouped[row.client].push(task);
-      });
+      // 2. جلب المهام من الجدول الجديد tasks والترتيب حسب وقت الإنشاء
+      const { data: tasksData, error: tasksError } = await supabase
+        .from('tasks')
+        .select('*')
+        .order('created_at', { ascending: false });
 
-      const summaries: ProjectSummary[] = Object.keys(grouped).map(name => {
-        const tasks = grouped[name];
-        const done = tasks.filter(t => t.status === 'منجز').length;
-        const metadata = projectMetadata[name] || {};
-        const firstRow = data?.find((r: any) => r.client === name);
-        
+      if (tasksError) throw tasksError;
+
+      // 3. معالجة ودمج البيانات
+      const summaries: ProjectSummary[] = (projectsData || []).map(p => {
+        const metadata = projectMetadata[p.title] || {};
+        const pTasks = (tasksData || [])
+          .filter((t: any) => t.project_id === p.id)
+          .map((t: any) => ({
+            id: t.id.toString(),
+            project: p.title,
+            description: t.title, // استخدام title من الجدول كـ description
+            reviewer: t.reviewer || '', // قد يكون فارغاً إذا لم يضفه المستخدم للجدول
+            requester: t.requester || '',
+            notes: t.notes || '',
+            location: p.location || 'الرياض',
+            status: t.status || 'متابعة',
+            // استخدام created_at كتاريخ للعرض
+            date: t.created_at ? new Date(t.created_at).toLocaleDateString('ar-SA') : new Date().toLocaleDateString('ar-SA'),
+            comments: t.comments || []
+          }));
+
+        const done = pTasks.filter(t => t.status === 'منجز').length;
+
         return {
-          name,
-          location: metadata.location || 'الرياض',
-          tasks,
-          totalTasks: tasks.length,
+          id: p.id,
+          name: p.title,
+          location: p.location || metadata.location || 'الرياض',
+          tasks: pTasks,
+          totalTasks: pTasks.length,
           completedTasks: done,
-          progress: tasks.length > 0 ? (done / tasks.length) * 100 : 0,
+          progress: pTasks.length > 0 ? (done / pTasks.length) * 100 : 0,
           isPinned: false,
           details: metadata,
-          imageUrl: firstRow?.image_url // جلب رابط الصورة من قاعدة البيانات
+          imageUrl: p.image_url
         };
       });
 
       setProjects(summaries);
-    } catch (err) {
-      console.error("Fetch Error:", err);
+
+      if (selectedProject) {
+        const updated = summaries.find(s => (s as any).id === (selectedProject as any).id);
+        if (updated) setSelectedProject(updated);
+      }
+    } catch (err: any) {
+      // إصلاح مشكلة [object Object] عبر استخراج رسالة الخطأ
+      console.error("Fetch Error Details:", err?.message || err || "Unknown error");
     } finally {
       setIsDbLoading(false);
     }
@@ -163,7 +177,7 @@ const AppContent: React.FC = () => {
   const [locationFilter, setLocationFilter] = useState('All');
   const [statusFilter, setStatusFilter] = useState<'All' | 'Active' | 'Completed'>('All');
   
-  const [selectedProject, setSelectedProject] = useState<ProjectSummary | null>(null);
+  const [selectedProject, setSelectedProject] = useState<any | null>(null);
   const [selectedTaskForComments, setSelectedTaskForComments] = useState<Task | null>(null);
   const [selectedRequestForComments, setSelectedRequestForComments] = useState<ServiceRequest | null>(null);
   const [selectedRequestForDetails, setSelectedRequestForDetails] = useState<ServiceRequest | null>(null);
@@ -178,7 +192,7 @@ const AppContent: React.FC = () => {
   const [isDeleteTaskConfirmOpen, setIsDeleteTaskConfirmOpen] = useState(false);
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
   
-  const [projectToDelete, setProjectToDelete] = useState<string | null>(null);
+  const [projectToDelete, setProjectToDelete] = useState<any | null>(null);
   const [taskToDelete, setTaskToDelete] = useState<Task | null>(null);
 
   const [loginData, setLoginData] = useState({ email: '', password: '' });
@@ -232,10 +246,13 @@ const AppContent: React.FC = () => {
 
   const handleCreateProject = async () => {
     if (!newProject.name) return alert('يرجى إدخال اسم المشروع');
-    const { error } = await supabase.from('projects').insert([{ title: 'بداية المشروع', client: newProject.name, status: 'متابعة', date: new Date().toISOString().split('T')[0] }]);
+    const { error } = await supabase.from('projects').insert([{ 
+      title: newProject.name, 
+      location: newProject.location
+    }]);
     if (error) alert("خطأ: " + error.message);
     else {
-      setProjectMetadata({ ...projectMetadata, [newProject.name]: { ...projectMetadata[newProject.name], location: newProject.location } });
+      setProjectMetadata({ ...projectMetadata, [newProject.name as string]: { location: newProject.location } });
       await fetchProjects();
       setIsProjectModalOpen(false);
       setNewProject({ name: '', location: LOCATIONS_ORDER[0] });
@@ -251,14 +268,15 @@ const AppContent: React.FC = () => {
 
   const handleDeleteProject = async () => {
     if (projectToDelete) {
-      const { error } = await supabase.from('projects').delete().eq('client', projectToDelete);
+      await supabase.from('tasks').delete().eq('project_id', projectToDelete.id);
+      const { error } = await supabase.from('projects').delete().eq('id', projectToDelete.id);
       if (error) alert(error.message);
       else {
         const newMetadata = { ...projectMetadata };
-        delete newMetadata[projectToDelete];
+        delete newMetadata[projectToDelete.name];
         setProjectMetadata(newMetadata);
         await fetchProjects();
-        if (selectedProject?.name === projectToDelete) setView('DASHBOARD');
+        if (selectedProject?.id === projectToDelete.id) setView('DASHBOARD');
         setIsDeleteConfirmOpen(false);
         setProjectToDelete(null);
       }
@@ -267,18 +285,10 @@ const AppContent: React.FC = () => {
 
   const handleDeleteTask = async () => {
     if (taskToDelete) {
-      const { error } = await supabase.from('projects').delete().eq('id', taskToDelete.id);
+      const { error } = await supabase.from('tasks').delete().eq('id', taskToDelete.id);
       if (error) alert(error.message);
       else {
         await fetchProjects();
-        if (selectedProject) {
-            const updated = (await supabase.from('projects').select('*').eq('client', selectedProject.name));
-            if (updated.data) {
-                const tasks: Task[] = updated.data.map((r: any) => ({ id: r.id.toString(), project: r.client, description: r.title, reviewer: r.reviewer || '', requester: r.requester || '', notes: r.notes || '', location: 'الرياض', status: r.status, date: r.date, comments: r.comments || [] }));
-                const done = tasks.filter(t => t.status === 'منجز').length;
-                setSelectedProject({ ...selectedProject, tasks, totalTasks: tasks.length, completedTasks: done, progress: tasks.length > 0 ? (done / tasks.length) * 100 : 0, details: projectMetadata[selectedProject.name] || {}, imageUrl: updated.data[0]?.image_url });
-            }
-        }
         setIsDeleteTaskConfirmOpen(false);
         setTaskToDelete(null);
       }
@@ -287,27 +297,26 @@ const AppContent: React.FC = () => {
 
   const handleSaveTask = async () => {
     if (!selectedProject) return;
-    const payload = { 
+    // التوافق مع أعمدة الجدول (id, created_at, title, status, project_id)
+    const payload: any = { 
         title: newTaskData.description || 'عمل جديد', 
         status: newTaskData.status || 'متابعة', 
-        reviewer: newTaskData.reviewer || '', 
-        requester: newTaskData.requester || '', 
-        notes: newTaskData.notes || '', 
-        client: selectedProject.name, 
-        date: new Date().toISOString().split('T')[0] 
+        project_id: selectedProject.id
     };
-    if (editingTask) await supabase.from('projects').update(payload).eq('id', editingTask.id);
-    else await supabase.from('projects').insert([payload]);
-    await fetchProjects();
-    setIsTaskModalOpen(false);
-    setEditingTask(null);
-    if (selectedProject) {
-        const updated = (await supabase.from('projects').select('*').eq('client', selectedProject.name));
-        if (updated.data) {
-            const tasks: Task[] = updated.data.map((r: any) => ({ id: r.id.toString(), project: r.client, description: r.title, reviewer: r.reviewer || '', requester: r.requester || '', notes: r.notes || '', location: 'الرياض', status: r.status, date: r.date, comments: r.comments || [] }));
-            const done = tasks.filter(t => t.status === 'منجز').length;
-            setSelectedProject({ ...selectedProject, tasks, totalTasks: tasks.length, completedTasks: done, progress: tasks.length > 0 ? (done / tasks.length) * 100 : 0, details: projectMetadata[selectedProject.name] || {}, imageUrl: updated.data[0]?.image_url });
-        }
+    
+    let result;
+    if (editingTask) {
+        result = await supabase.from('tasks').update(payload).eq('id', editingTask.id);
+    } else {
+        result = await supabase.from('tasks').insert([payload]);
+    }
+    
+    if (result.error) {
+        alert("خطأ في قاعدة البيانات: " + result.error.message);
+    } else {
+        await fetchProjects();
+        setIsTaskModalOpen(false);
+        setEditingTask(null);
     }
   };
 
@@ -315,10 +324,16 @@ const AppContent: React.FC = () => {
     if (!selectedTaskForComments || !newCommentText.trim()) return;
     const newComment: Comment = { id: Date.now().toString(), text: newCommentText, author: currentUser?.name || 'مستخدم', authorRole: currentUser?.role || 'PR_OFFICER', timestamp: new Date().toISOString() };
     const updatedComments = [...(selectedTaskForComments.comments || []), newComment];
-    await supabase.from('projects').update({ comments: updatedComments }).eq('id', selectedTaskForComments.id);
-    setSelectedTaskForComments({ ...selectedTaskForComments, comments: updatedComments });
-    setNewCommentText('');
-    await fetchProjects();
+    
+    const { error } = await supabase.from('tasks').update({ comments: updatedComments }).eq('id', selectedTaskForComments.id);
+    
+    if (error) {
+        alert("فشل تحديث التعليقات: " + error.message);
+    } else {
+        setSelectedTaskForComments({ ...selectedTaskForComments, comments: updatedComments });
+        setNewCommentText('');
+        await fetchProjects();
+    }
   };
 
   const handleAddRequestComment = () => {
@@ -383,14 +398,13 @@ const AppContent: React.FC = () => {
   };
 
   const handleExportAllProjects = () => {
-    const exportData = projects.flatMap(p => p.tasks.map(t => ({ 'المشروع': p.name, 'بيان الأعمال': t.description, 'جهة المراجعة': t.reviewer, 'الجهة طالبة الخدمة': t.requester, 'الموقع': p.location, 'الحالة': t.status, 'التاريخ': t.date })));
+    const exportData = projects.flatMap(p => p.tasks.map(t => ({ 'المشروع': p.name, 'بيان الأعمال': t.description, 'الموقع': p.location, 'الحالة': t.status, 'التاريخ': t.date })));
     const ws = XLSX.utils.json_to_sheet(exportData);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "المشاريع");
     XLSX.writeFile(wb, "تقرير_المشاريع.xlsx");
   };
 
-  // وظيفة تصدير PDF
   const handleExportPDF = async () => {
     const element = document.getElementById('statistics-dashboard-content');
     if (!element || !html2canvas || !jspdfModule) {
@@ -401,7 +415,7 @@ const AppContent: React.FC = () => {
     setIsExportingPDF(true);
     try {
       const canvas = await html2canvas(element, {
-        scale: 2, // جودة أعلى
+        scale: 2,
         useCORS: true,
         backgroundColor: '#f8f9fa',
         windowWidth: element.scrollWidth,
@@ -419,15 +433,14 @@ const AppContent: React.FC = () => {
       pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
       pdf.save(`تحليلات_المشاريع_دار_وإعمار_${new Date().toLocaleDateString('ar-SA')}.pdf`);
       
-    } catch (error) {
-      console.error('PDF Export Error:', error);
+    } catch (error: any) {
+      console.error('PDF Export Error:', error?.message || error);
       alert('حدث خطأ أثناء تصدير ملف PDF');
     } finally {
       setIsExportingPDF(false);
     }
   };
 
-  // --- Filtering Logic for Dashboard ---
   const filteredDashboard = useMemo(() => {
     return projects.filter(p => {
       const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase());
@@ -534,7 +547,7 @@ const AppContent: React.FC = () => {
 
   if (view === 'LOGIN') return (
     <div className="min-h-screen bg-[#f8f9fa] flex items-center justify-center p-4 font-cairo" dir="rtl">
-      <div className="bg-[#1B2B48] w-full max-w-md rounded-[50px] shadow-2xl overflow-hidden border border-gray-100 text-center">
+      <div className="bg-[#1B2B48] w-full max-md rounded-[50px] shadow-2xl overflow-hidden border border-gray-100 text-center">
         <div className="p-12 relative overflow-hidden"><Logo className="h-48 mx-auto mb-8 relative z-10" /><h1 className="text-white text-4xl font-bold">تسجيل الدخول</h1></div>
         <form onSubmit={handleLogin} className="p-10 bg-white space-y-6 rounded-t-[50px] text-right">
           <input type="email" placeholder="البريد الإلكتروني" className="w-full p-4 bg-gray-50 rounded-2xl border outline-none text-right font-cairo" value={loginData.email} onChange={e => setLoginData({...loginData, email: e.target.value})} required />
@@ -552,6 +565,12 @@ const AppContent: React.FC = () => {
     { id: 'USERS', label: 'المستخدمين', icon: Users, roles: ['ADMIN'] },
     { id: 'SERVICE_ONLY', label: 'طلب جديد', icon: Plus, roles: ['TECHNICAL', 'CONVEYANCE', 'ADMIN', 'PR_MANAGER', 'PR_OFFICER'] }
   ].filter(i => i.roles.includes(currentUser?.role || ''));
+
+  // Pre-calculate SVG values to avoid complex arithmetic in JSX which can trigger TS errors
+  const circleRadius = 80;
+  const dashArrayValue = 2 * Math.PI * circleRadius;
+  const progressRatio = projectStatsAggregated ? (projectStatsAggregated.completedTasks / (projectStatsAggregated.totalTasks || 1)) : 0;
+  const dashOffsetValue = dashArrayValue * (1 - progressRatio);
 
   return (
     <div className="flex h-screen bg-[#f8f9fa] font-cairo overflow-hidden" dir="rtl">
@@ -678,7 +697,7 @@ const AppContent: React.FC = () => {
                                 <h3 className="text-xl font-bold mb-8 flex items-center gap-3"><MapPin className="text-[#E95D22]" /> توزيع المشاريع حسب المنطقة</h3>
                                 <div className="space-y-6">
                                     {Object.entries(projectStatsAggregated.locationCounts).map(([loc, count]) => {
-                                        const percentage = (count / projectStatsAggregated.totalProjects) * 100;
+                                        const percentage = (count / (projectStatsAggregated?.totalProjects || 1)) * 100;
                                         return (
                                             <div 
                                                 key={loc} 
@@ -730,14 +749,14 @@ const AppContent: React.FC = () => {
                                     <svg className="w-full h-full transform -rotate-90">
                                         <circle cx="96" cy="96" r="80" stroke="currentColor" strokeWidth="16" fill="transparent" className="text-gray-100" />
                                         <circle cx="96" cy="96" r="80" stroke="currentColor" strokeWidth="16" fill="transparent" 
-                                            strokeDasharray={2 * Math.PI * 80}
-                                            strokeDashoffset={2 * Math.PI * 80 * (1 - projectStatsAggregated.completedTasks / (projectStatsAggregated.totalTasks || 1))}
+                                            strokeDasharray={dashArrayValue}
+                                            strokeDashoffset={dashOffsetValue}
                                             className="text-[#E95D22] transition-all duration-1000"
                                             strokeLinecap="round"
                                         />
                                     </svg>
                                     <div className="absolute inset-0 flex flex-col items-center justify-center">
-                                        <span className="text-3xl font-bold text-[#1B2B48]">{Math.round((projectStatsAggregated.completedTasks / (projectStatsAggregated.totalTasks || 1)) * 100)}%</span>
+                                        <span className="text-3xl font-bold text-[#1B2B48]">{Math.round(progressRatio * 100)}%</span>
                                         <span className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">الإغلاق العام</span>
                                     </div>
                                 </div>
@@ -761,7 +780,6 @@ const AppContent: React.FC = () => {
                 <div className="space-y-6 animate-in fade-in duration-500 pb-20 text-right">
                     <button onClick={() => setView('DASHBOARD')} className="flex items-center gap-2 text-gray-400 hover:text-[#E95D22] mb-4 transition-colors font-bold"><ArrowLeft size={16} /> العودة للرئيسية</button>
                     <div className="bg-white rounded-[40px] shadow-sm border overflow-hidden">
-                        {/* رأس الصفحة مع الخلفية */}
                         <div 
                           className={`relative flex flex-col justify-end min-h-[350px] transition-all duration-700 ${selectedProject.imageUrl ? 'text-white' : 'bg-[#1B2B48] text-white'}`}
                           style={selectedProject.imageUrl ? {
@@ -777,13 +795,12 @@ const AppContent: React.FC = () => {
                             </div>
                             <div className="flex gap-4">
                                 <button onClick={() => { setTempProjectDetails(selectedProject.details || {}); setIsProjectEditModalOpen(true); }} className="bg-white/20 backdrop-blur-md text-white p-4 rounded-3xl hover:bg-white/30 transition-colors border border-white/20" title="تعديل بيانات المشروع"><Edit2 size={24} /></button>
-                                <button onClick={() => { setProjectToDelete(selectedProject.name); setIsDeleteConfirmOpen(true); }} className="bg-red-500/20 backdrop-blur-md text-red-200 p-4 rounded-3xl hover:bg-red-500/40 transition-colors border border-red-500/20"><Trash2 size={24} /></button>
+                                <button onClick={() => { setProjectToDelete(selectedProject); setIsDeleteConfirmOpen(true); }} className="bg-red-500/20 backdrop-blur-md text-red-200 p-4 rounded-3xl hover:bg-red-500/40 transition-colors border border-red-500/20"><Trash2 size={24} /></button>
                                 <div className="bg-[#E95D22] text-white p-6 rounded-3xl text-center font-bold text-3xl shadow-2xl min-w-[120px] ring-4 ring-[#E95D22]/20">{Math.round(selectedProject.progress)}%</div>
                             </div>
                           </div>
                         </div>
 
-                        {/* محتوى المشروع */}
                         <div className="p-8 md:p-12 space-y-10">
                             <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-6">
                               <InfoCard icon={Building2} title="عدد الوحدات" value={selectedProject.details?.unitsCount} unit="وحدة" />
@@ -803,25 +820,9 @@ const AppContent: React.FC = () => {
                                 <div className="lg:col-span-1 space-y-6">
                                     <h3 className="text-xl font-bold text-[#1B2B48] flex items-center gap-2"><ListChecks className="text-[#E95D22]" /> قائمة المهام</h3>
                                     <button onClick={() => { setEditingTask(null); setNewTaskData({ status: 'متابعة', description: TECHNICAL_SERVICE_TYPES[0], notes: '' }); setIsTaskModalOpen(true); }} className="w-full bg-[#E95D22] text-white py-5 rounded-[30px] font-bold text-lg shadow-xl hover:scale-[1.02] transition-all flex items-center justify-center gap-2"><Plus size={24} /> إضافة عمل جديد</button>
-                                    {completedRequestsForCurrentProject.length > 0 && (
-                                        <div className="mt-8">
-                                            <h4 className="text-sm font-bold text-gray-400 mb-4 flex items-center gap-2"><Briefcase size={16} /> الطلبات الحكومية المنجزة</h4>
-                                            <div className="space-y-3">
-                                                {completedRequestsForCurrentProject.map(req => (
-                                                    <div key={req.id} onClick={() => { setSelectedRequestForDetails(req); setIsRequestDetailModalOpen(true); }} className="bg-gray-50 p-4 rounded-2xl border flex justify-between items-center cursor-pointer hover:bg-[#E95D22]/5 transition-colors">
-                                                        <div className="flex items-center gap-3">
-                                                            <div className="p-2 bg-green-100 text-green-700 rounded-lg"><FileCheck size={16} /></div>
-                                                            <span className="text-sm font-bold">{req.type === 'conveyance' ? req.clientName : req.serviceSubType}</span>
-                                                        </div>
-                                                        <ChevronLeft size={14} className="text-gray-300" />
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    )}
                                 </div>
                                 <div className="lg:col-span-2 space-y-4">
-                                    {selectedProject.tasks.map(task => <TaskCard key={task.id} task={task} onEdit={t => { setEditingTask(t); setNewTaskData(t); setIsTaskModalOpen(true); }} onOpenComments={t => { setSelectedTaskForComments(t); setIsCommentsModalOpen(true); }} onDelete={t => { setTaskToDelete(t); setIsDeleteTaskConfirmOpen(true); }} canManage={canUserCommentOnTasks} />)}
+                                    {selectedProject.tasks.map((task: any) => <TaskCard key={task.id} task={task} onEdit={t => { setEditingTask(t); setNewTaskData(t); setIsTaskModalOpen(true); }} onOpenComments={t => { setSelectedTaskForComments(t); setIsCommentsModalOpen(true); }} onDelete={t => { setTaskToDelete(t); setIsDeleteTaskConfirmOpen(true); }} canManage={canUserCommentOnTasks} />)}
                                 </div>
                             </div>
                         </div>
@@ -942,17 +943,7 @@ const AppContent: React.FC = () => {
               {TECHNICAL_SERVICE_TYPES.map(type => <option key={type} value={type}>{type}</option>)}
             </select>
           </div>
-          <div>
-            <label className="text-xs font-bold text-gray-400 pr-1">وصف الأعمال (اختياري)</label>
-            <textarea 
-              className="w-full p-4 bg-gray-50 rounded-2xl border outline-none font-cairo h-24" 
-              placeholder="اكتب تفاصيل العمل هنا..."
-              value={newTaskData.notes || ''} 
-              onChange={e => setNewTaskData({...newTaskData, notes: e.target.value})} 
-            />
-          </div>
           <div className="grid grid-cols-2 gap-4">
-            <div><label className="text-xs font-bold text-gray-400 pr-1">جهة المراجعة</label><select className="w-full p-4 bg-gray-50 rounded-2xl border text-right font-cairo outline-none" value={newTaskData.reviewer || ''} onChange={e => setNewTaskData({...newTaskData, reviewer: e.target.value})}><option value="">اختر جهة...</option>{GOVERNMENT_AUTHORITIES.map(auth => <option key={auth} value={auth}>{auth}</option>)}</select></div>
             <div><label className="text-xs font-bold text-gray-400 pr-1">الحالة</label><select className="w-full p-4 bg-gray-50 rounded-2xl border text-right font-cairo outline-none" value={newTaskData.status || 'متابعة'} onChange={e => setNewTaskData({...newTaskData, status: e.target.value})}><option value="متابعة">متابعة</option><option value="منجز">منجز</option></select></div>
           </div>
           <button onClick={handleSaveTask} className="w-full bg-[#1B2B48] text-white py-4 rounded-2xl font-bold shadow-lg mt-4 hover:bg-opacity-95 transition-all">حفظ العمل</button>
@@ -985,12 +976,6 @@ const AppContent: React.FC = () => {
                     <p className="text-sm text-gray-600">{comment.text}</p>
                   </div>
                 ))}
-                {(!selectedRequestForComments?.comments || selectedRequestForComments.comments.length === 0) && (
-                  <div className="h-full flex flex-col items-center justify-center text-gray-300 opacity-50">
-                    <MessageSquare size={40} className="mb-2" />
-                    <p className="text-sm font-bold">لا يوجد تعليقات حتى الآن</p>
-                  </div>
-                )}
             </div>
             {canUserCommentOnRequests && (
               <div className="border-t pt-4 flex gap-2">
@@ -1001,7 +986,7 @@ const AppContent: React.FC = () => {
         </div>
       </Modal>
       
-      <Modal isOpen={isDeleteConfirmOpen} onClose={() => setIsDeleteConfirmOpen(false)} title="تأكيد الحذف"><div className="text-right space-y-6"><div className="bg-red-50 p-6 rounded-3xl border border-red-100 flex items-center gap-4"><AlertCircle className="text-red-500" size={32} /><p className="text-red-700 font-bold">حذف مشروع "{projectToDelete}"؟</p></div><div className="flex gap-4"><button onClick={handleDeleteProject} className="flex-1 bg-red-600 text-white py-4 rounded-2xl font-bold">نعم، احذف</button><button onClick={() => setIsDeleteConfirmOpen(false)} className="flex-1 bg-gray-100 text-gray-600 py-4 rounded-2xl font-bold">إلغاء</button></div></div></Modal>
+      <Modal isOpen={isDeleteConfirmOpen} onClose={() => setIsDeleteConfirmOpen(false)} title="تأكيد الحذف"><div className="text-right space-y-6"><div className="bg-red-50 p-6 rounded-3xl border border-red-100 flex items-center gap-4"><AlertCircle className="text-red-500" size={32} /><p className="text-red-700 font-bold">حذف مشروع "{projectToDelete?.name}"؟ سيتم حذف كافة المهام المرتبطة به.</p></div><div className="flex gap-4"><button onClick={handleDeleteProject} className="flex-1 bg-red-600 text-white py-4 rounded-2xl font-bold">نعم، احذف</button><button onClick={() => setIsDeleteConfirmOpen(false)} className="flex-1 bg-gray-100 text-gray-600 py-4 rounded-2xl font-bold">إلغاء</button></div></div></Modal>
       <Modal isOpen={isDeleteTaskConfirmOpen} onClose={() => setIsDeleteTaskConfirmOpen(false)} title="تأكيد حذف العمل"><div className="text-right space-y-6"><div className="bg-red-50 p-6 rounded-3xl border border-red-100 flex items-center gap-4"><AlertCircle className="text-red-500" size={32} /><p className="text-red-700 font-bold">هل أنت متأكد من حذف هذا العمل؟</p></div><div className="flex gap-4"><button onClick={handleDeleteTask} className="flex-1 bg-red-600 text-white py-4 rounded-2xl font-bold">تأكيد الحذف</button><button onClick={() => setIsDeleteTaskConfirmOpen(false)} className="flex-1 bg-gray-100 text-gray-600 py-4 rounded-2xl font-bold">إلغاء</button></div></div></Modal>
       <Modal isOpen={isProjectEditModalOpen} onClose={() => setIsProjectEditModalOpen(false)} title="تحديث بيانات المشروع">
         <div className="space-y-4 text-right">
