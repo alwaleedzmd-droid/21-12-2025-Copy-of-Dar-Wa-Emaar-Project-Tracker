@@ -222,6 +222,13 @@ const AppContent: React.FC = () => {
     }
   };
 
+  const handleDeleteRequest = (requestId: string) => {
+    if (confirm('هل أنت متأكد من حذف هذا الطلب؟')) {
+      setServiceRequests(prev => prev.filter(r => r.id !== requestId));
+      alert('تم حذف الطلب بنجاح');
+    }
+  };
+
   const handleCreateProject = async () => {
     if (!newProject.name) return alert('يرجى إدخال اسم المشروع');
     const { error } = await supabase.from('projects').insert([{
@@ -865,6 +872,15 @@ const AppContent: React.FC = () => {
                                <div className={`px-6 py-2 rounded-2xl text-sm font-bold shadow-sm ${status.color}`}>
                                   {status.text}
                                </div>
+                               {currentUser?.role === 'ADMIN' && (
+                                 <button 
+                                    onClick={(e) => { e.stopPropagation(); handleDeleteRequest(req.id); }}
+                                    className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
+                                    title="حذف الطلب"
+                                  >
+                                    <Trash2 size={18} />
+                                 </button>
+                               )}
                             </div>
                           </div>
                         );
