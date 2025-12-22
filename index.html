@@ -9,13 +9,16 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- مكتبات تصدير PDF -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <style>
       body {
         font-family: 'Cairo', sans-serif;
         background-color: #f8f9fa;
         margin: 0;
       }
-      /* Prevent Arabic letters from breaking/disjointing in inputs */
+      /* منع تقطع الحروف العربية في المدخلات */
       input, textarea {
         font-family: 'Cairo', sans-serif !important;
         letter-spacing: 0 !important;
@@ -23,7 +26,7 @@
         font-feature-settings: "kern" 0;
         font-kerning: none;
       }
-      /* Custom Scrollbar */
+      /* شريط التمرير المخصص */
       ::-webkit-scrollbar {
         width: 6px;
         height: 6px;
@@ -37,6 +40,12 @@
       }
       ::-webkit-scrollbar-thumb:hover {
         background: #888; 
+      }
+
+      @media print {
+        .no-print {
+          display: none !important;
+        }
       }
     </style>
   <script type="importmap">
