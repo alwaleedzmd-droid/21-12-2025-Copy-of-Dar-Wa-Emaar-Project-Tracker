@@ -1,5 +1,3 @@
-
-
 export interface Comment {
   id: string;
   text: string;
@@ -51,7 +49,7 @@ export interface ProjectSummary {
   details?: ProjectDetails;
 }
 
-export type ViewState = 'LOGIN' | 'DASHBOARD' | 'PROJECT_DETAIL' | 'USERS' | 'SERVICE_ONLY' | 'REQUESTS';
+export type ViewState = 'LOGIN' | 'DASHBOARD' | 'PROJECT_DETAIL' | 'USERS' | 'SERVICE_ONLY' | 'REQUESTS' | 'STATISTICS';
 
 export type UserRole = 'ADMIN' | 'PR_MANAGER' | 'PR_OFFICER' | 'FINANCE' | 'TECHNICAL' | 'CONVEYANCE';
 
@@ -92,7 +90,6 @@ export interface ServiceRequest {
   projectName: string;
   comments?: Comment[];
   // Conveyance fields
-  // Fix: changed clientName from undefined type 'clientName' to 'string'
   clientName?: string;
   mobileNumber?: string;
   idNumber?: string;

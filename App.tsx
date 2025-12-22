@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, ReactNode, useRef, useMemo } from 'react';
 import { 
   LayoutDashboard, Users, FileText, Settings, LogOut, 
@@ -11,7 +10,7 @@ import {
   ListChecks, AlertTriangle, RotateCcw, ThumbsUp, ThumbsDown,
   Building2, SortAsc, SortDesc, Edit2, CreditCard, Landmark, Hash, Phone, FileUp,
   ClipboardList, CheckCircle as CheckIcon, XCircle as CloseIcon, RefreshCw, FileDown,
-  HardHat, Droplets, Zap, Info, Briefcase, Mail, Key, Shield
+  HardHat, Droplets, Zap, Info, Briefcase, Mail, Key, Shield, PieChart, BarChart3, Activity
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { supabase } from './supabaseClient';
@@ -543,6 +542,40 @@ const AppContent: React.FC = () => {
     );
   }, [users, searchQuery]);
 
+  const projectStatsAggregated = useMemo(() => {
+    if (projects.length === 0) return null;
+
+    const totalProjects = projects.length;
+    const totalTasks = projects.reduce((acc, p) => acc + p.totalTasks, 0);
+    const completedTasks = projects.reduce((acc, p) => acc + p.completedTasks, 0);
+    const avgProgress = projects.reduce((acc, p) => acc + p.progress, 0) / totalProjects;
+    
+    const locationCounts: Record<string, number> = {};
+    projects.forEach(p => {
+      locationCounts[p.location] = (locationCounts[p.location] || 0) + 1;
+    });
+
+    const finishedProjects = projects.filter(p => p.progress >= 100).length;
+    const activeProjects = totalProjects - finishedProjects;
+
+    const totalUnits = projects.reduce((acc, p) => acc + (p.details?.unitsCount || 0), 0);
+    const totalElectricity = projects.reduce((acc, p) => acc + (p.details?.electricityMetersCount || 0), 0);
+    const totalWater = projects.reduce((acc, p) => acc + (p.details?.waterMetersCount || 0), 0);
+
+    return {
+      totalProjects,
+      totalTasks,
+      completedTasks,
+      avgProgress,
+      locationCounts,
+      finishedProjects,
+      activeProjects,
+      totalUnits,
+      totalElectricity,
+      totalWater
+    };
+  }, [projects]);
+
   const completedRequestsForCurrentProject = useMemo(() => {
     if (!selectedProject) return [];
     return serviceRequests.filter(req => req.projectName === selectedProject.name && req.status === 'completed');
@@ -617,6 +650,7 @@ const AppContent: React.FC = () => {
 
   const sidebarItems = [ 
     { id: 'DASHBOARD', label: 'الرئيسية', icon: LayoutDashboard, roles: ['ADMIN', 'PR_MANAGER', 'PR_OFFICER'] }, 
+    { id: 'STATISTICS', label: 'التحليلات', icon: Activity, roles: ['ADMIN', 'PR_MANAGER'] },
     { id: 'REQUESTS', label: 'الطلبات', icon: FileText, roles: ['ADMIN', 'PR_MANAGER', 'PR_OFFICER', 'FINANCE', 'TECHNICAL', 'CONVEYANCE'] }, 
     { id: 'USERS', label: 'المستخدمين', icon: Users, roles: ['ADMIN'] },
     { id: 'SERVICE_ONLY', label: 'طلب جديد', icon: Plus, roles: ['TECHNICAL', 'CONVEYANCE', 'ADMIN', 'PR_MANAGER', 'PR_OFFICER'] }
@@ -663,6 +697,136 @@ const AppContent: React.FC = () => {
                     </div>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">{filteredDashboard.map(p => <ProjectCard key={p.name} project={p} onClick={p => { setSelectedProject(p); setView('PROJECT_DETAIL'); }} onTogglePin={() => {}} />)}</div>
+                </div>
+              )}
+
+              {view === 'STATISTICS' && projectStatsAggregated && (
+                <div className="space-y-10 animate-in fade-in duration-500">
+                    <div className="flex justify-between items-center border-b pb-6 border-gray-100">
+                        <h2 className="text-3xl font-bold text-[#1B2B48] flex items-center gap-3">
+                            <Activity className="text-[#E95D22]" /> تحليلات المشاريع العامة
+                        </h2>
+                        <div className="bg-[#1B2B48]/5 px-4 py-2 rounded-2xl border border-[#1B2B48]/10">
+                            <span className="text-gray-400 text-sm">تاريخ التقرير: </span>
+                            <span className="font-bold text-[#1B2B48]">{new Date().toLocaleDateString('ar-SA')}</span>
+                        </div>
+                    </div>
+
+                    {/* Top KPI Cards */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                        <div className="bg-white p-8 rounded-[40px] shadow-sm border border-gray-50 flex flex-col justify-between">
+                            <div className="bg-blue-50 w-12 h-12 rounded-2xl flex items-center justify-center text-blue-600 mb-6"><Building size={24} /></div>
+                            <div>
+                                <h4 className="text-gray-400 font-bold mb-1">إجمالي المشاريع</h4>
+                                <p className="text-4xl font-bold text-[#1B2B48]">{projectStatsAggregated.totalProjects}</p>
+                            </div>
+                        </div>
+                        <div className="bg-white p-8 rounded-[40px] shadow-sm border border-gray-50 flex flex-col justify-between">
+                            <div className="bg-orange-50 w-12 h-12 rounded-2xl flex items-center justify-center text-[#E95D22] mb-6"><Activity size={24} /></div>
+                            <div>
+                                <h4 className="text-gray-400 font-bold mb-1">متوسط الإنجاز</h4>
+                                <p className="text-4xl font-bold text-[#1B2B48]">{Math.round(projectStatsAggregated.avgProgress)}%</p>
+                            </div>
+                        </div>
+                        <div className="bg-white p-8 rounded-[40px] shadow-sm border border-gray-50 flex flex-col justify-between">
+                            <div className="bg-green-50 w-12 h-12 rounded-2xl flex items-center justify-center text-green-600 mb-6"><CheckCircle2 size={24} /></div>
+                            <div>
+                                <h4 className="text-gray-400 font-bold mb-1">مشاريع مكتملة</h4>
+                                <p className="text-4xl font-bold text-[#1B2B48]">{projectStatsAggregated.finishedProjects}</p>
+                            </div>
+                        </div>
+                        <div className="bg-white p-8 rounded-[40px] shadow-sm border border-gray-50 flex flex-col justify-between">
+                            <div className="bg-purple-50 w-12 h-12 rounded-2xl flex items-center justify-center text-purple-600 mb-6"><ListChecks size={24} /></div>
+                            <div>
+                                <h4 className="text-gray-400 font-bold mb-1">إجمالي المهام</h4>
+                                <p className="text-4xl font-bold text-[#1B2B48]">{projectStatsAggregated.totalTasks}</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
+                        {/* Location Breakdown Card */}
+                        <div className="lg:col-span-1 bg-[#1B2B48] text-white p-10 rounded-[50px] shadow-xl relative overflow-hidden">
+                             <div className="absolute -top-10 -right-10 w-40 h-40 bg-white/5 rounded-full blur-3xl"></div>
+                             <h3 className="text-xl font-bold mb-8 flex items-center gap-3"><MapPin className="text-[#E95D22]" /> توزيع المشاريع حسب المنطقة</h3>
+                             <div className="space-y-6">
+                                {Object.entries(projectStatsAggregated.locationCounts).map(([loc, count]) => {
+                                    const percentage = (count / projectStatsAggregated.totalProjects) * 100;
+                                    return (
+                                        <div key={loc} className="space-y-2">
+                                            <div className="flex justify-between items-center text-sm">
+                                                <span className="font-bold">{loc}</span>
+                                                <span className="text-gray-400">{count} مشروع</span>
+                                            </div>
+                                            <div className="w-full bg-white/10 rounded-full h-2 overflow-hidden">
+                                                <div className="bg-[#E95D22] h-full rounded-full transition-all duration-1000" style={{ width: `${percentage}%` }}></div>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                             </div>
+                        </div>
+
+                        {/* Inventory Stats */}
+                        <div className="lg:col-span-2 bg-white p-10 rounded-[50px] shadow-sm border border-gray-50 flex flex-col h-full">
+                            <h3 className="text-xl font-bold text-[#1B2B48] mb-8 flex items-center gap-3"><BarChart3 className="text-[#E95D22]" /> جرد الموارد والعدادات</h3>
+                            <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-8">
+                                <div className="bg-gray-50 p-6 rounded-3xl border border-gray-100 flex flex-col items-center justify-center text-center group hover:bg-blue-50 transition-colors">
+                                    <Building2 className="text-blue-600 mb-4 group-hover:scale-110 transition-transform" size={40} />
+                                    <p className="text-gray-400 text-sm font-bold">إجمالي الوحدات</p>
+                                    <p className="text-3xl font-bold text-[#1B2B48] mt-1">{projectStatsAggregated.totalUnits}</p>
+                                </div>
+                                <div className="bg-gray-50 p-6 rounded-3xl border border-gray-100 flex flex-col items-center justify-center text-center group hover:bg-amber-50 transition-colors">
+                                    <Zap className="text-amber-500 mb-4 group-hover:scale-110 transition-transform" size={40} />
+                                    <p className="text-gray-400 text-sm font-bold">إجمالي عدادات الكهرباء</p>
+                                    <p className="text-3xl font-bold text-[#1B2B48] mt-1">{projectStatsAggregated.totalElectricity}</p>
+                                </div>
+                                <div className="bg-gray-50 p-6 rounded-3xl border border-gray-100 flex flex-col items-center justify-center text-center group hover:bg-cyan-50 transition-colors">
+                                    <Droplets className="text-cyan-500 mb-4 group-hover:scale-110 transition-transform" size={40} />
+                                    <p className="text-gray-400 text-sm font-bold">إجمالي عدادات المياة</p>
+                                    <p className="text-3xl font-bold text-[#1B2B48] mt-1">{projectStatsAggregated.totalWater}</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Task Progress Tracking */}
+                    <div className="bg-white p-10 rounded-[50px] shadow-sm border border-gray-50">
+                        <h3 className="text-xl font-bold text-[#1B2B48] mb-8 flex items-center gap-3"><Activity className="text-[#E95D22]" /> حالة إنجاز المهام الكلية</h3>
+                        <div className="flex flex-col md:flex-row items-center gap-10">
+                            <div className="relative w-48 h-48 flex items-center justify-center">
+                                <svg className="w-full h-full transform -rotate-90">
+                                    <circle cx="96" cy="96" r="80" stroke="currentColor" strokeWidth="16" fill="transparent" className="text-gray-100" />
+                                    <circle cx="96" cy="96" r="80" stroke="currentColor" strokeWidth="16" fill="transparent" 
+                                        strokeDasharray={2 * Math.PI * 80}
+                                        strokeDashoffset={2 * Math.PI * 80 * (1 - projectStatsAggregated.completedTasks / (projectStatsAggregated.totalTasks || 1))}
+                                        className="text-[#E95D22] transition-all duration-1000"
+                                        strokeLinecap="round"
+                                    />
+                                </svg>
+                                <div className="absolute inset-0 flex flex-col items-center justify-center">
+                                    <span className="text-3xl font-bold text-[#1B2B48]">{Math.round((projectStatsAggregated.completedTasks / (projectStatsAggregated.totalTasks || 1)) * 100)}%</span>
+                                    <span className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">معدل الإغلاق</span>
+                                </div>
+                            </div>
+                            <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-6 w-full">
+                                <div className="bg-green-50 p-6 rounded-3xl border border-green-100">
+                                    <p className="text-green-800 text-sm font-bold mb-2">المهام المنجزة</p>
+                                    <p className="text-3xl font-bold text-green-900">{projectStatsAggregated.completedTasks}</p>
+                                    <div className="mt-4 flex items-center gap-2 text-xs text-green-700">
+                                        <CheckCircle2 size={14} /> عمل مكتمل ومغلق
+                                    </div>
+                                </div>
+                                <div className="bg-orange-50 p-6 rounded-3xl border border-orange-100">
+                                    <p className="text-orange-800 text-sm font-bold mb-2">المهام الجارية</p>
+                                    <p className="text-3xl font-bold text-orange-900">{projectStatsAggregated.totalTasks - projectStatsAggregated.completedTasks}</p>
+                                    <div className="mt-4 flex items-center gap-2 text-xs text-orange-700">
+                                        <Clock size={14} /> تحت المتابعة والمراجعة
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
               )}
 
