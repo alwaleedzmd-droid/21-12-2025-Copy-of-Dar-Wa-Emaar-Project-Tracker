@@ -18,7 +18,6 @@ export interface Comment {
   created_at: string;
 }
 
-// Added Task interface to fix the import error in TaskCard.tsx
 export interface Task {
   id: string;
   description: string;
@@ -66,10 +65,11 @@ export interface TechnicalRequest {
   requesting_entity: string;
   assigned_to: string;
   details: string;
-  status: 'new' | 'pending' | 'completed' | 'rejected';
+  status: 'new' | 'pending' | 'completed' | 'rejected' | 'منجز' | 'مرفوض' | 'pending_modification' | 'تعديل';
   submitted_by: string;
   created_at: string;
-  category: 'TECHNICAL_REQUEST' | 'PROJECT_WORK'; // Discriminator for separation
+  scope: string; // 'INTERNAL_WORK' or External Entity Name
+  deadline?: string;
 }
 
 export interface ClearanceRequest {
@@ -82,10 +82,11 @@ export interface ClearanceRequest {
   deal_value: string; 
   bank_name: string;
   deed_number: string;
-  status: 'new' | 'finance_approved' | 'finance_rejected' | 'completed' | 'rejected' | 'pending';
+  status: 'new' | 'finance_approved' | 'finance_rejected' | 'completed' | 'rejected' | 'pending' | 'منجز' | 'مرفوض' | 'pending_modification' | 'تعديل';
   submitted_by: string;
   created_at: string;
   assigned_to?: string;
+  property_value?: string;
 }
 
 export interface AppNotification {
