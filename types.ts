@@ -6,6 +6,7 @@ export interface User {
   name: string;
   email: string;
   role: UserRole;
+  created_at?: string;
 }
 
 export interface Comment {
@@ -17,15 +18,22 @@ export interface Comment {
   created_at: string;
 }
 
+// Added Task interface to fix the import error in TaskCard.tsx
 export interface Task {
   id: string;
   description: string;
+  status: string;
   reviewer?: string;
   requester?: string;
   notes?: string;
-  status: string;
   date: string;
   comments?: Comment[];
+}
+
+export interface ContractorInfo {
+  companyName: string;
+  mobile: string;
+  engineerName: string;
 }
 
 export interface ProjectSummary {
@@ -41,6 +49,12 @@ export interface ProjectSummary {
     unitsCount?: number;
     electricityMetersCount?: number;
     waterMetersCount?: number;
+    buildingPermitsCount?: number;
+    occupancyCertificatesCount?: number;
+    surveyDecisionsCount?: number;
+    electricityContractor?: ContractorInfo;
+    waterContractor?: ContractorInfo;
+    consultantOffice?: ContractorInfo;
   };
 }
 
@@ -55,6 +69,7 @@ export interface TechnicalRequest {
   status: 'new' | 'pending' | 'completed' | 'rejected';
   submitted_by: string;
   created_at: string;
+  category: 'TECHNICAL_REQUEST' | 'PROJECT_WORK'; // Discriminator for separation
 }
 
 export interface ClearanceRequest {
