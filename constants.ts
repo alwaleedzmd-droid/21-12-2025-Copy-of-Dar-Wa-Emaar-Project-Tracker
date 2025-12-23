@@ -1,6 +1,68 @@
 
-export const RAW_CSV_DATA = `المشروع,بيان الأعمال,جهة المراجعة,الجهة طالبة الخدمة,الوصف والملاحظات,الموقع,الحالة,تاريخ المتابعة
-سرايا البحر,خدمات AI,-,-,"تجربة ",القطيف,منجز,2025-12-09`;
+export const DAR_LOGO = "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNTAwIiBoZWlnaHQ9IjUwMCIgdmlld0JveD0iMCAwIDUwMCA1MDAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSI1MDAiIGhlaWdodz0iNTAwIiByeD0iNTAiIGZpbGw9IiMxQjJCODAiLz4KPHBhdGggZD0iTTI1MCAxMDBMMTAwIDIyMFY0MDBIMjAwVjMwMEgzMDBWNDAwSDQwMFYyMjBMMjUwIDEwMFoiIGZpbGw9IiNFMzVEMjIiLz4KPHBhdGggZD0iTTI1MCAxNTBMMTUwIDIzMFYzNzBIMjMwVjI3MEgyNzBWMzcwSDM1MFYyMzBMMjUwIDEwMFoiIGZpbGw9IndoaXRlIiBmaWxsLW9wYWNpdHk9IjAuMiIvPgo8cGF0aCBkPSJNMjUwIDgwTDE1MCAxNjBWMjQwaDIwMHYtODBMMjUwIDgwWiIgZmlsbD0id2hpdGUiLz4KPC9zdmc+";
+
+export const TECHNICAL_ENTITY_MAPPING: Record<string, string[]> = {
+  'الشركة السعودية للكهرباء': [
+    'نقل ملكية عدادات', 
+    'طلب فتح خدمة', 
+    'مقاول الكهرباء', 
+    'فحص الجهد', 
+    'إطلاق تيار كهربائي',
+    'طلب تقوية عداد'
+  ],
+  'شركة المياه الوطنية': [
+    'شبكة الري', 
+    'ربط شبكة المياه', 
+    'تركيب عدادات', 
+    'التقديم على خدمات المياه',
+    'تصريف سيول'
+  ],
+  'أمانة منطقة الرياض/البلديات': [
+    'نظام البناء', 
+    'إصدار رخص بناء', 
+    'تعديل بيانات المالك', 
+    'شهادة امتثال', 
+    'تسوية أرض',
+    'إطلاق شهادة إتمام بناء'
+  ],
+  'وزارة الإسكان': [
+    'استخراج صكوك', 
+    'فرز صكوك', 
+    'فرز وحدات عقارية', 
+    'شهادات الأشغال', 
+    'طلب استثناء'
+  ],
+  'الشركة الوطنية للإسكان (NHC)': [
+    'تعاقدات البيع على الخارطة', 
+    'استلام الوحدات',
+    'منصة وافي'
+  ],
+  'وزارة الشؤون الإسلامية': [
+    'اعتماد جامع', 
+    'رخصة بناء مسجد'
+  ],
+  'الدفاع المدني': [
+    'رخصة سلامة', 
+    'شهادة استيفاء متطلبات'
+  ],
+  'الشرطة': [
+    'بلاغ سرقة كيابل', 
+    'بلاغ تعدي'
+  ]
+};
+
+export const BANKS_LIST = [
+  'مصرف الراجحي',
+  'بنك البلاد',
+  'بنك الإنماء',
+  'البنك الأهلي السعودي',
+  'بنك الرياض',
+  'البنك السعودي الفرنسي',
+  'البنك العربي الوطني',
+  'بنك الجزيرة',
+  'بنك الاستثمار السعودي',
+  'أخرى'
+];
 
 export const LOCATIONS_ORDER = [
   'الرياض',
@@ -9,59 +71,3 @@ export const LOCATIONS_ORDER = [
   'المنطقة الشرقية',
   'القطيف'
 ];
-
-export const TECHNICAL_SERVICE_TYPES = [
-    'فرز صكوك',
-    'شبكة الري',
-    'الترخيص البيئي',
-    'بلاغ سرقة',
-    'شبكة المياة',
-    'نقل ملكية عدادات الكهرباء',
-    'شهادات الاشغال',
-    'نزل الملكية',
-    'طلب فتح خدمة الكهرباء',
-    'طلب استثناء شهادات الاشغال',
-    'إصدار رخص بناء',
-    'تعديل بيانات المالك برخصة البناء',
-    'رخص البناء',
-    'التقديم على خدمات المياة',
-    'قرارات مساحية',
-    'تعاقدات',
-    'أخرى'
-];
-
-export const GOVERNMENT_AUTHORITIES = [
-    'وزارة الإسكان',
-    'شركة الوطنية للإسكان',
-    'أمانة منطقة الرياض',
-    'الشركة السعودية للكهرباء',
-    'المركز الوطني للرقابة على الالتزام البيئي',
-    'شرطة العارض',
-    'الهيئة الملكية للتطوير الرياض',
-    'وزارة الشؤون الإسلامية',
-    'بلدية شمال الرياض',
-    'امانه محافظة جدة',
-    'بلدية العقيق',
-    'شركة الكهرباء',
-    'بلدي',
-    'شركة المياة الوطنية',
-    'السجل العقاري',
-    'امانه المنطقة الشرقية',
-    'بلدية صفوى',
-    'أخرى'
-];
-
-import { User } from './types';
-
-// Fix: Removed 'password' property from user objects as it is not part of the 'User' type definition.
-export const INITIAL_USERS: User[] = [
-  { id: '1', name: 'مدير النظام', email: 'admin@dar.sa', role: 'ADMIN' },
-  { id: '2', name: 'مدير علاقات عامة', email: 'manager@dar.sa', role: 'PR_MANAGER' },
-  { id: '3', name: 'مسؤول علاقات عامة', email: 'officer@dar.sa', role: 'PR_OFFICER' },
-  { id: '4', name: 'القسم الفني', email: 'tech@dar.sa', role: 'TECHNICAL' },
-  { id: '5', name: 'موظف الإفراغات', email: 'conveyance@dar.sa', role: 'CONVEYANCE' },
-  { id: '6', name: 'المالية', email: 'finance@dar.sa', role: 'FINANCE' }
-];
-
-export const DAR_LOGO = "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNTAwIiBoZWlnaHQ9IjUwMCIgdmlld0JveD0iMCAwIDUwMCA1MDAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSI1MDAiIGhlaWdodz0iNTAwIiByeD0iNTAiIGZpbGw9IiMxQjJCODAiLz4KPHBhdGggZD0iTTI1MCAxMDBMMTAwIDIyMFY0MDBIMjAwVjMwMEgzMDBWNDAwSDQwMFYyMjBMMjUwIDEwMFoiIGZpbGw9IiNFMzVEMjIiLz4KPHBhdGggZD0iTTI1MCAxNTBMMTUwIDIzMFYzNzBIMjMwVjI3MEgyNzBWMzcwSDM1MFYyMzBMMjUwIDEwMFoiIGZpbGw9IndoaXRlIiBmaWxsLW9wYWNpdHk9IjAuMiIvPgo8cGF0aCBkPSJNMjUwIDgwTDE1MCAxNjBWMjQwaDIwMHYtODBMMjUwIDgwWiIgZmlsbD0id2hpdGUiLz4KPC9zdmc+";
-export const DAR_LOGO_STABLE = DAR_LOGO;

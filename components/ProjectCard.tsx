@@ -13,8 +13,8 @@ const DEFAULT_PLACEHOLDER = "https://images.unsplash.com/photo-1486406146926-c62
 
 const ProjectCard: React.FC<ProjectCardProps> = ({ project, onClick, onTogglePin }) => {
   const [imgError, setImgError] = useState(false);
-  // قراءة image_url أو image_url حسب المسمى في قاعدة البيانات
-  const imageUrl = project.image_url || project.imageUrl;
+  // Fix: Property 'imageUrl' does not exist on type 'ProjectSummary'. Only using image_url.
+  const imageUrl = project.image_url;
 
   return (
     <div 
