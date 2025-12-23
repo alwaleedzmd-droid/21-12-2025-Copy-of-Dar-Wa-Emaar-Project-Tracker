@@ -317,6 +317,7 @@ const AppContent: React.FC = () => {
     return total > 0 ? Math.round(([...tech, ...clear].filter(r => r.status === 'completed' || r.status === 'منجز').length / total) * 100) : 0;
   };
 
+  // --- 1. Updated getStatusBadge Function ---
   const getStatusBadge = (status: string) => {
     switch(status) {
         case 'completed': case 'منجز': return <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-[10px] font-bold flex items-center gap-1 w-fit"><CheckCircle2 size={12}/> منجز</span>;
@@ -758,41 +759,45 @@ const AppContent: React.FC = () => {
               </div>
             </div>
 
+            {/* --- 2. Updated Modal Action Buttons with Role Logic --- */}
             <div className="grid grid-cols-1 gap-3">
                 {/* Stage 1: New -> Pending Finance */}
-                {activeRequest.status === 'new' && canAccess(['CONVEYANCE', 'ADMIN', 'PR_MANAGER']) && (
+                {activeRequest.status === 'new' && canAccess(['CONVEYANCE', 'ADMIN']) && (
                     <button onClick={() => updateRequestStatus('pending_finance')} className="bg-blue-600 text-white p-4 rounded-2xl font-bold hover:brightness-110 flex items-center justify-center gap-2 shadow-md transition-all">
-                        <Send size={20}/> إرسال للمالية للمراجعة
+                        <Send size={20}/> إرسال للمالية (Send to Finance)
                     </button>
                 )}
 
                 {/* Stage 2: Pending Finance -> Pending PR */}
                 {activeRequest.status === 'pending_finance' && canAccess(['FINANCE', 'ADMIN']) && (
                     <button onClick={() => updateRequestStatus('pending_pr')} className="bg-amber-500 text-white p-4 rounded-2xl font-bold hover:brightness-110 flex items-center justify-center gap-2 shadow-md transition-all">
-                        <Landmark size={20}/> تأكيد الدفع والتحويل للعلاقات
+                        <Landmark size={20}/> تأكيد السداد (Confirm Payment)
                     </button>
                 )}
 
                 {/* Stage 3: Pending PR -> Completed */}
                 {activeRequest.status === 'pending_pr' && canAccess(['PR_MANAGER', 'ADMIN']) && (
-                    <button onClick={() => updateRequestStatus('completed')} className="bg-purple-600 text-white p-4 rounded-2xl font-bold hover:brightness-110 flex items-center justify-center gap-2 shadow-md transition-all">
-                        <ShieldCheck size={20}/> اعتماد نهائي (إكمال الإفراغ)
-                    </button>
+                    <div className="space-y-3">
+                        <button onClick={() => updateRequestStatus('completed')} className="w-full bg-purple-600 text-white p-4 rounded-2xl font-bold hover:brightness-110 flex items-center justify-center gap-2 shadow-md transition-all">
+                            <ShieldCheck size={20}/> اعتماد نهائي (Final Approval)
+                        </button>
+                        <button onClick={() => updateRequestStatus('rejected')} className="w-full bg-red-50 text-red-700 p-4 rounded-2xl font-bold hover:bg-red-100 flex items-center justify-center gap-2 shadow-sm border border-red-100 transition-all">
+                            <XCircle size={20}/> رفض الطلب (Reject)
+                        </button>
+                    </div>
                 )}
 
-                <div className="grid grid-cols-2 gap-3 mt-2">
-                    {/* Always allow ADMIN/PR_MANAGER to Reject or Request Modification */}
-                    {canAccess(['ADMIN', 'PR_MANAGER']) && (
-                        <>
-                            <button onClick={() => updateRequestStatus('rejected')} className="bg-red-50 text-red-700 p-4 rounded-2xl font-bold hover:bg-red-100 flex flex-col items-center gap-1 shadow-sm border border-red-100 transition-all">
-                                <XCircle size={20}/> رفض الطلب
-                            </button>
-                            <button onClick={() => updateRequestStatus('pending_modification')} className="bg-orange-50 text-orange-700 p-4 rounded-2xl font-bold hover:bg-orange-100 flex flex-col items-center gap-1 shadow-sm border border-orange-100 transition-all">
-                                <Edit3 size={20}/> طلب تعديل
-                            </button>
-                        </>
-                    )}
-                </div>
+                {/* Secondary Actions for Admin/PR Manager when not in final stage */}
+                {activeRequest.status !== 'pending_pr' && canAccess(['ADMIN', 'PR_MANAGER']) && (
+                    <div className="grid grid-cols-2 gap-3 mt-2">
+                        <button onClick={() => updateRequestStatus('rejected')} className="bg-red-50 text-red-700 p-4 rounded-2xl font-bold hover:bg-red-100 flex flex-col items-center gap-1 shadow-sm border border-red-100 transition-all">
+                            <XCircle size={20}/> رفض
+                        </button>
+                        <button onClick={() => updateRequestStatus('pending_modification')} className="bg-orange-50 text-orange-700 p-4 rounded-2xl font-bold hover:bg-orange-100 flex flex-col items-center gap-1 shadow-sm border border-orange-100 transition-all">
+                            <Edit3 size={20}/> طلب تعديل
+                        </button>
+                    </div>
+                )}
             </div>
           </div>
         )}
