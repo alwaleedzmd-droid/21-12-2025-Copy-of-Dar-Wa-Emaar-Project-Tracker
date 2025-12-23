@@ -322,6 +322,9 @@ const AppContent: React.FC = () => {
         case 'completed': case 'منجز': return <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-[10px] font-bold flex items-center gap-1 w-fit"><CheckCircle2 size={12}/> منجز</span>;
         case 'rejected': case 'مرفوض': return <span className="bg-red-100 text-red-700 px-3 py-1 rounded-full text-[10px] font-bold flex items-center gap-1 w-fit"><XCircle size={12}/> مرفوض</span>;
         case 'pending_modification': case 'تعديل': return <span className="bg-orange-100 text-orange-700 px-3 py-1 rounded-full text-[10px] font-bold flex items-center gap-1 w-fit"><AlertCircle size={12}/> مطلوب تعديل</span>;
+        case 'pending_finance': return <span className="bg-amber-100 text-amber-700 px-3 py-1 rounded-full text-[10px] font-bold flex items-center gap-1 w-fit"><Landmark size={12}/> بانتظار المالية</span>;
+        case 'pending_pr': return <span className="bg-purple-100 text-purple-700 px-3 py-1 rounded-full text-[10px] font-bold flex items-center gap-1 w-fit"><ShieldCheck size={12}/> بانتظار العلاقات</span>;
+        case 'new': return <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-[10px] font-bold flex items-center gap-1 w-fit"><Activity size={12}/> جديد</span>;
         default: return <span className="bg-blue-50 text-blue-700 px-3 py-1 rounded-full text-[10px] font-bold w-fit">قيد المتابعة</span>;
     }
   };
@@ -740,11 +743,56 @@ const AppContent: React.FC = () => {
                 </div>
                 {getStatusBadge(activeRequest.status)}
             </div>
-            <div className="grid grid-cols-1 gap-4"><div className="bg-white p-3 rounded-2xl border shadow-sm"><p className="text-xs text-gray-400 mb-1 font-bold">المسؤول</p><select className="font-bold text-orange-600 bg-transparent outline-none w-full" value={activeRequest.assigned_to || ''} onChange={(e) => updateRequestDelegation(e.target.value)}><option value="">غير محدد</option>{usersList.map(u => <option key={u.id} value={u.name}>{u.name}</option>)}</select></div></div>
-            <div className="grid grid-cols-3 gap-3">
-                <button onClick={() => updateRequestStatus('completed')} className="bg-green-50 text-green-700 p-4 rounded-2xl font-bold hover:bg-green-100 flex flex-col items-center gap-1 shadow-sm"><CheckCircle2 size={24}/> منجز</button>
-                <button onClick={() => updateRequestStatus('rejected')} className="bg-red-50 text-red-700 p-4 rounded-2xl font-bold hover:bg-red-100 flex flex-col items-center gap-1 shadow-sm"><XCircle size={24}/> رفض</button>
-                <button onClick={() => updateRequestStatus('pending_modification')} className="bg-orange-50 text-orange-700 p-4 rounded-2xl font-bold hover:bg-orange-100 flex flex-col items-center gap-1 shadow-sm"><Edit3 size={24}/> تعديل</button>
+            
+            <div className="grid grid-cols-1 gap-4">
+              <div className="bg-white p-3 rounded-2xl border shadow-sm">
+                <p className="text-xs text-gray-400 mb-1 font-bold">المسؤول</p>
+                <select 
+                  className="font-bold text-orange-600 bg-transparent outline-none w-full" 
+                  value={activeRequest.assigned_to || ''} 
+                  onChange={(e) => updateRequestDelegation(e.target.value)}
+                >
+                  <option value="">غير محدد</option>
+                  {usersList.map(u => <option key={u.id} value={u.name}>{u.name}</option>)}
+                </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3">
+                {/* Stage 1: New -> Pending Finance */}
+                {activeRequest.status === 'new' && canAccess(['CONVEYANCE', 'ADMIN', 'PR_MANAGER']) && (
+                    <button onClick={() => updateRequestStatus('pending_finance')} className="bg-blue-600 text-white p-4 rounded-2xl font-bold hover:brightness-110 flex items-center justify-center gap-2 shadow-md transition-all">
+                        <Send size={20}/> إرسال للمالية للمراجعة
+                    </button>
+                )}
+
+                {/* Stage 2: Pending Finance -> Pending PR */}
+                {activeRequest.status === 'pending_finance' && canAccess(['FINANCE', 'ADMIN']) && (
+                    <button onClick={() => updateRequestStatus('pending_pr')} className="bg-amber-500 text-white p-4 rounded-2xl font-bold hover:brightness-110 flex items-center justify-center gap-2 shadow-md transition-all">
+                        <Landmark size={20}/> تأكيد الدفع والتحويل للعلاقات
+                    </button>
+                )}
+
+                {/* Stage 3: Pending PR -> Completed */}
+                {activeRequest.status === 'pending_pr' && canAccess(['PR_MANAGER', 'ADMIN']) && (
+                    <button onClick={() => updateRequestStatus('completed')} className="bg-purple-600 text-white p-4 rounded-2xl font-bold hover:brightness-110 flex items-center justify-center gap-2 shadow-md transition-all">
+                        <ShieldCheck size={20}/> اعتماد نهائي (إكمال الإفراغ)
+                    </button>
+                )}
+
+                <div className="grid grid-cols-2 gap-3 mt-2">
+                    {/* Always allow ADMIN/PR_MANAGER to Reject or Request Modification */}
+                    {canAccess(['ADMIN', 'PR_MANAGER']) && (
+                        <>
+                            <button onClick={() => updateRequestStatus('rejected')} className="bg-red-50 text-red-700 p-4 rounded-2xl font-bold hover:bg-red-100 flex flex-col items-center gap-1 shadow-sm border border-red-100 transition-all">
+                                <XCircle size={20}/> رفض الطلب
+                            </button>
+                            <button onClick={() => updateRequestStatus('pending_modification')} className="bg-orange-50 text-orange-700 p-4 rounded-2xl font-bold hover:bg-orange-100 flex flex-col items-center gap-1 shadow-sm border border-orange-100 transition-all">
+                                <Edit3 size={20}/> طلب تعديل
+                            </button>
+                        </>
+                    )}
+                </div>
             </div>
           </div>
         )}

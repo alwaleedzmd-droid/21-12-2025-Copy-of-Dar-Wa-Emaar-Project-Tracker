@@ -65,7 +65,7 @@ export interface TechnicalRequest {
   requesting_entity: string;
   assigned_to: string;
   details: string;
-  status: 'new' | 'pending' | 'completed' | 'rejected' | 'منجز' | 'مرفوض' | 'pending_modification' | 'تعديل';
+  status: 'new' | 'pending' | 'completed' | 'rejected' | 'منجز' | 'مرفوض' | 'pending_modification' | 'تعديل' | 'pending_finance' | 'pending_pr';
   submitted_by: string;
   created_at: string;
   scope: string; // 'INTERNAL_WORK' or External Entity Name
@@ -82,7 +82,7 @@ export interface ClearanceRequest {
   deal_value: string; 
   bank_name: string;
   deed_number: string;
-  status: 'new' | 'finance_approved' | 'finance_rejected' | 'completed' | 'rejected' | 'pending' | 'منجز' | 'مرفوض' | 'pending_modification' | 'تعديل';
+  status: 'new' | 'finance_approved' | 'finance_rejected' | 'completed' | 'rejected' | 'pending' | 'منجز' | 'مرفوض' | 'pending_modification' | 'تعديل' | 'pending_finance' | 'pending_pr';
   submitted_by: string;
   created_at: string;
   assigned_to?: string;
