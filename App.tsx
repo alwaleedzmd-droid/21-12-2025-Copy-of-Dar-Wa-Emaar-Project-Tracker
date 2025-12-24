@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, ReactNode } from 'react';
+import React, { useState, useEffect, ReactNode, useMemo } from 'react';
 import { 
   LayoutDashboard, Users, FileText, LogOut, 
   Plus, ArrowLeft, Loader2, Send, AlertTriangle, 
@@ -75,6 +75,21 @@ const AppContent: React.FC = () => {
   // Forms
   const [editProjectForm, setEditProjectForm] = useState<any>({});
   const [bulkProject, setBulkProject] = useState('');
+
+  // --- Derived State (Memoized for Performance) ---
+  const projectTechnicalRequests = useMemo(() => 
+    selectedProject ? technicalRequests.filter(r => r.project_name === selectedProject.name) : []
+  , [technicalRequests, selectedProject]);
+
+  const projectClearanceRequests = useMemo(() => 
+    selectedProject ? clearanceRequests.filter(r => r.project_name === selectedProject.name) : []
+  , [clearanceRequests, selectedProject]);
+
+  const stats = useMemo(() => ({
+    projects: projects.length,
+    techRequests: technicalRequests.length,
+    clearRequests: clearanceRequests.length
+  }), [projects.length, technicalRequests.length, clearanceRequests.length]);
 
   // --- RBAC Helper ---
   const canAccess = (allowedRoles: string[]) => {
@@ -257,11 +272,7 @@ const AppContent: React.FC = () => {
               {view === 'DASHBOARD' && !selectedProject && (
                 <ProjectsModule 
                   projects={projects.map(p => ({...p, progress: getProjectProgress(p.name)}))}
-                  stats={{
-                    projects: projects.length,
-                    techRequests: technicalRequests.length,
-                    clearRequests: clearanceRequests.length
-                  }}
+                  stats={stats}
                   currentUser={currentUser}
                   onProjectClick={(p) => { setSelectedProject(p); setView('PROJECT_DETAIL'); }}
                   onRefresh={fetchAllData}
@@ -270,91 +281,108 @@ const AppContent: React.FC = () => {
 
               {selectedProject && view === 'PROJECT_DETAIL' && (
                 <div className="animate-in fade-in slide-in-from-bottom-4 space-y-8">
+                  {/* Project Header Card */}
                   <div className="bg-white p-8 rounded-[40px] shadow-sm border border-gray-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
                     <div className="space-y-2">
-                        <button onClick={() => { setSelectedProject(null); setView('DASHBOARD'); }} className="flex items-center gap-2 text-gray-400 hover:text-[#1B2B48] text-sm font-bold transition-all mb-2"><ArrowLeft size={16} /> العودة</button>
+                        <button onClick={() => { setSelectedProject(null); setView('DASHBOARD'); }} className="flex items-center gap-2 text-gray-400 hover:text-[#1B2B48] text-sm font-bold transition-all mb-2">
+                          <ArrowLeft size={16} /> العودة للرئيسية
+                        </button>
                         <div className="flex items-center gap-3">
                           <h2 className="text-4xl font-black text-[#1B2B48] tracking-tight">{selectedProject.name}</h2>
                           {canAccess(['ADMIN', 'PR_MANAGER']) && (
-                            <button onClick={() => { setEditProjectForm(selectedProject.details || {}); setIsEditProjectModalOpen(true); }} className="p-2 text-gray-400 hover:text-[#E95D22] hover:bg-orange-50 rounded-full transition-all"><Edit3 size={20} /></button>
+                            <button onClick={() => { setEditProjectForm(selectedProject.details || {}); setIsEditProjectModalOpen(true); }} className="p-2 text-gray-400 hover:text-[#E95D22] hover:bg-orange-50 rounded-full transition-all">
+                              <Edit3 size={20} />
+                            </button>
                           )}
                         </div>
-                        <div className="flex items-center gap-2 text-gray-400"><MapPin size={16} className="text-[#E95D22]" /> <span>{selectedProject.location}</span></div>
+                        <div className="flex items-center gap-2 text-gray-400">
+                          <MapPin size={16} className="text-[#E95D22]" /> 
+                          <span>{selectedProject.location}</span>
+                        </div>
                     </div>
                     <div className="w-full md:w-96 space-y-3">
-                        <div className="flex justify-between text-[11px] font-black uppercase mb-1"><span className="text-gray-400">إنجاز كلي</span><span className="text-[#E95D22]">{Math.round(getProjectProgress(selectedProject.name))}%</span></div>
-                        <div className="w-full bg-gray-100 h-3 rounded-full overflow-hidden border border-gray-50"><div className="bg-[#E95D22] h-full transition-all duration-1000 ease-in-out" style={{ width: `${getProjectProgress(selectedProject.name)}%` }} /></div>
+                        <div className="flex justify-between text-[11px] font-black uppercase mb-1">
+                          <span className="text-gray-400 tracking-wider">معدل الإنجاز العام</span>
+                          <span className="text-[#E95D22]">{Math.round(getProjectProgress(selectedProject.name))}%</span>
+                        </div>
+                        <div className="w-full bg-gray-100 h-3 rounded-full overflow-hidden border border-gray-50">
+                          <div className="bg-[#E95D22] h-full transition-all duration-1000 ease-in-out" style={{ width: `${getProjectProgress(selectedProject.name)}%` }} />
+                        </div>
                     </div>
                   </div>
 
-                  <div className="flex gap-4 p-1.5 bg-gray-100 rounded-[30px] w-fit shadow-inner overflow-x-auto max-w-full">
-                    <button onClick={() => setProjectTab('info')} className={`px-8 py-3 rounded-[25px] font-bold transition-all whitespace-nowrap ${projectTab === 'info' ? 'bg-[#1B2B48] text-white shadow-xl scale-105' : 'text-gray-500 hover:text-[#1B2B48] hover:bg-white/50'}`}>المعلومات</button>
+                  {/* Navigation Tabs */}
+                  <div className="flex gap-4 p-1.5 bg-gray-100 rounded-[30px] w-fit shadow-inner overflow-x-auto max-w-full no-scrollbar">
+                    <button onClick={() => setProjectTab('info')} className={`px-8 py-3 rounded-[25px] font-bold transition-all whitespace-nowrap ${projectTab === 'info' ? 'bg-[#1B2B48] text-white shadow-xl scale-105' : 'text-gray-500 hover:text-[#1B2B48] hover:bg-white/50'}`}>المعلومات الأساسية</button>
                     {canAccess(['ADMIN', 'PR_MANAGER', 'PR_OFFICER']) && (
-                        <button onClick={() => setProjectTab('work')} className={`px-8 py-3 rounded-[25px] font-bold transition-all whitespace-nowrap ${projectTab === 'work' ? 'bg-[#1B2B48] text-white shadow-xl scale-105' : 'text-gray-500 hover:text-[#1B2B48] hover:bg-white/50'}`}>أعمال المشروع</button>
+                        <button onClick={() => setProjectTab('work')} className={`px-8 py-3 rounded-[25px] font-bold transition-all whitespace-nowrap ${projectTab === 'work' ? 'bg-[#1B2B48] text-white shadow-xl scale-105' : 'text-gray-500 hover:text-[#1B2B48] hover:bg-white/50'}`}>أعمال المشروع الداخلية</button>
                     )}
                     {canAccess(['ADMIN', 'PR_MANAGER', 'TECHNICAL']) && (
-                        <button onClick={() => setProjectTab('tech')} className={`px-8 py-3 rounded-[25px] font-bold transition-all whitespace-nowrap ${projectTab === 'tech' ? 'bg-[#1B2B48] text-white shadow-xl scale-105' : 'text-gray-500 hover:text-[#1B2B48] hover:bg-white/50'}`}>الطلبات الفنية</button>
+                        <button onClick={() => setProjectTab('tech')} className={`px-8 py-3 rounded-[25px] font-bold transition-all whitespace-nowrap ${projectTab === 'tech' ? 'bg-[#1B2B48] text-white shadow-xl scale-105' : 'text-gray-500 hover:text-[#1B2B48] hover:bg-white/50'}`}>المراجعات والطلبات الفنية</button>
                     )}
                     {canAccess(['ADMIN', 'PR_MANAGER', 'CONVEYANCE', 'FINANCE']) && (
-                        <button onClick={() => setProjectTab('clearance')} className={`px-8 py-3 rounded-[25px] font-bold transition-all whitespace-nowrap ${projectTab === 'clearance' ? 'bg-[#1B2B48] text-white shadow-xl scale-105' : 'text-gray-500 hover:text-[#1B2B48] hover:bg-white/50'}`}>الإفراغات</button>
+                        <button onClick={() => setProjectTab('clearance')} className={`px-8 py-3 rounded-[25px] font-bold transition-all whitespace-nowrap ${projectTab === 'clearance' ? 'bg-[#1B2B48] text-white shadow-xl scale-105' : 'text-gray-500 hover:text-[#1B2B48] hover:bg-white/50'}`}>إجراءات الإفراغ</button>
                     )}
                   </div>
 
-                  {projectTab === 'info' && (
-                    <div className="space-y-12">
-                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-6">
-                          {[
-                              { label: 'الوحدات', icon: Building2, value: selectedProject.details?.unitsCount || 0, color: 'text-blue-600', bg: 'bg-blue-50' },
-                              { label: 'الكهرباء', icon: Zap, value: selectedProject.details?.electricityMetersCount || 0, color: 'text-amber-500', bg: 'bg-amber-50' },
-                              { label: 'المياه', icon: Droplets, value: selectedProject.details?.waterMetersCount || 0, color: 'text-cyan-500', bg: 'bg-cyan-50' },
-                              { label: 'رخص البناء', icon: ClipboardList, value: selectedProject.details?.buildingPermitsCount || 0, color: 'text-indigo-600', bg: 'bg-indigo-50' },
-                              { label: 'الأشغال', icon: ShieldCheck, value: selectedProject.details?.occupancyCertificatesCount || 0, color: 'text-emerald-600', bg: 'bg-emerald-50' },
-                              { label: 'المساحة', icon: Ruler, value: selectedProject.details?.surveyDecisionsCount || 0, color: 'text-rose-600', bg: 'bg-rose-50' },
-                          ].map((m, idx) => (
-                              <div key={idx} className="bg-white p-8 rounded-[40px] border border-gray-100 shadow-sm flex flex-col items-center hover:scale-105 transition-transform">
-                                  <div className={`w-14 h-14 ${m.bg} ${m.color} rounded-2xl flex items-center justify-center mb-4`}><m.icon size={28} /></div>
-                                  <p className="text-[10px] text-gray-400 font-black uppercase">{m.label}</p>
-                                  <p className="text-4xl font-black text-[#1B2B48] mt-2">{m.value}</p>
-                              </div>
-                          ))}
+                  {/* Tab Content Rendering */}
+                  <div className="animate-in fade-in duration-300">
+                    {projectTab === 'info' && (
+                      <div className="space-y-12">
+                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-6">
+                            {[
+                                { label: 'الوحدات', icon: Building2, value: selectedProject.details?.unitsCount || 0, color: 'text-blue-600', bg: 'bg-blue-50' },
+                                { label: 'الكهرباء', icon: Zap, value: selectedProject.details?.electricityMetersCount || 0, color: 'text-amber-500', bg: 'bg-amber-50' },
+                                { label: 'المياه', icon: Droplets, value: selectedProject.details?.waterMetersCount || 0, color: 'text-cyan-500', bg: 'bg-cyan-50' },
+                                { label: 'رخص البناء', icon: ClipboardList, value: selectedProject.details?.buildingPermitsCount || 0, color: 'text-indigo-600', bg: 'bg-indigo-50' },
+                                { label: 'الأشغال', icon: ShieldCheck, value: selectedProject.details?.occupancyCertificatesCount || 0, color: 'text-emerald-600', bg: 'bg-emerald-50' },
+                                { label: 'المساحة', icon: Ruler, value: selectedProject.details?.surveyDecisionsCount || 0, color: 'text-rose-600', bg: 'bg-rose-50' },
+                            ].map((m, idx) => (
+                                <div key={idx} className="bg-white p-8 rounded-[40px] border border-gray-100 shadow-sm flex flex-col items-center hover:scale-105 transition-transform">
+                                    <div className={`w-14 h-14 ${m.bg} ${m.color} rounded-2xl flex items-center justify-center mb-4`}><m.icon size={28} /></div>
+                                    <p className="text-[10px] text-gray-400 font-black uppercase tracking-tight">{m.label}</p>
+                                    <p className="text-4xl font-black text-[#1B2B48] mt-2">{m.value}</p>
+                                </div>
+                            ))}
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    )}
 
-                  {projectTab === 'work' && (
-                    <TechnicalModule 
-                      requests={technicalRequests}
-                      projects={projects}
-                      currentUser={currentUser}
-                      usersList={usersList}
-                      onRefresh={fetchAllData}
-                      filteredByProject={selectedProject.name}
-                      scopeFilter="INTERNAL_WORK"
-                    />
-                  )}
+                    {projectTab === 'work' && (
+                      <TechnicalModule 
+                        requests={projectTechnicalRequests}
+                        projects={[selectedProject]}
+                        currentUser={currentUser}
+                        usersList={usersList}
+                        onRefresh={fetchAllData}
+                        filteredByProject={selectedProject.name}
+                        scopeFilter="INTERNAL_WORK"
+                      />
+                    )}
 
-                  {projectTab === 'tech' && (
-                    <TechnicalModule 
-                      requests={technicalRequests}
-                      projects={projects}
-                      currentUser={currentUser}
-                      usersList={usersList}
-                      onRefresh={fetchAllData}
-                      filteredByProject={selectedProject.name}
-                      scopeFilter="EXTERNAL"
-                    />
-                  )}
+                    {projectTab === 'tech' && (
+                      <TechnicalModule 
+                        requests={projectTechnicalRequests}
+                        projects={[selectedProject]}
+                        currentUser={currentUser}
+                        usersList={usersList}
+                        onRefresh={fetchAllData}
+                        filteredByProject={selectedProject.name}
+                        scopeFilter="EXTERNAL"
+                      />
+                    )}
 
-                  {projectTab === 'clearance' && (
-                    <ClearanceModule 
-                      requests={clearanceRequests.filter(r => r.project_name === selectedProject.name)}
-                      projects={projects}
-                      currentUser={currentUser}
-                      usersList={usersList}
-                      onRefresh={fetchAllData}
-                      filteredByProject={selectedProject.name}
-                    />
-                  )}
+                    {projectTab === 'clearance' && (
+                      <ClearanceModule 
+                        requests={projectClearanceRequests}
+                        projects={[selectedProject]}
+                        currentUser={currentUser}
+                        usersList={usersList}
+                        onRefresh={fetchAllData}
+                        filteredByProject={selectedProject.name}
+                      />
+                    )}
+                  </div>
                 </div>
               )}
 
@@ -379,12 +407,32 @@ const AppContent: React.FC = () => {
               )}
 
               {view === 'USERS' && !selectedProject && (
-                  <div className="bg-white rounded-[40px] p-8 shadow-sm border border-gray-100">
+                  <div className="bg-white rounded-[40px] p-8 shadow-sm border border-gray-100 animate-in fade-in">
                       <h2 className="text-2xl font-black mb-6 text-[#1B2B48]">إدارة فريق العمل</h2>
-                      <table className="w-full text-right">
-                          <thead className="bg-gray-50 border-b"><tr><th className="p-6">الاسم</th><th className="p-6">البريد</th><th className="p-6">الدور</th></tr></thead>
-                          <tbody>{appUsers.map(u => <tr key={u.id} className="border-b hover:bg-gray-50"><td className="p-6 font-bold text-[#1B2B48]">{u.name}</td><td className="p-6 text-gray-500 font-bold">{u.email}</td><td className="p-6"><span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-xs font-bold">{u.role}</span></td></tr>)}</tbody>
-                      </table>
+                      <div className="overflow-hidden border border-gray-100 rounded-[30px]">
+                        <table className="w-full text-right">
+                            <thead className="bg-gray-50 border-b">
+                              <tr>
+                                <th className="p-6 text-xs text-gray-400 uppercase font-bold tracking-wider">الاسم</th>
+                                <th className="p-6 text-xs text-gray-400 uppercase font-bold tracking-wider">البريد الإلكتروني</th>
+                                <th className="p-6 text-xs text-gray-400 uppercase font-bold tracking-wider text-left">الدور</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-50">
+                              {appUsers.map(u => (
+                                <tr key={u.id} className="hover:bg-gray-50 transition-colors">
+                                  <td className="p-6 font-bold text-[#1B2B48]">{u.name}</td>
+                                  <td className="p-6 text-gray-500 font-bold">{u.email}</td>
+                                  <td className="p-6 text-left">
+                                    <span className="bg-indigo-50 text-indigo-700 px-4 py-1.5 rounded-full text-xs font-black shadow-sm">
+                                      {u.role}
+                                    </span>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                        </table>
+                      </div>
                   </div>
               )}
             </div>
@@ -396,36 +444,43 @@ const AppContent: React.FC = () => {
         <div className="space-y-6 text-right font-cairo">
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1">
-              <label className="text-xs text-gray-400 font-bold">عدد الوحدات</label>
-              <input type="number" className="w-full p-3 bg-gray-50 border rounded-xl font-bold" value={editProjectForm.unitsCount || 0} onChange={e => setEditProjectForm({...editProjectForm, unitsCount: parseInt(e.target.value)})} />
+              <label className="text-xs text-gray-400 font-bold block mb-1">عدد الوحدات</label>
+              <input type="number" className="w-full p-4 bg-gray-50 border rounded-2xl font-bold outline-none focus:border-[#E95D22] transition-all" value={editProjectForm.unitsCount || 0} onChange={e => setEditProjectForm({...editProjectForm, unitsCount: parseInt(e.target.value)})} />
             </div>
             <div className="space-y-1">
-              <label className="text-xs text-gray-400 font-bold">عدادات الكهرباء</label>
-              <input type="number" className="w-full p-3 bg-gray-50 border rounded-xl font-bold" value={editProjectForm.electricityMetersCount || 0} onChange={e => setEditProjectForm({...editProjectForm, electricityMetersCount: parseInt(e.target.value)})} />
+              <label className="text-xs text-gray-400 font-bold block mb-1">عدادات الكهرباء</label>
+              <input type="number" className="w-full p-4 bg-gray-50 border rounded-2xl font-bold outline-none focus:border-[#E95D22] transition-all" value={editProjectForm.electricityMetersCount || 0} onChange={e => setEditProjectForm({...editProjectForm, electricityMetersCount: parseInt(e.target.value)})} />
             </div>
             <div className="space-y-1">
-              <label className="text-xs text-gray-400 font-bold">عدادات المياه</label>
-              <input type="number" className="w-full p-3 bg-gray-50 border rounded-xl font-bold" value={editProjectForm.waterMetersCount || 0} onChange={e => setEditProjectForm({...editProjectForm, waterMetersCount: parseInt(e.target.value)})} />
+              <label className="text-xs text-gray-400 font-bold block mb-1">عدادات المياه</label>
+              <input type="number" className="w-full p-4 bg-gray-50 border rounded-2xl font-bold outline-none focus:border-[#E95D22] transition-all" value={editProjectForm.waterMetersCount || 0} onChange={e => setEditProjectForm({...editProjectForm, waterMetersCount: parseInt(e.target.value)})} />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs text-gray-400 font-bold block mb-1">رخص البناء</label>
+              <input type="number" className="w-full p-4 bg-gray-50 border rounded-2xl font-bold outline-none focus:border-[#E95D22] transition-all" value={editProjectForm.buildingPermitsCount || 0} onChange={e => setEditProjectForm({...editProjectForm, buildingPermitsCount: parseInt(e.target.value)})} />
             </div>
           </div>
-          <button onClick={handleUpdateProjectDetails} className="w-full bg-[#1B2B48] text-white py-5 rounded-[25px] font-black shadow-xl mt-4 hover:brightness-110 transition-all">حفظ التغييرات</button>
+          <button onClick={handleUpdateProjectDetails} className="w-full bg-[#1B2B48] text-white py-5 rounded-[25px] font-black shadow-xl mt-4 hover:brightness-110 hover:-translate-y-1 transition-all active:scale-95">حفظ التغييرات</button>
         </div>
       </Modal>
 
-      <Modal isOpen={isBulkUploadModalOpen} onClose={() => setIsBulkUploadModalOpen(false)} title="رفع بيانات إفراغ">
+      <Modal isOpen={isBulkUploadModalOpen} onClose={() => setIsBulkUploadModalOpen(false)} title="رفع بيانات إفراغ جماعية">
         <div className="space-y-4 text-right font-cairo">
           <div>
-            <label className="text-gray-400 text-xs font-bold block mb-1">المشروع المستهدف</label>
-            <select className="w-full p-4 bg-gray-50 rounded-2xl border outline-none font-bold" value={bulkProject} onChange={e => setBulkProject(e.target.value)}>
+            <label className="text-gray-400 text-xs font-bold block mb-2 mr-1">المشروع المستهدف</label>
+            <select className="w-full p-4 bg-gray-50 rounded-2xl border border-gray-200 outline-none font-bold focus:border-[#E95D22] transition-all appearance-none" value={bulkProject} onChange={e => setBulkProject(e.target.value)}>
               <option value="">اختر مشروعاً...</option>
               {projects.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
             </select>
           </div>
-          <div className="border-2 border-dashed border-gray-200 rounded-2xl p-8 text-center bg-gray-50 hover:border-[#E95D22] transition-colors group">
+          <div className="border-2 border-dashed border-gray-200 rounded-[30px] p-12 text-center bg-gray-50 hover:border-[#E95D22] transition-all group cursor-pointer">
             <input type="file" accept=".xlsx,.xls" onChange={handleExcelImport} className="hidden" id="excel-upload" />
             <label htmlFor="excel-upload" className="cursor-pointer flex flex-col items-center">
-              <FileUp className="w-12 h-12 text-gray-300 group-hover:text-[#E95D22] mb-2" />
-              <p className="text-sm font-bold text-gray-500">اختر ملف إكسل لرفعه</p>
+              <div className="p-5 bg-white rounded-full shadow-sm mb-4 group-hover:scale-110 transition-transform">
+                <FileUp className="w-10 h-10 text-[#E95D22]" />
+              </div>
+              <p className="text-lg font-black text-[#1B2B48] mb-1">اختر ملف Excel</p>
+              <p className="text-sm font-bold text-gray-400 tracking-tight">اضغط هنا أو قم بسحب وإفلات الملف</p>
             </label>
           </div>
         </div>
