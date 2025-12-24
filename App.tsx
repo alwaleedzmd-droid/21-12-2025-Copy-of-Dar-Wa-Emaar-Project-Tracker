@@ -22,6 +22,10 @@ import {
 } from './constants';
 import ProjectCard from './components/ProjectCard';
 import Modal from './components/Modal';
+import ManageRequestModal from './components/ManageRequestModal';
+import ClearanceModule from './components/ClearanceModule';
+import TechnicalModule from './components/TechnicalModule';
+import ProjectsModule from './components/ProjectsModule';
 
 const STORAGE_KEYS = {
     SIDEBAR_COLLAPSED: 'dar_sidebar_v2_collapsed',
@@ -65,28 +69,12 @@ const AppContent: React.FC = () => {
   const [loginData, setLoginData] = useState({ email: 'adaldawsari@darwaemaar.com', password: '' });
 
   // Modals
-  const [isTechModalOpen, setIsTechModalOpen] = useState(false);
-  const [isWorkModalOpen, setIsWorkModalOpen] = useState(false);
-  const [isClearModalOpen, setIsClearModalOpen] = useState(false);
   const [isBulkUploadModalOpen, setIsBulkUploadModalOpen] = useState(false);
-  const [isManageModalOpen, setIsManageModalOpen] = useState(false);
-  const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
   const [isEditProjectModalOpen, setIsEditProjectModalOpen] = useState(false);
 
   // Forms
-  const [techForm, setTechForm] = useState({ project_name: '', scope: '', entity: '', service_type: '', requesting_entity: '', assigned_to: '', deadline: '', details: '' });
-  const [workForm, setWorkForm] = useState({ title: '', assigned_to: '', details: '', status: 'new' });
-  const [clearForm, setClearForm] = useState({ client_name: '', mobile: '', id_number: '', project_name: '', plot_number: '', deal_value: '', bank_name: '', deed_number: '' });
-  const [projectForm, setProjectForm] = useState({ name: '', location: '', client: '' });
   const [editProjectForm, setEditProjectForm] = useState<any>({});
-  
   const [bulkProject, setBulkProject] = useState('');
-  const [isUploading, setIsUploading] = useState(false);
-
-  // Management
-  const [activeRequest, setActiveRequest] = useState<TechnicalRequest | ClearanceRequest | null>(null);
-  const [comments, setComments] = useState<Comment[]>([]);
-  const [newComment, setNewComment] = useState('');
 
   // --- RBAC Helper ---
   const canAccess = (allowedRoles: string[]) => {
@@ -174,95 +162,15 @@ const AppContent: React.FC = () => {
     setView('LOGIN');
   };
 
-  const handleAddProject = async () => {
-      if (!projectForm.name) return alert("الاسم مطلوب");
-      const { error } = await supabase.from('projects').insert([{ client: projectForm.name, title: projectForm.name, status: 'active', location: projectForm.location }]);
-      if (error) alert(error.message);
-      else { alert("تم"); setIsProjectModalOpen(false); setProjectForm({ name: '', location: '', client: '' }); fetchAllData(); }
-  };
-
   const handleUpdateProjectDetails = async () => {
     if (!selectedProject) return;
     const { error } = await supabase.from('projects').update({ details: editProjectForm }).eq('id', selectedProject.id);
     if (!error) { alert("تم التحديث ✅"); setIsEditProjectModalOpen(false); fetchAllData(); }
   };
 
-  const handleDeleteProject = async (id: any) => {
-      if(!window.confirm("حذف المشروع؟")) return;
-      const { error } = await supabase.from('projects').delete().eq('id', id);
-      if(!error) { fetchAllData(); alert("تم الحذف"); }
-  };
-
-  const handleWorkSubmit = async () => {
-    if (!selectedProject || !workForm.title) return alert("الرجاء إدخال عنوان العمل");
-    const payload = {
-        project_name: selectedProject.name,
-        service_type: workForm.title,
-        scope: 'INTERNAL_WORK',
-        entity: 'إدارة المشروع',
-        assigned_to: workForm.assigned_to,
-        details: workForm.details,
-        submitted_by: currentUser?.name,
-        status: workForm.status
-    };
-    const { error } = await supabase.from('technical_requests').insert([payload]);
-    if (!error) {
-        alert("تمت إضافة عمل المشروع بنجاح");
-        setIsWorkModalOpen(false);
-        setWorkForm({ title: '', assigned_to: '', details: '', status: 'new' });
-        fetchAllData();
-    } else alert(error.message);
-  };
-
-  const handleTechSubmit = async () => {
-    if (!techForm.project_name) return alert("الرجاء اختيار المشروع");
-    if (!techForm.scope) return alert("الرجاء اختيار جهة المراجعة");
-    if (!techForm.service_type) return alert("الرجاء اختيار بيان الأعمال");
-    
-    const payload = { 
-        project_name: techForm.project_name,
-        entity: techForm.scope,
-        scope: techForm.scope,
-        service_type: techForm.service_type,
-        requesting_entity: techForm.requesting_entity,
-        details: techForm.details,
-        deadline: techForm.deadline || null,
-        submitted_by: currentUser?.name, 
-        status: 'new' 
-    };
-    
-    const { error } = await supabase.from('technical_requests').insert([payload]);
-    if (!error) { 
-        alert("تم حفظ الطلب الفني بنجاح ✅"); 
-        setIsTechModalOpen(false); 
-        setTechForm({ project_name: '', scope: '', entity: '', service_type: '', requesting_entity: '', assigned_to: '', deadline: '', details: '' });
-        fetchAllData(); 
-    } 
-    else alert(error.message);
-  };
-
-  const handleClearanceSubmit = async () => {
-    if (!clearForm.client_name || !clearForm.project_name) return alert("الحقول الأساسية مطلوبة");
-    
-    const payload = { 
-        ...clearForm, 
-        submitted_by: currentUser?.name, 
-        status: 'new' 
-    };
-    
-    const { error } = await supabase.from('clearance_requests').insert([payload]);
-    if (!error) { 
-        alert("تم حفظ طلب الإفراغ بنجاح"); 
-        setIsClearModalOpen(false); 
-        setClearForm({ client_name: '', mobile: '', id_number: '', project_name: '', plot_number: '', deal_value: '', bank_name: '', deed_number: '' });
-        fetchAllData(); 
-    } else alert(error.message);
-  };
-
   const handleExcelImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !bulkProject) return alert("اختر المشروع والملف");
-    setIsUploading(true);
     const reader = new FileReader();
     reader.onload = async (evt) => {
       try {
@@ -282,32 +190,9 @@ const AppContent: React.FC = () => {
         })).filter(r => r.client_name);
         const { error } = await supabase.from('clearance_requests').insert(formatted);
         if (!error) { alert(`تم رفع ${formatted.length} سجل`); setIsBulkUploadModalOpen(false); fetchAllData(); }
-      } catch (err: any) { alert(err.message); } finally { setIsUploading(false); }
+      } catch (err: any) { alert(err.message); }
     };
     reader.readAsBinaryString(file);
-  };
-
-  const updateRequestStatus = async (newStatus: any) => {
-    if (!activeRequest) return;
-    const table = 'service_type' in activeRequest ? 'technical_requests' : 'clearance_requests';
-    const { error } = await supabase.from(table).update({ status: newStatus }).eq('id', activeRequest.id);
-    if (!error) { setActiveRequest({ ...activeRequest, status: newStatus } as any); fetchAllData(); alert("تم التحديث"); }
-  };
-
-  const updateRequestDelegation = async (newAssignee: string) => {
-    if (!activeRequest) return;
-    const assigneeName = usersList.find(u => u.id === newAssignee)?.name || newAssignee;
-    const table = 'service_type' in activeRequest ? 'technical_requests' : 'clearance_requests';
-    const { error } = await supabase.from(table).update({ assigned_to: assigneeName }).eq('id', activeRequest.id);
-    if (!error) { setActiveRequest({ ...activeRequest, assigned_to: assigneeName } as any); fetchAllData(); alert("تم التفويض"); }
-  };
-
-  const postComment = async () => {
-    if (!newComment.trim() || !activeRequest) return;
-    const isTech = 'service_type' in activeRequest;
-    const payload: any = { content: newComment, user_id: currentUser?.id, [isTech ? 'technical_request_id' : 'clearance_request_id']: activeRequest.id };
-    const { data, error } = await supabase.from('comments').insert([payload]).select().single();
-    if (!error) { setComments([...comments, { ...data, text: data.content, author: currentUser?.name } as any]); setNewComment(''); }
   };
 
   const getProjectProgress = (pName: string) => {
@@ -315,18 +200,6 @@ const AppContent: React.FC = () => {
     const clear = clearanceRequests.filter(r => r.project_name === pName);
     const total = tech.length + clear.length;
     return total > 0 ? Math.round(([...tech, ...clear].filter(r => r.status === 'completed' || r.status === 'منجز').length / total) * 100) : 0;
-  };
-
-  // --- 1. Updated getStatusBadge Function ---
-  const getStatusBadge = (status: string) => {
-    switch(status) {
-        case 'completed': case 'منجز': return <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-[10px] font-bold flex items-center gap-1 w-fit"><CheckCircle2 size={12}/> منجز</span>;
-        case 'rejected': case 'مرفوض': return <span className="bg-red-100 text-red-700 px-3 py-1 rounded-full text-[10px] font-bold flex items-center gap-1 w-fit"><XCircle size={12}/> مرفوض</span>;
-        case 'pending_modification': case 'تعديل': return <span className="bg-orange-100 text-orange-700 px-3 py-1 rounded-full text-[10px] font-bold flex items-center gap-1 w-fit"><AlertCircle size={12}/> مطلوب تعديل</span>;
-        case 'pending_pr': return <span className="bg-indigo-100 text-indigo-700 px-3 py-1 rounded-full text-[10px] font-bold flex items-center gap-1 w-fit"><ShieldCheck size={12}/> بانتظار الاعتماد</span>;
-        case 'new': return <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-[10px] font-bold flex items-center gap-1 w-fit"><Activity size={12}/> جديد</span>;
-        default: return <span className="bg-blue-50 text-blue-700 px-3 py-1 rounded-full text-[10px] font-bold w-fit">قيد المراجعة</span>;
-    }
   };
 
   if (isAuthLoading) return <div className="min-h-screen flex items-center justify-center bg-gray-50"><Loader2 className="animate-spin text-[#E95D22] w-12 h-12" /></div>;
@@ -382,28 +255,17 @@ const AppContent: React.FC = () => {
             <div className="max-w-7xl mx-auto space-y-8">
               
               {view === 'DASHBOARD' && !selectedProject && (
-                <>
-                  <div className="flex justify-between items-end mb-6">
-                      <div className="grid grid-cols-3 gap-6 flex-1">
-                        <div className="bg-white p-6 rounded-[30px] border border-gray-100 flex items-center gap-4 shadow-sm"><div className="p-4 bg-blue-50 text-blue-600 rounded-2xl"><PieChart/></div><div><p className="text-xs font-bold text-gray-400">مشاريع</p><p className="text-2xl font-black text-[#1B2B48]">{projects.length}</p></div></div>
-                        <div className="bg-white p-6 rounded-[30px] border border-gray-100 flex items-center gap-4 shadow-sm"><div className="p-4 bg-amber-50 text-amber-600 rounded-2xl"><Zap/></div><div><p className="text-xs font-bold text-gray-400">فنية</p><p className="text-2xl font-black text-[#1B2B48]">{technicalRequests.length}</p></div></div>
-                        <div className="bg-white p-6 rounded-[30px] border border-gray-100 flex items-center gap-4 shadow-sm"><div className="p-4 bg-indigo-50 text-indigo-600 rounded-2xl"><FileText/></div><div><p className="text-xs font-bold text-gray-400">إفراغات</p><p className="text-2xl font-black text-[#1B2B48]">{clearanceRequests.length}</p></div></div>
-                      </div>
-                      {canAccess(['ADMIN', 'PR_MANAGER']) && (
-                        <button onClick={()=>setIsProjectModalOpen(true)} className="mr-6 bg-[#1B2B48] text-white p-6 rounded-[30px] font-bold shadow-lg hover:scale-105 transition flex items-center gap-2"><Plus/> مشروع جديد</button>
-                      )}
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-10 animate-in fade-in">
-                    {projects.map(p => (
-                      <div key={p.id} className="relative group">
-                          <ProjectCard project={{...p, progress: getProjectProgress(p.name)}} onClick={(proj) => { setSelectedProject(proj); setView('PROJECT_DETAIL'); }} onTogglePin={() => {}} />
-                          {canAccess(['ADMIN']) && (
-                              <button onClick={(e) => { e.stopPropagation(); handleDeleteProject(p.id); }} className="absolute top-4 left-4 bg-white/80 p-2 rounded-full text-red-500 opacity-0 group-hover:opacity-100 transition hover:bg-white shadow-sm"><Trash2 size={16}/></button>
-                          )}
-                      </div>
-                    ))}
-                  </div>
-                </>
+                <ProjectsModule 
+                  projects={projects.map(p => ({...p, progress: getProjectProgress(p.name)}))}
+                  stats={{
+                    projects: projects.length,
+                    techRequests: technicalRequests.length,
+                    clearRequests: clearanceRequests.length
+                  }}
+                  currentUser={currentUser}
+                  onProjectClick={(p) => { setSelectedProject(p); setView('PROJECT_DETAIL'); }}
+                  onRefresh={fetchAllData}
+                />
               )}
 
               {selectedProject && view === 'PROJECT_DETAIL' && (
@@ -460,111 +322,60 @@ const AppContent: React.FC = () => {
                   )}
 
                   {projectTab === 'work' && (
-                    <div className="space-y-6">
-                      <div className="flex justify-between items-center">
-                        <h3 className="font-black text-2xl text-[#1B2B48]">سجل أعمال المشروع الداخلية</h3>
-                        <button onClick={() => setIsWorkModalOpen(true)} className="bg-[#1B2B48] text-white px-6 py-3 rounded-2xl font-bold flex items-center gap-2 shadow-md hover:brightness-110 transition-all"><Plus size={18} /> إضافة عمل</button>
-                      </div>
-                      <div className="bg-white rounded-[40px] shadow-sm border border-gray-100 overflow-hidden">
-                        <table className="w-full text-right">
-                          <thead className="bg-gray-50 border-b"><tr><th className="p-6 text-xs text-gray-400">العمل / المهمة</th><th className="p-6 text-xs text-gray-400">المسؤول</th><th className="p-6 text-xs text-gray-400">الحالة</th></tr></thead>
-                          <tbody className="divide-y divide-gray-50">
-                            {technicalRequests.filter(r => r.project_name === selectedProject.name && r.scope === 'INTERNAL_WORK').map(r => (
-                              <tr key={r.id} onClick={() => { setActiveRequest(r); setIsManageModalOpen(true); }} className="hover:bg-gray-50 cursor-pointer transition-colors">
-                                <td className="p-6"><p className="font-bold text-[#1B2B48]">{r.service_type}</p></td>
-                                <td className="p-6 text-sm text-gray-500 font-bold">{r.assigned_to || '-'}</td>
-                                <td className="p-6">{getStatusBadge(r.status)}</td>
-                              </tr>
-                            ))}
-                            {technicalRequests.filter(r => r.project_name === selectedProject.name && r.scope === 'INTERNAL_WORK').length === 0 && (
-                                <tr><td colSpan={3} className="p-20 text-center text-gray-300 italic font-bold">لا توجد أعمال داخلية مسجلة لهذا المشروع</td></tr>
-                            )}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
+                    <TechnicalModule 
+                      requests={technicalRequests}
+                      projects={projects}
+                      currentUser={currentUser}
+                      usersList={usersList}
+                      onRefresh={fetchAllData}
+                      filteredByProject={selectedProject.name}
+                      scopeFilter="INTERNAL_WORK"
+                    />
                   )}
 
                   {projectTab === 'tech' && (
-                    <div className="space-y-6">
-                      <div className="flex justify-between items-center">
-                        <h3 className="font-black text-2xl text-[#1B2B48]">سجل الطلبات والمراجعات الفنية</h3>
-                        <button onClick={() => { setTechForm({...techForm, project_name: selectedProject.name}); setIsTechModalOpen(true); }} className="bg-[#E95D22] text-white px-6 py-3 rounded-2xl font-bold flex items-center gap-2 shadow-md hover:brightness-110 transition-all"><Plus size={18} /> طلب مراجعة</button>
-                      </div>
-                      <div className="bg-white rounded-[40px] shadow-sm border border-gray-100 overflow-hidden">
-                        <table className="w-full text-right">
-                          <thead className="bg-gray-50 border-b"><tr><th className="p-6 text-xs text-gray-400">جهة المراجعة</th><th className="p-6 text-xs text-gray-400">بيان العمل</th><th className="p-6 text-xs text-gray-400">الحالة</th></tr></thead>
-                          <tbody className="divide-y divide-gray-50">
-                            {technicalRequests.filter(r => r.project_name === selectedProject.name && r.scope !== 'INTERNAL_WORK').map(r => (
-                              <tr key={r.id} onClick={() => { setActiveRequest(r); setIsManageModalOpen(true); }} className="hover:bg-gray-50 cursor-pointer">
-                                <td className="p-6 font-bold text-[#1B2B48]">{r.scope}</td>
-                                <td className="p-6 text-sm text-gray-500">{r.service_type}</td>
-                                <td className="p-6">{getStatusBadge(r.status)}</td>
-                              </tr>
-                            ))}
-                            {technicalRequests.filter(r => r.project_name === selectedProject.name && r.scope !== 'INTERNAL_WORK').length === 0 && (
-                                <tr><td colSpan={3} className="p-20 text-center text-gray-300 italic font-bold">لا توجد مراجعات فنية مسجلة</td></tr>
-                            )}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
+                    <TechnicalModule 
+                      requests={technicalRequests}
+                      projects={projects}
+                      currentUser={currentUser}
+                      usersList={usersList}
+                      onRefresh={fetchAllData}
+                      filteredByProject={selectedProject.name}
+                      scopeFilter="EXTERNAL"
+                    />
                   )}
 
                   {projectTab === 'clearance' && (
-                    <div className="space-y-6">
-                      <div className="flex justify-end gap-4">
-                        <button onClick={() => { setBulkProject(selectedProject.name); setIsBulkUploadModalOpen(true); }} className="bg-white border text-[#1B2B48] px-6 py-3 rounded-2xl font-bold flex items-center gap-2 shadow-sm"><FileUp size={18}/> إكسل</button>
-                        <button onClick={() => { setClearForm({...clearForm, project_name: selectedProject.name}); setIsClearModalOpen(true); }} className="bg-[#1B2B48] text-white px-6 py-3 rounded-2xl font-bold flex items-center gap-2 shadow-md hover:brightness-110 transition-all"><Plus size={18} /> تسجيل إفراغ</button>
-                      </div>
-                      <div className="bg-white rounded-[40px] shadow-sm border border-gray-100 overflow-hidden">
-                        <table className="w-full text-right">
-                          <thead className="bg-gray-50 border-b"><tr><th className="p-6 text-xs text-gray-400">العميل</th><th className="p-6 text-xs text-gray-400">الصك</th><th className="p-6 text-xs text-gray-400">القيمة</th><th className="p-6 text-xs text-gray-400">الحالة</th></tr></thead>
-                          <tbody className="divide-y divide-gray-50">
-                            {clearanceRequests.filter(r => r.project_name === selectedProject.name).map(r => (
-                              <tr key={r.id} onClick={() => { setActiveRequest(r); setIsManageModalOpen(true); }} className="hover:bg-gray-50 cursor-pointer">
-                                <td className="p-6 font-bold text-[#1B2B48]">{r.client_name}</td>
-                                <td className="p-6 text-xs text-gray-400 font-mono">{r.deed_number}</td>
-                                <td className="p-6 text-sm font-bold text-green-600">{parseFloat(r.deal_value || '0').toLocaleString()}</td>
-                                <td className="p-6">{getStatusBadge(r.status)}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
+                    <ClearanceModule 
+                      requests={clearanceRequests.filter(r => r.project_name === selectedProject.name)}
+                      projects={projects}
+                      currentUser={currentUser}
+                      usersList={usersList}
+                      onRefresh={fetchAllData}
+                      filteredByProject={selectedProject.name}
+                    />
                   )}
                 </div>
               )}
 
               {view === 'TECHNICAL_SERVICES' && !selectedProject && (
-                  <div className="bg-white rounded-[40px] p-8 shadow-sm border border-gray-100">
-                      <div className="flex justify-between items-center mb-6">
-                        <h2 className="text-2xl font-black text-[#1B2B48]">سجل الطلبات الفنية</h2>
-                        {canAccess(['ADMIN', 'TECHNICAL', 'PR_MANAGER']) && (
-                          <button onClick={() => setIsTechModalOpen(true)} className="bg-[#E95D22] text-white px-5 py-2.5 rounded-xl font-bold flex items-center gap-2 hover:brightness-110 transition-all"><Plus size={18}/> إضافة طلب فني</button>
-                        )}
-                      </div>
-                      <table className="w-full text-right text-sm">
-                          <thead className="bg-gray-50 border-b"><tr><th className="p-4 text-gray-400">المشروع</th><th className="p-4 text-gray-400">الخدمة</th><th className="p-4 text-gray-400">الحالة</th></tr></thead>
-                          <tbody>{technicalRequests.map(r => <tr key={r.id} className="border-b hover:bg-gray-50 cursor-pointer" onClick={()=>{setActiveRequest(r); setIsManageModalOpen(true)}}><td className="p-4 font-bold text-[#1B2B48]">{r.project_name}</td><td className="p-4 font-bold text-gray-500">{r.service_type}</td><td className="p-4">{getStatusBadge(r.status)}</td></tr>)}</tbody>
-                      </table>
-                  </div>
+                  <TechnicalModule 
+                    requests={technicalRequests}
+                    projects={projects}
+                    currentUser={currentUser}
+                    usersList={usersList}
+                    onRefresh={fetchAllData}
+                  />
               )}
 
               {view === 'CONVEYANCE_SERVICES' && !selectedProject && (
-                  <div className="bg-white rounded-[40px] p-8 shadow-sm border border-gray-100">
-                      <div className="flex justify-between items-center mb-6">
-                        <h2 className="text-2xl font-black text-[#1B2B48]">سجل الإفراغات</h2>
-                        {canAccess(['ADMIN', 'CONVEYANCE', 'PR_MANAGER']) && (
-                          <button onClick={() => setIsClearModalOpen(true)} className="bg-[#1B2B48] text-white px-5 py-2.5 rounded-xl font-bold flex items-center gap-2 hover:brightness-110 transition-all"><Plus size={18}/> تسجيل إفراغ جديد</button>
-                        )}
-                      </div>
-                      <table className="w-full text-right text-sm">
-                          <thead className="bg-gray-50 border-b"><tr><th className="p-4 text-gray-400">المشروع</th><th className="p-4 text-gray-400">العميل</th><th className="p-4 text-gray-400">الحالة</th></tr></thead>
-                          <tbody>{clearanceRequests.map(r => <tr key={r.id} className="border-b hover:bg-gray-50 cursor-pointer" onClick={()=>{setActiveRequest(r); setIsManageModalOpen(true)}}><td className="p-4 font-bold text-[#1B2B48]">{r.project_name}</td><td className="p-4 font-bold text-gray-500">{r.client_name}</td><td className="p-4">{getStatusBadge(r.status)}</td></tr>)}</tbody>
-                      </table>
-                  </div>
+                  <ClearanceModule 
+                    requests={clearanceRequests}
+                    projects={projects}
+                    currentUser={currentUser}
+                    usersList={usersList}
+                    onRefresh={fetchAllData}
+                  />
               )}
 
               {view === 'USERS' && !selectedProject && (
@@ -580,240 +391,6 @@ const AppContent: React.FC = () => {
           )}
         </div>
       </main>
-
-      {/* --- MODALS --- */}
-
-      {/* 1. Technical Request Modal */}
-      <Modal isOpen={isTechModalOpen} onClose={() => setIsTechModalOpen(false)} title="إضافة طلب مراجعة فني">
-        <div className="space-y-4 text-right font-cairo overflow-visible">
-          <div>
-            <label className="text-xs text-gray-400 font-bold block mb-1">المشروع</label>
-            <select 
-              className="w-full p-4 bg-gray-50 rounded-2xl border outline-none font-bold" 
-              value={techForm.project_name} 
-              onChange={e => setTechForm({...techForm, project_name: e.target.value})}
-            >
-                <option value="">اختر المشروع...</option>
-                {projects.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="text-xs text-gray-400 font-bold block mb-1">جهة المراجعة</label>
-            <select 
-              className="w-full p-4 bg-gray-50 rounded-2xl border outline-none font-bold" 
-              value={techForm.scope} 
-              onChange={e => setTechForm({...techForm, scope: e.target.value, entity: e.target.value})}
-            >
-                <option value="">اختر جهة المراجعة...</option>
-                {Object.keys(TECHNICAL_ENTITY_MAPPING).map(k => <option key={k} value={k}>{k}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="text-xs text-gray-400 font-bold block mb-1">بيان الأعمال</label>
-            <select 
-              className="w-full p-4 bg-gray-50 rounded-2xl border outline-none font-bold" 
-              value={techForm.service_type} 
-              onChange={e => setTechForm({...techForm, service_type: e.target.value})} 
-              disabled={!techForm.scope}
-            >
-                <option value="">اختر نوع العمل...</option>
-                {techForm.scope && TECHNICAL_ENTITY_MAPPING[techForm.scope].map(s => <option key={s} value={s}>{s}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="text-xs text-gray-400 font-bold block mb-1">الجهة طالبة الخدمة</label>
-            <input 
-              type="text" 
-              placeholder="الجهة الطالبة (إدارة المشاريع، مبيعات...)"
-              className="w-full p-4 bg-gray-50 rounded-2xl border outline-none font-bold" 
-              value={techForm.requesting_entity} 
-              onChange={e => setTechForm({...techForm, requesting_entity: e.target.value})} 
-            />
-          </div>
-          <div>
-            <label className="text-xs text-gray-400 font-bold block mb-1">الوصف / التفاصيل</label>
-            <textarea 
-              rows={3} 
-              placeholder="وصف تفصيلي للطلب..."
-              className="w-full p-4 bg-gray-50 rounded-2xl border outline-none font-bold resize-none" 
-              value={techForm.details} 
-              onChange={e => setTechForm({...techForm, details: e.target.value})} 
-            />
-          </div>
-          <div>
-            <label className="text-xs text-gray-400 font-bold block mb-1">تاريخ الاستحقاق (Deadline)</label>
-            <input 
-              type="date" 
-              className="w-full p-4 bg-gray-50 rounded-2xl border outline-none font-bold" 
-              value={techForm.deadline} 
-              onChange={e => setTechForm({...techForm, deadline: e.target.value})} 
-            />
-          </div>
-          <button onClick={handleTechSubmit} className="w-full bg-[#E95D22] text-white py-5 rounded-[25px] font-black shadow-xl mt-4 hover:brightness-110 transition-all">إرسال الطلب</button>
-        </div>
-      </Modal>
-
-      {/* 2. Clearance Request Modal */}
-      <Modal isOpen={isClearModalOpen} onClose={() => setIsClearModalOpen(false)} title="تسجيل طلب إفراغ">
-        <div className="space-y-4 text-right font-cairo overflow-visible">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="text-xs text-gray-400 font-bold block mb-1">اسم العميل</label>
-                <input className="w-full p-4 bg-gray-50 rounded-2xl border outline-none font-bold" placeholder="الاسم الكامل" value={clearForm.client_name} onChange={e => setClearForm({...clearForm, client_name: e.target.value})} />
-              </div>
-              <div>
-                <label className="text-xs text-gray-400 font-bold block mb-1">رقم الجوال</label>
-                <input className="w-full p-4 bg-gray-50 rounded-2xl border outline-none font-bold" placeholder="05xxxxxxxx" value={clearForm.mobile} onChange={e => setClearForm({...clearForm, mobile: e.target.value})} />
-              </div>
-            </div>
-            <div>
-              <label className="text-xs text-gray-400 font-bold block mb-1">رقم الهوية</label>
-              <input className="w-full p-4 bg-gray-50 rounded-2xl border outline-none font-bold" placeholder="1xxxxxxxxx" value={clearForm.id_number} onChange={e => setClearForm({...clearForm, id_number: e.target.value})} />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="text-xs text-gray-400 font-bold block mb-1">المشروع</label>
-                <select className="w-full p-4 bg-gray-50 rounded-2xl border outline-none font-bold" value={clearForm.project_name} onChange={e => setClearForm({...clearForm, project_name: e.target.value})}>
-                    <option value="">اختر المشروع...</option>
-                    {projects.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="text-xs text-gray-400 font-bold block mb-1">رقم القطعة</label>
-                <input className="w-full p-4 bg-gray-50 rounded-2xl border outline-none font-bold" placeholder="القطعة" value={clearForm.plot_number} onChange={e => setClearForm({...clearForm, plot_number: e.target.value})} />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="text-xs text-gray-400 font-bold block mb-1">قيمة الصفقة</label>
-                <input type="number" className="w-full p-4 bg-gray-50 rounded-2xl border outline-none font-bold" placeholder="القيمة بالريال" value={clearForm.deal_value} onChange={e => setClearForm({...clearForm, deal_value: e.target.value})} />
-              </div>
-              <div>
-                <label className="text-xs text-gray-400 font-bold block mb-1">البنك</label>
-                <select className="w-full p-4 bg-gray-50 rounded-2xl border outline-none font-bold" value={clearForm.bank_name} onChange={e => setClearForm({...clearForm, bank_name: e.target.value})}>
-                    <option value="">اختر البنك...</option>
-                    {BANKS_LIST.map(b => <option key={b} value={b}>{b}</option>)}
-                </select>
-              </div>
-            </div>
-            <div>
-              <label className="text-xs text-gray-400 font-bold block mb-1">رقم الصك</label>
-              <input className="w-full p-4 bg-gray-50 rounded-2xl border outline-none font-bold" placeholder="12xxxxxxxxxx" value={clearForm.deed_number} onChange={e => setClearForm({...clearForm, deed_number: e.target.value})} />
-            </div>
-            <button onClick={handleClearanceSubmit} className="w-full bg-[#1B2B48] text-white py-5 rounded-[25px] font-black shadow-xl mt-4 hover:brightness-110 transition-all">حفظ الطلب</button>
-        </div>
-      </Modal>
-
-      <Modal isOpen={isWorkModalOpen} onClose={() => setIsWorkModalOpen(false)} title="إضافة عمل مشروع داخلي">
-        <div className="space-y-4 text-right font-cairo overflow-visible">
-            <div className="space-y-1">
-                <label className="text-xs text-gray-400 font-bold block mb-1">بيان العمل</label>
-                <input type="text" className="w-full p-4 bg-gray-50 rounded-2xl border outline-none font-bold" placeholder="مثال: مراجعة المخططات، تسوية الأرض..." value={workForm.title} onChange={e => setWorkForm({...workForm, title: e.target.value})} />
-            </div>
-            <div className="space-y-1">
-                <label className="text-xs text-gray-400 font-bold block mb-1">المسؤول عن التنفيذ</label>
-                <select className="w-full p-4 bg-gray-50 rounded-2xl border outline-none font-bold" value={workForm.assigned_to} onChange={e => setWorkForm({...workForm, assigned_to: e.target.value})}>
-                    <option value="">اختر موظف...</option>
-                    {usersList.map(u => <option key={u.id} value={u.name}>{u.name}</option>)}
-                </select>
-            </div>
-            <div className="space-y-1">
-                <label className="text-xs text-gray-400 font-bold block mb-1">الوصف والتفاصيل</label>
-                <textarea rows={3} className="w-full p-4 bg-gray-50 rounded-2xl border outline-none font-bold resize-none" value={workForm.details} onChange={e => setWorkForm({...workForm, details: e.target.value})} />
-            </div>
-            <button onClick={handleWorkSubmit} className="w-full bg-[#1B2B48] text-white py-5 rounded-[25px] font-black shadow-xl mt-4 hover:brightness-110 transition-all">حفظ العمل</button>
-        </div>
-      </Modal>
-
-      <Modal isOpen={isProjectModalOpen} onClose={() => setIsProjectModalOpen(false)} title="إضافة مشروع جديد">
-          <div className="space-y-4 text-right font-cairo">
-              <div><label className="text-gray-400 text-xs font-bold block mb-1">اسم المشروع</label><input className="w-full p-4 bg-gray-50 rounded-2xl border outline-none font-bold" value={projectForm.name} onChange={e => setProjectForm({...projectForm, name: e.target.value})} /></div>
-              <div><label className="text-gray-400 text-xs font-bold block mb-1">الموقع</label><input className="w-full p-4 bg-gray-50 rounded-2xl border outline-none font-bold" value={projectForm.location} onChange={e => setProjectForm({...projectForm, location: e.target.value})} /></div>
-              <button onClick={handleAddProject} className="w-full bg-[#1B2B48] text-white py-5 rounded-[25px] font-black shadow-xl hover:brightness-110 transition-all">إنشاء المشروع</button>
-          </div>
-      </Modal>
-
-      <Modal isOpen={isManageModalOpen} onClose={() => setIsManageModalOpen(false)} title="إدارة الطلب والتعليقات">
-        {activeRequest && (
-          <div className="space-y-6 text-right font-cairo">
-            <div className="p-6 bg-gray-50 rounded-[30px] border border-gray-100 flex justify-between shadow-inner">
-                <div>
-                    <h3 className="font-black text-xl text-[#1B2B48]">{'client_name' in activeRequest ? activeRequest.client_name : activeRequest.service_type}</h3>
-                    <p className="text-sm text-gray-500 font-bold">المشروع: {activeRequest.project_name}</p>
-                </div>
-                {getStatusBadge(activeRequest.status)}
-            </div>
-            
-            <div className="grid grid-cols-1 gap-4">
-              <div className="bg-white p-3 rounded-2xl border shadow-sm">
-                <p className="text-xs text-gray-400 mb-1 font-bold">المسؤول</p>
-                <select 
-                  className="font-bold text-[#E95D22] bg-transparent outline-none w-full" 
-                  value={activeRequest.assigned_to || ''} 
-                  onChange={(e) => updateRequestDelegation(e.target.value)}
-                >
-                  <option value="">غير محدد</option>
-                  {usersList.map(u => <option key={u.id} value={u.name}>{u.name}</option>)}
-                </select>
-              </div>
-            </div>
-
-            {/* --- 2. Updated Modal Action Buttons (Inside isManageModalOpen) --- */}
-            <div className="grid grid-cols-1 gap-3">
-              {/* Clearance Requests Workflow Logic */}
-              {activeRequest && 'client_name' in activeRequest ? (
-                <>
-                  {/* Stage 1: Submission & Resubmission (CONVEYANCE / ADMIN) */}
-                  {(activeRequest.status === 'new' || activeRequest.status === 'pending_modification') && (canAccess(['CONVEYANCE', 'ADMIN'])) && (
-                    <button 
-                      onClick={() => updateRequestStatus('pending_pr')} 
-                      className="w-full bg-indigo-600 text-white p-5 rounded-2xl font-black shadow-lg hover:brightness-110 flex items-center justify-center gap-2 transition-all active:scale-95"
-                    >
-                      <Send size={20} /> إرسال للاعتماد
-                    </button>
-                  )}
-
-                  {/* Stage 2: Decision Making (PR_MANAGER / ADMIN) */}
-                  {activeRequest.status === 'pending_pr' && (canAccess(['PR_MANAGER', 'ADMIN'])) && (
-                    <div className="space-y-4">
-                      <button 
-                        onClick={() => updateRequestStatus('completed')} 
-                        className="w-full bg-green-600 text-white p-5 rounded-2xl font-black shadow-lg hover:brightness-110 flex items-center justify-center gap-2 transition-all active:scale-95"
-                      >
-                        <CheckCircle2 size={20} /> الموافقة النهائية
-                      </button>
-                      
-                      <div className="grid grid-cols-2 gap-3">
-                        <button 
-                          onClick={() => updateRequestStatus('pending_modification')} 
-                          className="bg-orange-50 text-orange-700 p-4 rounded-2xl font-bold border border-orange-100 flex flex-col items-center gap-2 hover:bg-orange-100 transition-all active:scale-95"
-                        >
-                          <RotateCcw size={20} /> إعادة للتعديل
-                        </button>
-                        <button 
-                          onClick={() => updateRequestStatus('rejected')} 
-                          className="bg-red-50 text-red-700 p-4 rounded-2xl font-bold border border-red-100 flex flex-col items-center gap-2 hover:bg-red-100 transition-all active:scale-95"
-                        >
-                          <XCircle size={20} /> رفض الطلب
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </>
-              ) : (
-                /* Fallback for Technical Requests */
-                canAccess(['ADMIN', 'PR_MANAGER', 'TECHNICAL']) && (
-                  <div className="grid grid-cols-3 gap-3">
-                    <button onClick={() => updateRequestStatus('completed')} className="bg-green-50 text-green-700 p-4 rounded-2xl font-bold hover:bg-green-100 flex flex-col items-center gap-1 shadow-sm border border-green-100"><CheckCircle2 size={24}/> منجز</button>
-                    <button onClick={() => updateRequestStatus('rejected')} className="bg-red-50 text-red-700 p-4 rounded-2xl font-bold hover:bg-red-100 flex flex-col items-center gap-1 shadow-sm border border-red-100"><XCircle size={24}/> رفض</button>
-                    <button onClick={() => updateRequestStatus('pending_modification')} className="bg-orange-50 text-orange-700 p-4 rounded-2xl font-bold hover:bg-orange-100 flex flex-col items-center gap-1 shadow-sm border border-orange-100"><Edit3 size={24}/> تعديل</button>
-                  </div>
-                )
-              )}
-            </div>
-          </div>
-        )}
-      </Modal>
 
       <Modal isOpen={isEditProjectModalOpen} onClose={() => setIsEditProjectModalOpen(false)} title="تعديل تفاصيل المشروع">
         <div className="space-y-6 text-right font-cairo">
@@ -832,6 +409,25 @@ const AppContent: React.FC = () => {
             </div>
           </div>
           <button onClick={handleUpdateProjectDetails} className="w-full bg-[#1B2B48] text-white py-5 rounded-[25px] font-black shadow-xl mt-4 hover:brightness-110 transition-all">حفظ التغييرات</button>
+        </div>
+      </Modal>
+
+      <Modal isOpen={isBulkUploadModalOpen} onClose={() => setIsBulkUploadModalOpen(false)} title="رفع بيانات إفراغ">
+        <div className="space-y-4 text-right font-cairo">
+          <div>
+            <label className="text-gray-400 text-xs font-bold block mb-1">المشروع المستهدف</label>
+            <select className="w-full p-4 bg-gray-50 rounded-2xl border outline-none font-bold" value={bulkProject} onChange={e => setBulkProject(e.target.value)}>
+              <option value="">اختر مشروعاً...</option>
+              {projects.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
+            </select>
+          </div>
+          <div className="border-2 border-dashed border-gray-200 rounded-2xl p-8 text-center bg-gray-50 hover:border-[#E95D22] transition-colors group">
+            <input type="file" accept=".xlsx,.xls" onChange={handleExcelImport} className="hidden" id="excel-upload" />
+            <label htmlFor="excel-upload" className="cursor-pointer flex flex-col items-center">
+              <FileUp className="w-12 h-12 text-gray-300 group-hover:text-[#E95D22] mb-2" />
+              <p className="text-sm font-bold text-gray-500">اختر ملف إكسل لرفعه</p>
+            </label>
+          </div>
         </div>
       </Modal>
 
