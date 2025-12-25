@@ -56,7 +56,8 @@ const ProjectsModule: React.FC<ProjectsModuleProps> = ({
     }
   };
 
-  const handleDeleteProject = async (id: string) => {
+  // Fix: Changed parameter type from string to number to match ProjectSummary.id
+  const handleDeleteProject = async (id: number) => {
     if (!window.confirm("هل أنت متأكد من حذف هذا المشروع نهائياً؟ سيتم حذف كافة البيانات المرتبطة به.")) return;
     
     const { error } = await supabase.from('projects').delete().eq('id', id);

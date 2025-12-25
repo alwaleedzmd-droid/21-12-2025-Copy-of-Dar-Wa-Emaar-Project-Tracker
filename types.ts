@@ -1,21 +1,70 @@
 
-export type UserRole = 'ADMIN' | 'PR_MANAGER' | 'PR_OFFICER' | 'FINANCE' | 'TECHNICAL' | 'CONVEYANCE';
+export type UserRole = 'ADMIN' | 'PR_MANAGER' | 'CONVEYANCE' | 'TECHNICAL' | 'FINANCE' | 'PR_OFFICER';
 
 export interface User {
   id: string;
-  name: string;
   email: string;
   role: UserRole;
-  created_at?: string;
+  name: string;
+}
+
+export interface ProjectSummary {
+  id: number;
+  client: string;
+  title: string;
+  status: string;
+  location: string;
+  progress: number;
+  name?: string; // Compatibility alias
+  totalTasks?: number;
+  completedTasks?: number;
+  details?: any;
+  image_url?: string;
+  isPinned?: boolean;
 }
 
 export interface Comment {
-  id: string;
-  request_id: string;
-  text: string;
-  author: string;
-  author_role: string;
+  id: number;
+  request_id: number;
+  request_type: 'technical' | 'clearance';
+  user_name: string;
+  content: string;
   created_at: string;
+}
+
+export interface TechnicalRequest {
+  id: number;
+  created_at: string;
+  project_id: number;
+  project_name?: string; // For display
+  scope: string;       
+  service_type: string; 
+  details: string;
+  status: string;      // new, pending, completed
+  progress: number;    // 0 - 100
+  reviewing_entity?: string;
+  requesting_entity?: string;
+  assigned_to?: string;
+  submitted_by?: string;
+}
+
+export interface ClearanceRequest {
+  id: number;
+  created_at: string;
+  project_id: number;
+  project_name?: string; // For display
+  client_name: string;
+  status: string; 
+  progress: number;
+  notes?: string;
+  mobile?: string;
+  id_number?: string;
+  plot_number?: string;
+  deal_value?: string;
+  bank_name?: string;
+  deed_number?: string;
+  submitted_by?: string;
+  assigned_to?: string;
 }
 
 export interface Task {
@@ -26,76 +75,7 @@ export interface Task {
   requester?: string;
   notes?: string;
   date: string;
-  comments?: Comment[];
-}
-
-export interface ContractorInfo {
-  companyName: string;
-  mobile: string;
-  engineerName: string;
-}
-
-export interface ProjectSummary {
-  id: string;
-  name: string;
-  location: string;
-  totalTasks: number;
-  completedTasks: number;
-  progress: number;
-  image_url?: string;
-  isPinned?: boolean;
-  details?: {
-    unitsCount?: number;
-    electricityMetersCount?: number;
-    waterMetersCount?: number;
-    buildingPermitsCount?: number;
-    occupancyCertificatesCount?: number;
-    surveyDecisionsCount?: number;
-    electricityContractor?: ContractorInfo;
-    waterContractor?: ContractorInfo;
-    consultantOffice?: ContractorInfo;
-  };
-}
-
-export interface TechnicalRequest {
-  id: string;
-  project_name: string;
-  entity: string;
-  service_type: string;
-  requesting_entity: string;
-  assigned_to: string;
-  details: string;
-  status: 'new' | 'pending' | 'completed' | 'rejected' | 'منجز' | 'مرفوض' | 'pending_modification' | 'تعديل' | 'pending_finance' | 'pending_pr';
-  submitted_by: string;
-  created_at: string;
-  scope: string; // 'INTERNAL_WORK' or External Entity Name
-  deadline?: string;
-}
-
-export interface ClearanceRequest {
-  id: string;
-  client_name: string;
-  mobile: string;
-  id_number: string;
-  project_name: string;
-  plot_number: string;
-  deal_value: string; 
-  bank_name: string;
-  deed_number: string;
-  status: 'new' | 'finance_approved' | 'finance_rejected' | 'completed' | 'rejected' | 'pending' | 'منجز' | 'مرفوض' | 'pending_modification' | 'تعديل' | 'pending_finance' | 'pending_pr';
-  submitted_by: string;
-  created_at: string;
-  assigned_to?: string;
-  property_value?: string;
-}
-
-export interface AppNotification {
-  id: string;
-  user_id: string;
-  title: string;
-  message: string;
-  is_read: boolean;
-  created_at: string;
+  comments?: any[];
 }
 
 export type ViewState = 

@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, FileUp, CheckCircle2, XCircle, AlertCircle, ShieldCheck, Activity, Landmark, Smartphone, User as UserIcon, Building2, MapPin, Hash, CreditCard } from 'lucide-react';
 import { supabase } from '../supabaseClient';
-import { User, ClearanceRequest, ProjectSummary, Comment } from '../types';
+import { User, ClearanceRequest, ProjectSummary } from '../types';
 import { BANKS_LIST } from '../constants';
 import Modal from './Modal';
 import ManageRequestModal from './ManageRequestModal';
@@ -28,7 +28,6 @@ const ClearanceModule: React.FC<ClearanceModuleProps> = ({
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isManageModalOpen, setIsManageModalOpen] = useState(false);
   const [activeRequest, setActiveRequest] = useState<ClearanceRequest | null>(null);
-  const [comments, setComments] = useState<Comment[]>([]);
 
   // Form State
   const [clearForm, setClearForm] = useState({
@@ -55,29 +54,6 @@ const ClearanceModule: React.FC<ClearanceModuleProps> = ({
         default: return <span className="bg-blue-50 text-blue-700 px-3 py-1 rounded-full text-[10px] font-bold w-fit">قيد المراجعة</span>;
     }
   };
-
-  const fetchComments = async (requestId: string) => {
-    const { data, error } = await supabase
-      .from('comments')
-      .select('*, profiles(name)')
-      .eq('clearance_request_id', requestId)
-      .order('created_at', { ascending: true });
-    
-    if (!error && data) {
-      setComments(data.map(c => ({
-        id: c.id,
-        text: c.content,
-        author: c.profiles?.name || 'مجهول',
-        created_at: c.created_at,
-        author_role: '',
-        request_id: requestId
-      })));
-    }
-  };
-
-  useEffect(() => {
-    if (activeRequest) fetchComments(activeRequest.id);
-  }, [activeRequest]);
 
   const handleAddSubmit = async () => {
     if (!clearForm.client_name || !clearForm.project_name) return alert("الاسم والمشروع مطلوبان");
@@ -119,16 +95,6 @@ const ClearanceModule: React.FC<ClearanceModuleProps> = ({
       setActiveRequest({ ...activeRequest, assigned_to: assignedTo } as any);
       onRefresh();
     }
-  };
-
-  const postComment = async (content: string) => {
-    if (!activeRequest) return;
-    const { error } = await supabase.from('comments').insert([{
-      content,
-      user_id: currentUser?.id,
-      clearance_request_id: activeRequest.id
-    }]);
-    if (!error) fetchComments(activeRequest.id);
   };
 
   return (
@@ -314,8 +280,6 @@ const ClearanceModule: React.FC<ClearanceModuleProps> = ({
         usersList={usersList}
         onUpdateStatus={updateStatus}
         onUpdateDelegation={updateDelegation}
-        onAddComment={postComment}
-        comments={comments}
       />
     </div>
   );
