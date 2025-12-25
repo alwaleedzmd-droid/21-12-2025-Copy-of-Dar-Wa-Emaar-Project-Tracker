@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { 
   Plus, CheckCircle2, XCircle, AlertCircle, ShieldCheck, Activity, 
   Smartphone, User as UserIcon, Building2, MapPin, 
-  Hash, CreditCard, Upload, Download
+  Hash, CreditCard, Upload, Download, UserCheck
 } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import { User, ClearanceRequest, ProjectSummary } from '../types';
@@ -80,8 +80,12 @@ const ClearanceModule: React.FC<ClearanceModuleProps> = ({
     if (selectedFile) attachmentUrl = await handleFileUpload(selectedFile);
 
     const { error } = await supabase.from('clearance_requests').insert([{
-      ...clearForm, project_id: finalProjectId, project_name: finalProjectName,
-      submitted_by: currentUser?.name, status: 'new', attachment_url: attachmentUrl
+      ...clearForm, 
+      project_id: finalProjectId, 
+      project_name: finalProjectName,
+      submitted_by: currentUser?.name, // حفظ اسم المستخدم
+      status: 'new', 
+      attachment_url: attachmentUrl
     }]);
 
     setUploading(false);
@@ -100,23 +104,12 @@ const ClearanceModule: React.FC<ClearanceModuleProps> = ({
     }
   };
 
-  // ✅ الدالة المصححة لتحديث الحالة
   const updateStatus = async (newStatus: string) => {
     if (!activeRequest) return;
-    
-    // 1. تحديث قاعدة البيانات
-    const { error } = await supabase
-      .from('clearance_requests')
-      .update({ status: newStatus })
-      .eq('id', activeRequest.id);
-      
+    const { error } = await supabase.from('clearance_requests').update({ status: newStatus }).eq('id', activeRequest.id);
     if (!error) {
-      // 2. تحديث الحالة في النافذة المفتوحة لكي لا تغلق
       setActiveRequest({ ...activeRequest, status: newStatus } as any);
-      // 3. تحديث القائمة الخلفية
       onRefresh();
-    } else {
-      alert("خطأ في التحديث: " + error.message);
     }
   };
 
@@ -150,6 +143,7 @@ const ClearanceModule: React.FC<ClearanceModuleProps> = ({
             <tr>
               <th className="p-6 text-xs text-gray-400">العميل</th>
               {!filteredByProject && <th className="p-6 text-xs text-gray-400">المشروع</th>}
+              <th className="p-6 text-xs text-gray-400">بواسطة</th> {/* ✅ عمود جديد */}
               <th className="p-6 text-xs text-gray-400">رقم الصك</th>
               <th className="p-6 text-xs text-gray-400">قيمة الصفقة</th>
               <th className="p-6 text-xs text-gray-400">المرفقات</th>
@@ -166,6 +160,17 @@ const ClearanceModule: React.FC<ClearanceModuleProps> = ({
                   </div>
                 </td>
                 {!filteredByProject && <td className="p-6 text-sm font-bold text-gray-500">{r.project_name}</td>}
+                
+                {/* ✅ عرض اسم المستخدم الذي أنشأ الطلب */}
+                <td className="p-6">
+                   <div className="flex items-center gap-2">
+                      <div className="w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center text-gray-500">
+                        <UserCheck size={12} />
+                      </div>
+                      <span className="text-xs font-bold text-[#1B2B48]">{r.submitted_by || 'غير محدد'}</span>
+                   </div>
+                </td>
+
                 <td className="p-6 text-xs font-mono text-gray-400">{r.deed_number || '-'}</td>
                 <td className="p-6 text-sm font-bold text-green-600">{r.deal_value ? `${parseFloat(r.deal_value).toLocaleString()} ر.س` : '-'}</td>
                 <td className="p-6" onClick={(e) => e.stopPropagation()}>
@@ -182,10 +187,8 @@ const ClearanceModule: React.FC<ClearanceModuleProps> = ({
         </table>
       </div>
 
-      {/* مودال الإضافة (تم اختصاره للكود الأساسي) */}
       <Modal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} title="تسجيل طلب إفراغ جديد">
         <div className="space-y-4 text-right">
-            {/* ... نفس حقول الإدخال السابقة ... */}
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="text-xs text-gray-400 font-bold block mb-1">اسم العميل</label>
@@ -236,7 +239,7 @@ const ClearanceModule: React.FC<ClearanceModuleProps> = ({
         request={activeRequest}
         currentUser={currentUser}
         usersList={usersList}
-        onUpdateStatus={updateStatus} // تم الربط بالدالة المصححة
+        onUpdateStatus={updateStatus}
         onUpdateDelegation={updateDelegation}
       />
     </div>

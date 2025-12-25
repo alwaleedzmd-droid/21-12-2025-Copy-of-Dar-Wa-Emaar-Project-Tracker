@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
 import { User, Comment, TechnicalRequest, ClearanceRequest } from '../types';
 import Modal from './Modal';
-import { MessageSquare, Send, CheckCircle2, Activity, Edit3, XCircle, User as UserIcon, Phone, FileText, CreditCard, Landmark, MapPin } from 'lucide-react';
+import { MessageSquare, Send, CheckCircle2, Activity, Edit3, XCircle, User as UserIcon, Phone, FileText, CreditCard, Landmark, MapPin, UserCheck } from 'lucide-react';
 
 interface ManageRequestModalProps {
   isOpen: boolean;
@@ -19,17 +19,12 @@ const ManageRequestModal: React.FC<ManageRequestModalProps> = ({
   onClose, 
   request, 
   currentUser, 
-  usersList,
-  onUpdateStatus,
-  onUpdateDelegation
+  onUpdateStatus
 }) => {
   const [comments, setComments] = useState<Comment[]>([]);
   const [newComment, setNewComment] = useState('');
   const [loading, setLoading] = useState(false);
-  
-  // حالة محلية لتخزين الحالة الحالية وعرضها فوراً
   const [currentStatus, setCurrentStatus] = useState('');
-  
   const commentsEndRef = useRef<HTMLDivElement>(null);
 
   const isClearance = request && 'client_name' in request;
@@ -38,7 +33,7 @@ const ManageRequestModal: React.FC<ManageRequestModalProps> = ({
 
   useEffect(() => {
     if (isOpen && request) {
-      setCurrentStatus(request.status); // مزامنة الحالة عند الفتح
+      setCurrentStatus(request.status);
       fetchComments();
     }
   }, [isOpen, request]);
@@ -84,13 +79,11 @@ const ManageRequestModal: React.FC<ManageRequestModalProps> = ({
     setLoading(false);
   };
 
-  // ✅ دالة تغيير الحالة (محدثة لتستجيب فوراً)
   const changeStatus = (newStatus: string) => {
-    setCurrentStatus(newStatus); // 1. تغيير اللون فوراً في الشاشة
-    onUpdateStatus(newStatus);   // 2. إرسال التحديث لقاعدة البيانات
+    setCurrentStatus(newStatus);
+    onUpdateStatus(newStatus);
   };
 
-  // دالة لجلب لون وعنوان الحالة
   const getStatusInfo = (status: string) => {
     switch(status) {
       case 'completed': return { label: 'منجز', color: 'bg-green-100 text-green-700 border-green-200' };
@@ -110,7 +103,6 @@ const ManageRequestModal: React.FC<ManageRequestModalProps> = ({
     <Modal isOpen={isOpen} onClose={onClose} title="تفاصيل ومتابعة الطلب">
       <div className="space-y-6 text-right font-cairo overflow-visible">
         
-        {/* --- رأس البطاقة الملون (يتغير فوراً) --- */}
         <div className={`p-5 rounded-[25px] border shadow-sm transition-all duration-300 ${statusInfo.color}`}>
           <div className="flex justify-between items-center">
             <div>
@@ -126,7 +118,6 @@ const ManageRequestModal: React.FC<ManageRequestModalProps> = ({
           </div>
         </div>
 
-        {/* --- بيانات العميل (للإفراغات) --- */}
         {isClearance && (
           <div className="bg-white p-5 rounded-[25px] border border-gray-100 shadow-sm space-y-4">
             <h3 className="font-black text-[#1B2B48] flex items-center gap-2 text-sm border-b pb-2">
@@ -141,6 +132,13 @@ const ManageRequestModal: React.FC<ManageRequestModalProps> = ({
                  <label className="text-[10px] text-gray-400 font-bold block">رقم الجوال</label>
                  <p className="font-bold text-[#1B2B48] text-sm flex items-center gap-1" dir="ltr">
                    {clearanceData.mobile} <Phone size={12} className="text-gray-400"/>
+                 </p>
+               </div>
+               {/* ✅ عرض اسم منشئ الطلب هنا أيضاً */}
+               <div>
+                 <label className="text-[10px] text-gray-400 font-bold block">تم الإنشاء بواسطة</label>
+                 <p className="font-bold text-[#E95D22] text-sm flex items-center gap-1">
+                   {clearanceData.submitted_by || '-'} <UserCheck size={12}/>
                  </p>
                </div>
                <div>
@@ -172,7 +170,6 @@ const ManageRequestModal: React.FC<ManageRequestModalProps> = ({
           </div>
         )}
 
-        {/* --- بيانات العمل الفني --- */}
         {!isClearance && (
            <div className="bg-white p-5 rounded-[25px] border border-gray-100 shadow-sm">
              <h3 className="font-black text-[#1B2B48] flex items-center gap-2 text-sm border-b pb-2 mb-3">
@@ -195,7 +192,6 @@ const ManageRequestModal: React.FC<ManageRequestModalProps> = ({
            </div>
         )}
 
-        {/* --- أزرار الإجراءات (تعمل فوراً الآن) --- */}
         {canAction(['ADMIN', 'PR_MANAGER', 'TECHNICAL', 'CONVEYANCE']) && (
           <div className="grid grid-cols-4 gap-2">
             <button onClick={() => changeStatus('completed')} className={`p-3 rounded-xl font-black flex flex-col items-center justify-center gap-1 transition-all active:scale-95 ${currentStatus === 'completed' ? 'bg-green-600 text-white shadow-lg ring-2 ring-green-200' : 'bg-green-50 text-green-700 hover:bg-green-100'}`}>
@@ -213,7 +209,6 @@ const ManageRequestModal: React.FC<ManageRequestModalProps> = ({
           </div>
         )}
 
-        {/* --- قسم التعليقات --- */}
         <div className="border-t border-gray-100 pt-6">
             <h3 className="font-black text-[#1B2B48] mb-4 flex items-center gap-2">
               <MessageSquare size={18} className="text-[#E95D22]" /> الملاحظات
