@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Plus, MoreHorizontal, Trash2, Edit } from 'lucide-react';
 import { supabase } from '../supabaseClient';
@@ -6,6 +5,7 @@ import { TechnicalRequest, ProjectSummary, User } from '../types';
 import Modal from './Modal';
 import ManageRequestModal from './ManageRequestModal';
 
+// ... (نفس القوائم الثابتة: REVIEW_ENTITIES, WORK_STATEMENTS, STATUS_OPTIONS)
 const REVIEW_ENTITIES = [
   "وزارة الإسكان", "الشركة الوطنية للإسكان", "أمانة منطقة الرياض", "الشركة السعودية للكهرباء",
   "المركز الوطني للرقابة على الالتزام البيئي", "شرطة العارض", "شركة المياه الوطنية", "بلدية شمال الرياض",
@@ -39,13 +39,7 @@ interface TechnicalModuleProps {
 }
 
 const TechnicalModule: React.FC<TechnicalModuleProps> = ({ 
-  requests, 
-  projects, 
-  currentUser, 
-  usersList, 
-  onRefresh, 
-  filteredByProject,
-  scopeFilter 
+  requests, projects, currentUser, usersList, onRefresh, filteredByProject, scopeFilter 
 }) => {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isManageModalOpen, setIsManageModalOpen] = useState(false);
@@ -63,16 +57,12 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
   });
 
   const openAddModal = () => {
-    const projId = filteredByProject ? projects.find(p => p.name === filteredByProject || p.title === filteredByProject)?.id.toString() : '';
+    // محاولة إيجاد المعرف كنص
+    const proj = filteredByProject ? projects.find(p => p.client === filteredByProject || p.title === filteredByProject) : null;
     setTechForm({ 
       id: 0, 
-      project_id: projId || '', 
-      service_type: '', 
-      reviewing_entity: '', 
-      requesting_entity: '', 
-      details: '', 
-      status: 'new', 
-      progress: 0 
+      project_id: proj ? proj.id.toString() : '', // تحويل لنص
+      service_type: '', reviewing_entity: '', requesting_entity: '', details: '', status: 'new', progress: 0 
     });
     setIsAddModalOpen(true);
   };
@@ -80,7 +70,7 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
   const openEditModal = (req: TechnicalRequest) => {
     setTechForm({
       id: req.id, 
-      project_id: req.project_id.toString(), 
+      project_id: req.project_id.toString(), // تحويل لنص
       service_type: req.service_type,
       reviewing_entity: req.reviewing_entity || '', 
       requesting_entity: req.requesting_entity || '',
@@ -113,8 +103,11 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
   const handleSubmit = async () => {
     if (!techForm.project_id || !techForm.service_type) return alert("يرجى ملء جميع الحقول الإلزامية");
     
+    // إيجاد اسم المشروع للحفظ
+    const selectedProj = projects.find(p => p.id.toString() === techForm.project_id);
+
     const payload = {
-      project_id: parseInt(techForm.project_id),
+      project_id: techForm.project_id, // ⚠️ هام: تم إزالة parseInt لأنه الآن نص
       scope: scopeFilter || 'EXTERNAL',
       service_type: techForm.service_type, 
       reviewing_entity: techForm.reviewing_entity,
@@ -122,7 +115,7 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
       details: techForm.details,
       status: techForm.status, 
       progress: techForm.progress,
-      project_name: projects.find(p => p.id.toString() === techForm.project_id)?.title || projects.find(p => p.id.toString() === techForm.project_id)?.client
+      project_name: selectedProj ? (selectedProj.client || selectedProj.title) : ''
     };
 
     if (techForm.id === 0) {
@@ -144,6 +137,7 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
     
     const { error } = await supabase.from('technical_requests').update(updateData).eq('id', activeRequest.id);
     if (!error) {
+      setActiveRequest({ ...activeRequest, ...updateData }); // تحديث محلي لمنع التعليق
       onRefresh();
       setIsManageModalOpen(false);
     }
@@ -152,7 +146,10 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
   const updateDelegation = async (assignedTo: string) => {
     if (!activeRequest) return;
     const { error } = await supabase.from('technical_requests').update({ assigned_to: assignedTo }).eq('id', activeRequest.id);
-    if (!error) onRefresh();
+    if (!error) {
+       setActiveRequest({ ...activeRequest, assigned_to: assignedTo });
+       onRefresh();
+    }
   };
 
   const canEdit = currentUser?.role === 'ADMIN' || currentUser?.role === 'PR_MANAGER' || currentUser?.role === 'TECHNICAL';
@@ -185,10 +182,10 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
           </thead>
           <tbody className="divide-y divide-gray-100">
             {requests.map(req => {
-              const proj = projects.find(p => p.id === req.project_id);
+              const proj = projects.find(p => p.id === req.project_id || p.id.toString() === req.project_id);
               return (
                 <tr key={req.id} className="hover:bg-blue-50/50 transition cursor-pointer" onClick={() => {setActiveRequest(req); setIsManageModalOpen(true);}}>
-                  {!filteredByProject && <td className="p-5 font-bold text-[#1B2B48]">{proj?.client || proj?.title}</td>}
+                  {!filteredByProject && <td className="p-5 font-bold text-[#1B2B48]">{req.project_name || proj?.client || proj?.title}</td>}
                   <td className="p-5 text-gray-600 font-bold">{req.service_type}</td>
                   <td className="p-5 text-gray-400 text-xs font-bold">{req.reviewing_entity || '-'}</td>
                   <td className="p-5 w-48" onClick={e => e.stopPropagation()}>
@@ -212,10 +209,8 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
                 </tr>
               );
             })}
-            {requests.length === 0 && (
-              <tr>
-                <td colSpan={6} className="p-20 text-center text-gray-300 italic font-bold">لا توجد سجلات حالياً</td>
-              </tr>
+             {requests.length === 0 && (
+              <tr><td colSpan={6} className="p-20 text-center text-gray-300 italic font-bold">لا توجد سجلات حالياً</td></tr>
             )}
           </tbody>
         </table>
@@ -230,6 +225,7 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
               {projects.map(p=><option key={p.id} value={p.id}>{p.client || p.title}</option>)}
             </select>
           </div>
+          {/* باقي النموذج كما هو ... */}
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="text-gray-400 text-xs font-bold block mb-1">بيان العمل</label>
