@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { 
   Plus, CheckCircle2, XCircle, AlertCircle, ShieldCheck, Activity, 
   Smartphone, User as UserIcon, Building2, MapPin, 
-  Hash, CreditCard, Upload, Download, UserCheck
+  Hash, CreditCard, Upload, Download, UserCheck, Trash2
 } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import { User, ClearanceRequest, ProjectSummary } from '../types';
@@ -30,6 +30,8 @@ const ClearanceModule: React.FC<ClearanceModuleProps> = ({
     client_name: '', mobile: '', id_number: '', project_id: '', project_name: filteredByProject || '', 
     plot_number: '', deal_value: '', bank_name: '', deed_number: ''
   });
+  
+  // حالة الملف
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
 
@@ -48,15 +50,25 @@ const ClearanceModule: React.FC<ClearanceModuleProps> = ({
 
   const handleFileUpload = async (file: File) => {
     try {
+      // تنظيف اسم الملف من الحروف العربية والرموز لتجنب المشاكل
       const fileExt = file.name.split('.').pop();
       const fileName = `${Date.now()}.${fileExt}`;
-      const filePath = `${fileName}`;
-      const { error: uploadError } = await supabase.storage.from('clearance-files').upload(filePath, file);
+      const filePath = fileName;
+
+      const { error: uploadError } = await supabase.storage
+        .from('clearance-files')
+        .upload(filePath, file);
+
       if (uploadError) throw uploadError;
-      const { data } = supabase.storage.from('clearance-files').getPublicUrl(filePath);
+
+      const { data } = supabase.storage
+        .from('clearance-files')
+        .getPublicUrl(filePath);
+
       return data.publicUrl;
     } catch (error) {
-      console.error(error);
+      console.error('Upload Error:', error);
+      alert('فشل رفع الملف. تأكد من أن الملف ليس كبيراً جداً.');
       return null;
     }
   };
@@ -67,6 +79,7 @@ const ClearanceModule: React.FC<ClearanceModuleProps> = ({
     let finalProjectId = clearForm.project_id;
     let finalProjectName = clearForm.project_name;
 
+    // التأكد من تعبئة بيانات المشروع عند الفلترة
     if (!finalProjectId && filteredByProject) {
         const p = projects.find(proj => proj.client === filteredByProject || proj.title === filteredByProject);
         if (p) {
@@ -77,13 +90,21 @@ const ClearanceModule: React.FC<ClearanceModuleProps> = ({
 
     setUploading(true);
     let attachmentUrl = null;
-    if (selectedFile) attachmentUrl = await handleFileUpload(selectedFile);
+
+    // رفع الملف فقط إذا كان موجوداً
+    if (selectedFile) {
+      attachmentUrl = await handleFileUpload(selectedFile);
+      if (!attachmentUrl) {
+        setUploading(false);
+        return; // توقف إذا فشل الرفع
+      }
+    }
 
     const { error } = await supabase.from('clearance_requests').insert([{
       ...clearForm, 
       project_id: finalProjectId, 
       project_name: finalProjectName,
-      submitted_by: currentUser?.name, // حفظ اسم المستخدم
+      submitted_by: currentUser?.name, 
       status: 'new', 
       attachment_url: attachmentUrl
     }]);
@@ -93,14 +114,15 @@ const ClearanceModule: React.FC<ClearanceModuleProps> = ({
     if (!error) {
       alert("تمت الإضافة بنجاح");
       setIsAddModalOpen(false);
+      // تصفير النموذج
       setClearForm({
         client_name: '', mobile: '', id_number: '', project_id: '', project_name: filteredByProject || '', 
         plot_number: '', deal_value: '', bank_name: '', deed_number: ''
       });
-      setSelectedFile(null);
+      setSelectedFile(null); // ✅ تصفير الملف المختار
       onRefresh();
     } else {
-      alert(error.message);
+      alert("خطأ أثناء الحفظ: " + error.message);
     }
   };
 
@@ -120,6 +142,13 @@ const ClearanceModule: React.FC<ClearanceModuleProps> = ({
       setActiveRequest({ ...activeRequest, assigned_to: assignedTo } as any);
       onRefresh();
     }
+  };
+
+  // ✅ دالة حذف الملف المختار قبل الرفع
+  const removeSelectedFile = (e: React.MouseEvent) => {
+    e.stopPropagation(); // منع فتح نافذة اختيار الملفات مرة أخرى
+    e.preventDefault();
+    setSelectedFile(null);
   };
 
   return (
@@ -143,7 +172,7 @@ const ClearanceModule: React.FC<ClearanceModuleProps> = ({
             <tr>
               <th className="p-6 text-xs text-gray-400">العميل</th>
               {!filteredByProject && <th className="p-6 text-xs text-gray-400">المشروع</th>}
-              <th className="p-6 text-xs text-gray-400">بواسطة</th> {/* ✅ عمود جديد */}
+              <th className="p-6 text-xs text-gray-400">بواسطة</th>
               <th className="p-6 text-xs text-gray-400">رقم الصك</th>
               <th className="p-6 text-xs text-gray-400">قيمة الصفقة</th>
               <th className="p-6 text-xs text-gray-400">المرفقات</th>
@@ -160,17 +189,12 @@ const ClearanceModule: React.FC<ClearanceModuleProps> = ({
                   </div>
                 </td>
                 {!filteredByProject && <td className="p-6 text-sm font-bold text-gray-500">{r.project_name}</td>}
-                
-                {/* ✅ عرض اسم المستخدم الذي أنشأ الطلب */}
                 <td className="p-6">
                    <div className="flex items-center gap-2">
-                      <div className="w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center text-gray-500">
-                        <UserCheck size={12} />
-                      </div>
+                      <div className="w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center text-gray-500"><UserCheck size={12} /></div>
                       <span className="text-xs font-bold text-[#1B2B48]">{r.submitted_by || 'غير محدد'}</span>
                    </div>
                 </td>
-
                 <td className="p-6 text-xs font-mono text-gray-400">{r.deed_number || '-'}</td>
                 <td className="p-6 text-sm font-bold text-green-600">{r.deal_value ? `${parseFloat(r.deal_value).toLocaleString()} ر.س` : '-'}</td>
                 <td className="p-6" onClick={(e) => e.stopPropagation()}>
@@ -222,14 +246,33 @@ const ClearanceModule: React.FC<ClearanceModuleProps> = ({
 
              <div><label className="text-xs text-gray-400 font-bold block mb-1">رقم الصك</label><div className="relative"><Hash className="absolute right-3 top-4 text-gray-300 w-4 h-4" /><input className="w-full p-4 pr-10 bg-gray-50 rounded-2xl border outline-none font-bold" placeholder="رقم الصك" value={clearForm.deed_number} onChange={e => setClearForm({...clearForm, deed_number: e.target.value})} /></div></div>
 
-            <div className="bg-gray-50 p-4 rounded-2xl border border-dashed border-gray-300 hover:bg-gray-100 transition-colors cursor-pointer relative">
-                <input type="file" className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" onChange={(e) => e.target.files && setSelectedFile(e.target.files[0])} />
+            {/* ✅ قسم رفع الملفات المحدث مع زر الحذف */}
+            <div className={`p-4 rounded-2xl border ${selectedFile ? 'border-green-500 bg-green-50' : 'border-dashed border-gray-300 bg-gray-50'} hover:bg-gray-100 transition-colors cursor-pointer relative`}>
+                <input type="file" className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" onChange={(e) => e.target.files && setSelectedFile(e.target.files[0])} disabled={!!selectedFile} />
                 <div className="text-center">
-                    {selectedFile ? <div className="flex items-center justify-center gap-2 text-green-600 font-bold"><CheckCircle2 size={24} /><span>{selectedFile.name}</span></div> : <div className="flex flex-col items-center text-gray-400"><Upload size={24} className="mb-2" /><span className="text-xs font-bold">إرفاق ملف</span></div>}
+                    {selectedFile ? (
+                        <div className="flex items-center justify-between px-4">
+                           <div className="flex items-center gap-2 text-green-700 font-bold">
+                              <CheckCircle2 size={24} />
+                              <span className="text-sm">{selectedFile.name}</span>
+                           </div>
+                           {/* زر الحذف الأحمر */}
+                           <button onClick={removeSelectedFile} className="z-10 p-2 bg-white rounded-full text-red-500 hover:bg-red-50 shadow-sm transition-all hover:scale-110">
+                              <XCircle size={20} />
+                           </button>
+                        </div>
+                    ) : (
+                        <div className="flex flex-col items-center text-gray-400">
+                           <Upload size={24} className="mb-2" />
+                           <span className="text-xs font-bold">اضغط هنا لإرفاق صورة الصك أو الهوية</span>
+                        </div>
+                    )}
                 </div>
             </div>
 
-            <button onClick={handleAddSubmit} disabled={uploading} className="w-full bg-[#1B2B48] text-white py-5 rounded-[25px] font-black shadow-xl mt-4 hover:brightness-110 transition-all disabled:opacity-50">{uploading ? "جاري الرفع..." : "حفظ الطلب"}</button>
+            <button onClick={handleAddSubmit} disabled={uploading} className="w-full bg-[#1B2B48] text-white py-5 rounded-[25px] font-black shadow-xl mt-4 hover:brightness-110 transition-all disabled:opacity-50">
+                {uploading ? "جاري الرفع والحفظ..." : "حفظ الطلب وإرسال"}
+            </button>
         </div>
       </Modal>
 
