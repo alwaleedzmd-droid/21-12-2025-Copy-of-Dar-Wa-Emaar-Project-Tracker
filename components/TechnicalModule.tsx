@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
-import { Plus, MoreHorizontal, Trash2, Edit, FileText, Building2, AlignLeft, CheckCircle2 } from 'lucide-react';
+import { Plus, MoreHorizontal, Trash2, Edit, FileText, Building2, AlignLeft, CheckCircle2, Paperclip, Download } from 'lucide-react'; // أضفت أيقونات جديدة
 import { supabase } from '../supabaseClient';
 import { TechnicalRequest, ProjectSummary, User } from '../types';
 import Modal from './Modal';
 import ManageRequestModal from './ManageRequestModal';
 
-// 1. القوائم الثابتة (المحدثة حسب طلبك)
+// 1. القوائم الثابتة
 const RAW_REVIEW_ENTITIES = [
   "وزارة الإسكان", "الشركة الوطنية للإسكان", "أمانة منطقة الرياض", "الشركة السعودية للكهرباء",
   "المركز الوطني للرقابة على الالتزام البيئي", "الشرطة", "شركة المياه الوطنية", "بلدية شمال الرياض",
@@ -21,7 +21,6 @@ const RAW_WORK_STATEMENTS = [
   "تعديل بيانات المالك", "رفع الحجز عن الصكوك", "تركيب عدادات", "فصل رخص البناء", "أخرى"
 ];
 
-// إزالة التكرار برمجياً (للاحتياط)
 const REVIEW_ENTITIES = Array.from(new Set(RAW_REVIEW_ENTITIES));
 const WORK_STATEMENTS = Array.from(new Set(RAW_WORK_STATEMENTS));
 
@@ -48,6 +47,11 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isManageModalOpen, setIsManageModalOpen] = useState(false);
   const [activeRequest, setActiveRequest] = useState<TechnicalRequest | null>(null);
+  
+  // حالة التحميل (عشان نمنع المستخدم يضغط مرتين وقت الرفع)
+  const [isUploading, setIsUploading] = useState(false);
+
+  const [attachment, setAttachment] = useState<File | null>(null);
 
   const [techForm, setTechForm] = useState({
     id: 0, 
@@ -57,8 +61,15 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
     requesting_entity: '', 
     details: '', 
     status: 'new', 
-    progress: 0
+    progress: 0,
+    attachment_url: '' // حقل لتخزين الرابط القديم في حالة التعديل
   });
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      setAttachment(e.target.files[0]);
+    }
+  };
 
   const openAddModal = () => {
     const proj = filteredByProject ? projects.find(p => p.client === filteredByProject || p.title === filteredByProject) : null;
@@ -70,8 +81,10 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
       requesting_entity: '', 
       details: '', 
       status: 'new', 
-      progress: 0 
+      progress: 0,
+      attachment_url: ''
     });
+    setAttachment(null);
     setIsAddModalOpen(true);
   };
 
@@ -84,8 +97,10 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
       requesting_entity: req.requesting_entity || '',
       details: req.details, 
       status: req.status, 
-      progress: req.progress || 0
+      progress: req.progress || 0,
+      attachment_url: req['attachment_url'] || '' // استرجاع الرابط الموجود إذا وجد
     });
+    setAttachment(null);
     setIsAddModalOpen(true);
   };
 
@@ -95,9 +110,39 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
     if (!error) onRefresh();
   };
 
+  // --- دالة الحفظ المعدلة للتعامل مع رفع الملفات ---
   const handleSubmit = async () => {
-    if (!techForm.project_id || !techForm.service_type || !techForm.reviewing_entity) return alert("يرجى تعبئة الحقول الأساسية (المشروع، البيان، الجهة)");
+    if (!techForm.project_id || !techForm.service_type || !techForm.reviewing_entity) return alert("يرجى تعبئة الحقول الأساسية");
     
+    setIsUploading(true); // بدء التحميل
+
+    let finalAttachmentUrl = techForm.attachment_url;
+
+    // 1. إذا كان هناك ملف جديد تم اختياره، نقوم برفعه
+    if (attachment) {
+      const fileExt = attachment.name.split('.').pop();
+      const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+      const filePath = `${fileName}`;
+
+      // الرفع إلى Bucket اسمه 'attachments'
+      const { error: uploadError } = await supabase.storage
+        .from('attachments')
+        .upload(filePath, attachment);
+
+      if (uploadError) {
+        alert('حدث خطأ أثناء رفع الملف: ' + uploadError.message);
+        setIsUploading(false);
+        return;
+      }
+
+      // الحصول على الرابط العام
+      const { data: { publicUrl } } = supabase.storage
+        .from('attachments')
+        .getPublicUrl(filePath);
+
+      finalAttachmentUrl = publicUrl;
+    }
+
     const selectedProj = projects.find(p => p.id.toString() === techForm.project_id);
 
     const payload = {
@@ -109,7 +154,8 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
       details: techForm.details,
       status: techForm.status, 
       progress: techForm.progress,
-      project_name: selectedProj ? (selectedProj.client || selectedProj.title) : ''
+      project_name: selectedProj ? (selectedProj.client || selectedProj.title) : '',
+      attachment_url: finalAttachmentUrl // حفظ الرابط في قاعدة البيانات
     };
 
     if (techForm.id === 0) {
@@ -120,6 +166,7 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
       if (error) alert(error.message);
     }
     
+    setIsUploading(false); // انتهاء التحميل
     setIsAddModalOpen(false);
     onRefresh();
   };
@@ -169,6 +216,7 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
               <th className="p-5">بيان العمل</th>
               <th className="p-5">جهة المراجعة</th>
               <th className="p-5">الإنجاز</th>
+              <th className="p-5">المرفقات</th> {/* عمود جديد للمرفقات */}
               <th className="p-5">الحالة</th>
               <th className="p-5">خيارات</th>
             </tr>
@@ -187,6 +235,25 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
                       </div>
                     </div>
                   </td>
+                  
+                  {/* عرض أيقونة المرفق إذا وجد */}
+                  <td className="p-5">
+                    {req['attachment_url'] ? (
+                      <a 
+                        href={req['attachment_url']} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center justify-center w-8 h-8 bg-gray-100 text-blue-600 rounded-full hover:bg-blue-100 transition-colors"
+                        onClick={(e) => e.stopPropagation()} // عشان ما يفتح المودال لما نضغط تحميل
+                        title="عرض المرفق"
+                      >
+                        <Paperclip size={16} />
+                      </a>
+                    ) : (
+                      <span className="text-gray-300">-</span>
+                    )}
+                  </td>
+
                   <td className="p-5">
                     <span className={`px-3 py-1 rounded-full text-[10px] font-black shadow-sm ${req.status === 'completed' || req.status === 'منجز' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
                       {req.status === 'completed' || req.status === 'منجز' ? 'منجز' : (STATUS_OPTIONS.find(o => o.value === req.status)?.label || req.status)}
@@ -200,7 +267,7 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
               </tr>
             ))}
              {requests.length === 0 && (
-              <tr><td colSpan={6} className="p-20 text-center text-gray-300 italic font-bold">لا توجد سجلات حالياً</td></tr>
+              <tr><td colSpan={7} className="p-20 text-center text-gray-300 italic font-bold">لا توجد سجلات حالياً</td></tr>
             )}
           </tbody>
         </table>
@@ -209,7 +276,6 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
       <Modal isOpen={isAddModalOpen} onClose={()=>setIsAddModalOpen(false)} title={techForm.id ? "تعديل بيانات العمل" : "إضافة عمل فني جديد"}>
         <div className="space-y-4 text-right font-cairo overflow-visible">
           
-          {/* اختيار المشروع */}
           <div>
             <label className="text-gray-400 text-xs font-bold block mb-1">المشروع</label>
             <div className="relative">
@@ -222,7 +288,6 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
           </div>
 
           <div className="grid grid-cols-2 gap-4">
-            {/* اختيار بيان الأعمال (قائمة منسدلة) */}
             <div>
               <label className="text-gray-400 text-xs font-bold block mb-1">بيان الأعمال</label>
               <div className="relative">
@@ -234,7 +299,6 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
               </div>
             </div>
 
-            {/* اختيار جهة المراجعة (قائمة منسدلة) */}
             <div>
               <label className="text-gray-400 text-xs font-bold block mb-1">جهة المراجعة</label>
               <div className="relative">
@@ -247,7 +311,6 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
             </div>
           </div>
 
-          {/* حقل الوصف */}
           <div>
             <label className="text-gray-400 text-xs font-bold block mb-1">الوصف / التفاصيل</label>
             <div className="relative">
@@ -262,7 +325,61 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
             </div>
           </div>
 
-          <button onClick={handleSubmit} className="w-full bg-[#1B2B48] text-white py-5 rounded-[25px] font-black shadow-xl hover:brightness-110 hover:-translate-y-1 transition-all active:scale-95">حفظ البيانات</button>
+          <div>
+            <label className="text-gray-400 text-xs font-bold block mb-1">المرفقات (اختياري)</label>
+            
+            <div style={{
+              border: '2px dashed #d1d5db',
+              borderRadius: '1rem',
+              padding: '1.5rem',
+              textAlign: 'center',
+              cursor: 'pointer',
+              position: 'relative',
+              backgroundColor: '#f9fafb',
+              transition: 'all 0.2s'
+            }}>
+              
+              <input
+                type="file"
+                accept=".pdf, image/*"
+                onChange={handleFileChange}
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  width: '100%',
+                  height: '100%',
+                  opacity: 0,
+                  cursor: 'pointer'
+                }}
+              />
+
+              <div className="flex flex-col items-center justify-center pointer-events-none">
+                <svg className="w-8 h-8 text-gray-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                </svg>
+
+                <p className="text-sm font-bold text-gray-500">
+                  {attachment ? (
+                    <span className="text-green-600">تم اختيار: {attachment.name}</span>
+                  ) : techForm.attachment_url ? (
+                    <span className="text-blue-600">يوجد مرفق سابق (اضغط للتغيير)</span>
+                  ) : (
+                    "اضغط هنا لإرفاق صورة المشكلة أو ملف PDF"
+                  )}
+                </p>
+              </div>
+
+            </div>
+          </div>
+
+          <button 
+            onClick={handleSubmit} 
+            disabled={isUploading}
+            className={`w-full text-white py-5 rounded-[25px] font-black shadow-xl transition-all active:scale-95 ${isUploading ? 'bg-gray-400 cursor-not-allowed' : 'bg-[#1B2B48] hover:brightness-110 hover:-translate-y-1'}`}
+          >
+            {isUploading ? 'جاري الرفع والحفظ...' : 'حفظ البيانات'}
+          </button>
         </div>
       </Modal>
 
