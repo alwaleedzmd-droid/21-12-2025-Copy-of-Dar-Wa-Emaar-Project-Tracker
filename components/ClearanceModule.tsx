@@ -27,7 +27,6 @@ const ClearanceModule: React.FC<ClearanceModuleProps> = ({
   const [isManageModalOpen, setIsManageModalOpen] = useState(false);
   const [activeRequest, setActiveRequest] = useState<ClearanceRequest | null>(null);
 
-  // وضع الإدخال: 'individual' (فردي) أو 'bulk' (جماعي/إكسل)
   const [entryMode, setEntryMode] = useState<'individual' | 'bulk'>('individual');
 
   const [clearForm, setClearForm] = useState({
@@ -35,8 +34,8 @@ const ClearanceModule: React.FC<ClearanceModuleProps> = ({
     plot_number: '', deal_value: '', bank_name: '', deed_number: ''
   });
   
-  const [selectedFile, setSelectedFile] = useState<File | null>(null); // للمرفق الفردي
-  const [excelFile, setExcelFile] = useState<File | null>(null); // لملف الإكسل
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [excelFile, setExcelFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
 
   const canAction = (roles: string[]) => currentUser && roles.includes(currentUser.role);
@@ -67,12 +66,20 @@ const ClearanceModule: React.FC<ClearanceModuleProps> = ({
     }
   };
 
-  // --- دالة المعالجة الرئيسية ---
+  // ✅ دالة لإضافة الإشعار
+  const addNotification = async (msg: string, refId: string | null = null) => {
+    await supabase.from('notifications').insert([{
+      type: 'new_request',
+      message: msg,
+      reference_id: refId,
+      created_by: currentUser?.name || 'النظام'
+    }]);
+  };
+
   const handleMainSubmit = async () => {
     setUploading(true);
-
     try {
-      // 1️⃣ الحالة الأولى: رفع ملف إكسل (جماعي)
+      // 1️⃣ إدخال جماعي (Excel)
       if (entryMode === 'bulk') {
         if (!excelFile) { alert("يرجى اختيار ملف Excel"); setUploading(false); return; }
 
@@ -90,23 +97,18 @@ const ClearanceModule: React.FC<ClearanceModuleProps> = ({
             const formattedData = rawData.map((row: any) => {
               const projNameFromExcel = row['المشروع'] || row['project'] || row['Project'] || '';
               const foundProject = projects.find(p => p.client === projNameFromExcel || p.title === projNameFromExcel);
-
-              // ✅ دالة لتنظيف الأرقام (تمنع الخطأ invalid input syntax)
+              
               const cleanNumber = (val: any) => {
                  if (!val) return 0;
-                 // إزالة الفواصل والنصوص وترك الأرقام فقط
                  const strVal = val.toString().replace(/[^0-9.]/g, ''); 
                  return parseFloat(strVal) || 0;
               };
-
-              // ✅ دالة لتنظيف النصوص (مثل الجوال)
               const cleanString = (val: any) => val ? val.toString().trim() : '';
 
               return {
                 client_name: row['اسم العميل'] || row['Client Name'] || 'غير محدد',
                 mobile: cleanString(row['رقم الجوال'] || row['Mobile']),
                 id_number: cleanString(row['رقم الهوية'] || row['ID']),
-                // استخدام دالة التنظيف هنا:
                 deal_value: cleanNumber(row['قيمة الصفقة'] || row['Value']), 
                 bank_name: row['البنك'] || row['Bank'] || '',
                 deed_number: cleanString(row['رقم الصك'] || row['Deed No']),
@@ -121,6 +123,9 @@ const ClearanceModule: React.FC<ClearanceModuleProps> = ({
             const { error } = await supabase.from('clearance_requests').insert(formattedData);
             if (error) throw error;
 
+            // ✅ إضافة إشعار للإكسل
+            await addNotification(`قام ${currentUser?.name} باستيراد ${formattedData.length} طلب إفراغ جديد عبر Excel`);
+
             alert(`تم إنشاء ${formattedData.length} طلب بنجاح! ✅`);
             setIsAddModalOpen(false);
             setExcelFile(null);
@@ -134,10 +139,10 @@ const ClearanceModule: React.FC<ClearanceModuleProps> = ({
           }
         };
         reader.readAsBinaryString(excelFile);
-        return; // الخروج لانتظار الـ Reader
+        return;
       }
 
-      // 2️⃣ الحالة الثانية: إدخال فردي (يدوي)
+      // 2️⃣ إدخال فردي
       if (!clearForm.client_name || (!clearForm.project_id && !clearForm.project_name)) {
         alert("الاسم والمشروع مطلوبان"); setUploading(false); return;
       }
@@ -156,16 +161,20 @@ const ClearanceModule: React.FC<ClearanceModuleProps> = ({
         if (!attachmentUrl) { setUploading(false); return; }
       }
 
-      const { error } = await supabase.from('clearance_requests').insert([{
+      const { data, error } = await supabase.from('clearance_requests').insert([{
         ...clearForm, 
         project_id: finalProjectId, 
         project_name: finalProjectName,
         submitted_by: currentUser?.name, 
         status: 'new', 
         attachment_url: attachmentUrl
-      }]);
+      }]).select(); // Select لجلب الـ ID للإشعار
 
       if (!error) {
+        // ✅ إضافة إشعار للطلب الفردي
+        const newReqId = data?.[0]?.id;
+        await addNotification(`طلب إفراغ جديد: ${clearForm.client_name} (بواسطة ${currentUser?.name})`, newReqId?.toString());
+
         alert("تمت الإضافة بنجاح");
         setIsAddModalOpen(false);
         setClearForm({
@@ -179,7 +188,7 @@ const ClearanceModule: React.FC<ClearanceModuleProps> = ({
       }
 
     } catch (error: any) {
-      alert("حدث خطأ غير متوقع: " + error.message);
+      alert("حدث خطأ: " + error.message);
     } finally {
       if (entryMode === 'individual') setUploading(false);
     }
@@ -271,8 +280,6 @@ const ClearanceModule: React.FC<ClearanceModuleProps> = ({
 
       <Modal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} title="تسجيل طلب إفراغ جديد">
         <div className="space-y-4 text-right">
-            
-            {/* ✅ تبويبات الاختيار (فردي / إكسل) */}
             <div className="flex bg-gray-100 p-1 rounded-xl mb-4">
                <button onClick={() => setEntryMode('individual')} className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg font-bold text-sm transition-all ${entryMode === 'individual' ? 'bg-white text-[#1B2B48] shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}>
                   <UserIcon size={16} /> فردي
@@ -282,33 +289,16 @@ const ClearanceModule: React.FC<ClearanceModuleProps> = ({
                </button>
             </div>
 
-            {/* --- نموذج الإدخال الفردي --- */}
             {entryMode === 'individual' && (
               <>
                 <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-xs text-gray-400 font-bold block mb-1">اسم العميل</label>
-                    <div className="relative"><UserIcon className="absolute right-3 top-4 text-gray-300 w-4 h-4" /><input className="w-full p-4 pr-10 bg-gray-50 rounded-2xl border outline-none font-bold" placeholder="الاسم الكامل" value={clearForm.client_name} onChange={e => setClearForm({...clearForm, client_name: e.target.value})} /></div>
-                  </div>
-                  <div>
-                    <label className="text-xs text-gray-400 font-bold block mb-1">رقم الجوال</label>
-                    <div className="relative"><Smartphone className="absolute right-3 top-4 text-gray-300 w-4 h-4" /><input className="w-full p-4 pr-10 bg-gray-50 rounded-2xl border outline-none font-bold" placeholder="05xxxxxxxx" value={clearForm.mobile} onChange={e => setClearForm({...clearForm, mobile: e.target.value})} /></div>
-                  </div>
+                  <div><label className="text-xs text-gray-400 font-bold block mb-1">اسم العميل</label><div className="relative"><UserIcon className="absolute right-3 top-4 text-gray-300 w-4 h-4" /><input className="w-full p-4 pr-10 bg-gray-50 rounded-2xl border outline-none font-bold" placeholder="الاسم الكامل" value={clearForm.client_name} onChange={e => setClearForm({...clearForm, client_name: e.target.value})} /></div></div>
+                  <div><label className="text-xs text-gray-400 font-bold block mb-1">رقم الجوال</label><div className="relative"><Smartphone className="absolute right-3 top-4 text-gray-300 w-4 h-4" /><input className="w-full p-4 pr-10 bg-gray-50 rounded-2xl border outline-none font-bold" placeholder="05xxxxxxxx" value={clearForm.mobile} onChange={e => setClearForm({...clearForm, mobile: e.target.value})} /></div></div>
                 </div>
                 
                 <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-xs text-gray-400 font-bold block mb-1">المشروع</label>
-                    <div className="relative"><Building2 className="absolute right-3 top-4 text-gray-300 w-4 h-4" />
-                    <select className="w-full p-4 pr-10 bg-gray-50 rounded-2xl border outline-none font-bold appearance-none" value={clearForm.project_id} onChange={e => {const selected = projects.find(p => p.id.toString() === e.target.value); setClearForm({...clearForm, project_id: e.target.value, project_name: selected?.client || selected?.title || ''});}} disabled={!!filteredByProject}>
-                      <option value="">اختر المشروع...</option>
-                      {projects.map(p => <option key={p.id} value={p.id}>{p.client || p.title}</option>)}
-                    </select></div>
-                  </div>
-                  <div>
-                    <label className="text-xs text-gray-400 font-bold block mb-1">رقم القطعة</label>
-                    <div className="relative"><MapPin className="absolute right-3 top-4 text-gray-300 w-4 h-4" /><input className="w-full p-4 pr-10 bg-gray-50 rounded-2xl border outline-none font-bold" placeholder="مثال: 10/أ" value={clearForm.plot_number} onChange={e => setClearForm({...clearForm, plot_number: e.target.value})} /></div>
-                  </div>
+                  <div><label className="text-xs text-gray-400 font-bold block mb-1">المشروع</label><div className="relative"><Building2 className="absolute right-3 top-4 text-gray-300 w-4 h-4" /><select className="w-full p-4 pr-10 bg-gray-50 rounded-2xl border outline-none font-bold appearance-none" value={clearForm.project_id} onChange={e => {const selected = projects.find(p => p.id.toString() === e.target.value); setClearForm({...clearForm, project_id: e.target.value, project_name: selected?.client || selected?.title || ''});}} disabled={!!filteredByProject}><option value="">اختر المشروع...</option>{projects.map(p => <option key={p.id} value={p.id}>{p.client || p.title}</option>)}</select></div></div>
+                  <div><label className="text-xs text-gray-400 font-bold block mb-1">رقم القطعة</label><div className="relative"><MapPin className="absolute right-3 top-4 text-gray-300 w-4 h-4" /><input className="w-full p-4 pr-10 bg-gray-50 rounded-2xl border outline-none font-bold" placeholder="مثال: 10/أ" value={clearForm.plot_number} onChange={e => setClearForm({...clearForm, plot_number: e.target.value})} /></div></div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
@@ -342,7 +332,6 @@ const ClearanceModule: React.FC<ClearanceModuleProps> = ({
               </>
             )}
 
-            {/* --- نموذج رفع الإكسل (الجماعي) --- */}
             {entryMode === 'bulk' && (
               <div className="space-y-4 py-6">
                  <div className="bg-blue-50 p-4 rounded-2xl border border-blue-100 text-blue-800 text-xs font-bold leading-relaxed">
@@ -352,7 +341,6 @@ const ClearanceModule: React.FC<ClearanceModuleProps> = ({
 
                  <div className={`p-10 rounded-3xl border-2 ${excelFile ? 'border-green-500 bg-green-50' : 'border-dashed border-gray-300 bg-gray-50'} hover:bg-gray-100 transition-all cursor-pointer relative flex flex-col items-center justify-center gap-4`}>
                     <input type="file" accept=".xlsx, .xls" className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" onChange={(e) => e.target.files && setExcelFile(e.target.files[0])} disabled={!!excelFile} />
-                    
                     {excelFile ? (
                         <>
                            <FileSpreadsheet size={48} className="text-green-600" />

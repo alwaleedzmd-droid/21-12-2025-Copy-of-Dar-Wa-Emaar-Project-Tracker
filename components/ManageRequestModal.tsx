@@ -71,6 +71,14 @@ const ManageRequestModal: React.FC<ManageRequestModalProps> = ({
     }]);
     
     if (!error) { 
+      // ✅ إضافة إشعار عند التعليق
+      await supabase.from('notifications').insert([{
+        type: 'new_comment',
+        message: `تعليق جديد من ${currentUser.name} على الطلب`,
+        reference_id: request.id.toString(),
+        created_by: currentUser.name
+      }]);
+
       setNewComment(''); 
       fetchComments(); 
     } else {
@@ -191,7 +199,6 @@ const ManageRequestModal: React.FC<ManageRequestModalProps> = ({
            </div>
         )}
 
-        {/* ✅ تم التعديل هنا: إزالة CONVEYANCE من القائمة */}
         {canAction(['ADMIN', 'PR_MANAGER', 'TECHNICAL']) && (
           <div className="grid grid-cols-4 gap-2">
             <button onClick={() => changeStatus('completed')} className={`p-3 rounded-xl font-black flex flex-col items-center justify-center gap-1 transition-all active:scale-95 ${currentStatus === 'completed' ? 'bg-green-600 text-white shadow-lg ring-2 ring-green-200' : 'bg-green-50 text-green-700 hover:bg-green-100'}`}>
