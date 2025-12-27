@@ -75,7 +75,7 @@ const AppContent: React.FC = () => {
   const [editProjectForm, setEditProjectForm] = useState<any>({});
   const [bulkProject, setBulkProject] = useState('');
 
-  // --- Derived State (Memoized for Performance) ---
+  // --- Derived State ---
   const projectTechnicalRequests = useMemo(() => 
     selectedProject ? technicalRequests.filter(r => r.project_name === selectedProject.name) : []
   , [technicalRequests, selectedProject]);
@@ -90,12 +90,10 @@ const AppContent: React.FC = () => {
     clearRequests: clearanceRequests.length
   }), [projects.length, technicalRequests.length, clearanceRequests.length]);
 
-  // --- RBAC Helper ---
   const canAccess = (allowedRoles: string[]) => {
     return currentUser && allowedRoles.includes(currentUser.role);
   };
 
-  // --- Smart Redirect Logic ---
   const syncUserProfile = async (sessionUser: any) => {
     const { data } = await supabase.from('profiles').select('role, name').eq('id', sessionUser.id).single();
     let userRole = data?.role || 'PR_OFFICER';
@@ -130,20 +128,23 @@ const AppContent: React.FC = () => {
         const mappedProjects = pRes.data.map((p: any) => ({
           ...p,
           name: p.client || p.title || p.name || 'مشروع جديد',
-          // === قراءة البيانات التفصيلية الجديدة ===
+          // قراءة الأعمدة المباشرة بدلاً من details
+          units_count: p.units_count || 0,
+          electricity_meters: p.electricity_meters || 0,
+          water_meters: p.water_meters || 0,
+          building_permits: p.building_permits || 0,
+          occupancy_certificates: p.occupancy_certificates || 0,
+          survey_decisions_count: p.survey_decisions_count || 0,
+          
           consultant_name: p.consultant_name,
           consultant_engineer: p.consultant_engineer,
           consultant_mobile: p.consultant_mobile,
-          
           water_contractor: p.water_contractor,
-          water_contractor_engineer: p.water_contractor_engineer, // جديد
-          water_contractor_mobile: p.water_contractor_mobile,     // جديد
-
+          water_contractor_engineer: p.water_contractor_engineer,
+          water_contractor_mobile: p.water_contractor_mobile,
           electricity_contractor: p.electricity_contractor,
-          electricity_contractor_engineer: p.electricity_contractor_engineer, // جديد
-          electricity_contractor_mobile: p.electricity_contractor_mobile,     // جديد
-          
-          survey_decisions_count: p.survey_decisions_count || p.details?.surveyDecisionsCount || 0
+          electricity_contractor_engineer: p.electricity_contractor_engineer,
+          electricity_contractor_mobile: p.electricity_contractor_mobile,
         }));
         setProjects(mappedProjects);
         
@@ -188,45 +189,48 @@ const AppContent: React.FC = () => {
     setView('LOGIN');
   };
 
-  // === تحديث الحفظ ليشمل الحقول الجديدة ===
+  // === دالة الحفظ المصححة (تكتب في الأعمدة المباشرة فقط وتتجاهل details) ===
   const handleUpdateProjectDetails = async () => {
     if (!selectedProject) return;
     
-    const directUpdate = {
+    // إزالة الاعتماد على عمود details نهائياً
+    const updatePayload = {
+        // العدادات والإحصائيات
+        units_count: editProjectForm.unitsCount,
+        electricity_meters: editProjectForm.electricityMetersCount,
+        water_meters: editProjectForm.waterMetersCount,
+        building_permits: editProjectForm.buildingPermitsCount,
+        occupancy_certificates: editProjectForm.occupancyCertificatesCount,
         survey_decisions_count: editProjectForm.surveyDecisionsCount,
+        
         // الاستشاري
         consultant_name: editProjectForm.consultant_name,
         consultant_engineer: editProjectForm.consultant_engineer,
         consultant_mobile: editProjectForm.consultant_mobile,
+        
         // المياه
         water_contractor: editProjectForm.water_contractor,
         water_contractor_engineer: editProjectForm.water_contractor_engineer,
         water_contractor_mobile: editProjectForm.water_contractor_mobile,
+        
         // الكهرباء
         electricity_contractor: editProjectForm.electricity_contractor,
         electricity_contractor_engineer: editProjectForm.electricity_contractor_engineer,
         electricity_contractor_mobile: editProjectForm.electricity_contractor_mobile,
     };
 
-    const detailsUpdate = {
-        unitsCount: editProjectForm.unitsCount,
-        electricityMetersCount: editProjectForm.electricityMetersCount,
-        waterMetersCount: editProjectForm.waterMetersCount,
-        buildingPermitsCount: editProjectForm.buildingPermitsCount,
-        occupancyCertificatesCount: editProjectForm.occupancyCertificatesCount,
-    };
-
     const { error } = await supabase
         .from('projects')
-        .update({ ...directUpdate, details: detailsUpdate })
+        .update(updatePayload)
         .eq('id', selectedProject.id);
 
     if (!error) { 
-        alert("تم التحديث وحفظ البيانات بنجاح ✅"); 
+        alert("تم حفظ البيانات بنجاح ✅"); 
         setIsEditProjectModalOpen(false); 
         fetchAllData(); 
     } else {
-        alert("خطأ في التحديث: " + error.message);
+        console.error(error);
+        alert("خطأ في الحفظ: " + error.message);
     }
   };
 
@@ -328,6 +332,7 @@ const AppContent: React.FC = () => {
 
               {selectedProject && view === 'PROJECT_DETAIL' && (
                 <div className="animate-in fade-in slide-in-from-bottom-4 space-y-8">
+                  {/* ... (رأس الصفحة) ... */}
                   <div className="bg-white p-8 rounded-[40px] shadow-sm border border-gray-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
                     <div className="space-y-2">
                         <button onClick={() => { setSelectedProject(null); setView('DASHBOARD'); }} className="flex items-center gap-2 text-gray-400 hover:text-[#1B2B48] text-sm font-bold transition-all mb-2">
@@ -337,17 +342,26 @@ const AppContent: React.FC = () => {
                           <h2 className="text-4xl font-black text-[#1B2B48] tracking-tight">{selectedProject.name}</h2>
                           {canAccess(['ADMIN', 'PR_MANAGER']) && (
                             <button onClick={() => { 
+                                // تحميل البيانات في الفورم من الأعمدة المباشرة
                                 setEditProjectForm({
-                                    ...selectedProject.details, 
+                                    // العدادات
+                                    unitsCount: selectedProject['units_count'],
+                                    electricityMetersCount: selectedProject['electricity_meters'],
+                                    waterMetersCount: selectedProject['water_meters'],
+                                    buildingPermitsCount: selectedProject['building_permits'],
+                                    occupancyCertificatesCount: selectedProject['occupancy_certificates'],
                                     surveyDecisionsCount: selectedProject['survey_decisions_count'],
+                                    
                                     // الاستشاري
                                     consultant_name: selectedProject['consultant_name'],
                                     consultant_engineer: selectedProject['consultant_engineer'],
                                     consultant_mobile: selectedProject['consultant_mobile'],
+                                    
                                     // المياه
                                     water_contractor: selectedProject['water_contractor'],
                                     water_contractor_engineer: selectedProject['water_contractor_engineer'],
                                     water_contractor_mobile: selectedProject['water_contractor_mobile'],
+                                    
                                     // الكهرباء
                                     electricity_contractor: selectedProject['electricity_contractor'],
                                     electricity_contractor_engineer: selectedProject['electricity_contractor_engineer'],
@@ -393,11 +407,11 @@ const AppContent: React.FC = () => {
                       <div className="space-y-8 animate-in fade-in duration-300">
                         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-6">
                             {[
-                                { label: 'الوحدات', icon: Building2, value: selectedProject.details?.unitsCount || 0, color: 'text-blue-600', bg: 'bg-blue-50' },
-                                { label: 'الكهرباء', icon: Zap, value: selectedProject.details?.electricityMetersCount || 0, color: 'text-amber-500', bg: 'bg-amber-50' },
-                                { label: 'المياه', icon: Droplets, value: selectedProject.details?.waterMetersCount || 0, color: 'text-cyan-500', bg: 'bg-cyan-50' },
-                                { label: 'رخص البناء', icon: ClipboardList, value: selectedProject.details?.buildingPermitsCount || 0, color: 'text-indigo-600', bg: 'bg-indigo-50' },
-                                { label: 'الأشغال', icon: ShieldCheck, value: selectedProject.details?.occupancyCertificatesCount || 0, color: 'text-emerald-600', bg: 'bg-emerald-50' },
+                                { label: 'الوحدات', icon: Building2, value: selectedProject['units_count'] || 0, color: 'text-blue-600', bg: 'bg-blue-50' },
+                                { label: 'الكهرباء', icon: Zap, value: selectedProject['electricity_meters'] || 0, color: 'text-amber-500', bg: 'bg-amber-50' },
+                                { label: 'المياه', icon: Droplets, value: selectedProject['water_meters'] || 0, color: 'text-cyan-500', bg: 'bg-cyan-50' },
+                                { label: 'رخص البناء', icon: ClipboardList, value: selectedProject['building_permits'] || 0, color: 'text-indigo-600', bg: 'bg-indigo-50' },
+                                { label: 'الأشغال', icon: ShieldCheck, value: selectedProject['occupancy_certificates'] || 0, color: 'text-emerald-600', bg: 'bg-emerald-50' },
                                 { label: 'المساحة', icon: Ruler, value: selectedProject['survey_decisions_count'] || 0, color: 'text-rose-600', bg: 'bg-rose-50' },
                             ].map((m, idx) => (
                                 <div key={idx} className="bg-white p-6 rounded-[30px] border border-gray-100 shadow-sm flex flex-col items-center justify-center hover:scale-105 transition-transform">
@@ -408,10 +422,8 @@ const AppContent: React.FC = () => {
                             ))}
                         </div>
 
-                        {/* === قسم المقاولين (التصميم الجديد بثلاث أعمدة) === */}
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                            
-                            {/* بطاقة المكتب الاستشاري */}
+                            {/* بطاقات الاستشاري والمقاولين (كما هي) */}
                             <div className="bg-white p-6 rounded-[30px] border border-gray-100 shadow-sm relative overflow-hidden group">
                                 <div className="absolute top-0 right-0 w-2 h-full bg-[#1B2B48]"></div>
                                 <div className="flex items-center gap-3 mb-6 pb-4 border-b border-gray-50">
@@ -434,7 +446,6 @@ const AppContent: React.FC = () => {
                                 </div>
                             </div>
 
-                            {/* بطاقة مقاول الكهرباء */}
                             <div className="bg-white p-6 rounded-[30px] border border-gray-100 shadow-sm relative overflow-hidden group">
                                 <div className="absolute top-0 right-0 w-2 h-full bg-amber-400"></div>
                                 <div className="flex items-center gap-3 mb-6 pb-4 border-b border-gray-50">
@@ -457,7 +468,6 @@ const AppContent: React.FC = () => {
                                 </div>
                             </div>
 
-                            {/* بطاقة مقاول المياه */}
                             <div className="bg-white p-6 rounded-[30px] border border-gray-100 shadow-sm relative overflow-hidden group">
                                 <div className="absolute top-0 right-0 w-2 h-full bg-cyan-400"></div>
                                 <div className="flex items-center gap-3 mb-6 pb-4 border-b border-gray-50">
@@ -484,6 +494,7 @@ const AppContent: React.FC = () => {
                       </div>
                     )}
 
+                    {/* ... (بقية التبويبات) ... */}
                     {projectTab === 'work' && (
                       <TechnicalModule 
                         requests={projectTechnicalRequests}
@@ -522,6 +533,7 @@ const AppContent: React.FC = () => {
                 </div>
               )}
 
+              {/* ... (بقية الصفحات) ... */}
               {view === 'TECHNICAL_SERVICES' && !selectedProject && (
                   <TechnicalModule 
                     requests={technicalRequests}
@@ -605,36 +617,36 @@ const AppContent: React.FC = () => {
             </div>
           </div>
 
-          <div className="border-t border-gray-100 pt-4 mt-4">
-            <h4 className="text-sm font-bold text-[#1B2B48] mb-3">بيانات الاستشاري والمقاولين</h4>
+          <div className="border-t border-gray-100 pt-4 mt-4 space-y-6">
+            <h4 className="text-sm font-bold text-[#1B2B48] mb-1">بيانات الاستشاري والمقاولين</h4>
             
             {/* الاستشاري */}
-            <div className="space-y-3 mb-4">
-                <div className="flex items-center gap-2 mb-1"><Briefcase size={16} className="text-[#1B2B48]"/><span className="text-xs font-bold text-gray-400">المكتب الاستشاري</span></div>
-                <input placeholder="اسم المكتب الاستشاري" className="w-full p-3 bg-gray-50 rounded-xl border font-bold outline-none focus:border-[#E95D22]" value={editProjectForm.consultant_name || ''} onChange={e => setEditProjectForm({...editProjectForm, consultant_name: e.target.value})} />
+            <div className="space-y-3 p-4 bg-gray-50 rounded-2xl border border-gray-100">
+                <div className="flex items-center gap-2 mb-1 text-[#1B2B48] font-bold"><Briefcase size={18}/><span>المكتب الاستشاري</span></div>
+                <input placeholder="اسم المكتب الاستشاري" className="w-full p-3 bg-white rounded-xl border border-gray-200 font-bold outline-none focus:border-[#E95D22]" value={editProjectForm.consultant_name || ''} onChange={e => setEditProjectForm({...editProjectForm, consultant_name: e.target.value})} />
                 <div className="grid grid-cols-2 gap-3">
-                    <input placeholder="المهندس المسؤول" className="w-full p-3 bg-gray-50 rounded-xl border font-bold outline-none focus:border-[#E95D22]" value={editProjectForm.consultant_engineer || ''} onChange={e => setEditProjectForm({...editProjectForm, consultant_engineer: e.target.value})} />
-                    <input placeholder="رقم التواصل" className="w-full p-3 bg-gray-50 rounded-xl border font-bold outline-none focus:border-[#E95D22]" value={editProjectForm.consultant_mobile || ''} onChange={e => setEditProjectForm({...editProjectForm, consultant_mobile: e.target.value})} />
+                    <input placeholder="المهندس المسؤول" className="w-full p-3 bg-white rounded-xl border border-gray-200 font-bold outline-none focus:border-[#E95D22]" value={editProjectForm.consultant_engineer || ''} onChange={e => setEditProjectForm({...editProjectForm, consultant_engineer: e.target.value})} />
+                    <input placeholder="رقم التواصل" className="w-full p-3 bg-white rounded-xl border border-gray-200 font-bold outline-none focus:border-[#E95D22]" value={editProjectForm.consultant_mobile || ''} onChange={e => setEditProjectForm({...editProjectForm, consultant_mobile: e.target.value})} />
                 </div>
             </div>
 
             {/* الكهرباء */}
-            <div className="space-y-3 mb-4">
-                 <div className="flex items-center gap-2 mb-1"><Zap size={16} className="text-amber-500"/><span className="text-xs font-bold text-gray-400">مقاول الكهرباء</span></div>
-                 <input placeholder="اسم شركة الكهرباء" className="w-full p-3 bg-gray-50 rounded-xl border font-bold outline-none focus:border-[#E95D22]" value={editProjectForm.electricity_contractor || ''} onChange={e => setEditProjectForm({...editProjectForm, electricity_contractor: e.target.value})} />
+            <div className="space-y-3 p-4 bg-amber-50/50 rounded-2xl border border-amber-100">
+                 <div className="flex items-center gap-2 mb-1 text-amber-600 font-bold"><Zap size={18}/><span>مقاول الكهرباء</span></div>
+                 <input placeholder="اسم شركة الكهرباء" className="w-full p-3 bg-white rounded-xl border border-gray-200 font-bold outline-none focus:border-[#E95D22]" value={editProjectForm.electricity_contractor || ''} onChange={e => setEditProjectForm({...editProjectForm, electricity_contractor: e.target.value})} />
                  <div className="grid grid-cols-2 gap-3">
-                    <input placeholder="المهندس المسؤول" className="w-full p-3 bg-gray-50 rounded-xl border font-bold outline-none focus:border-[#E95D22]" value={editProjectForm.electricity_contractor_engineer || ''} onChange={e => setEditProjectForm({...editProjectForm, electricity_contractor_engineer: e.target.value})} />
-                    <input placeholder="رقم التواصل" className="w-full p-3 bg-gray-50 rounded-xl border font-bold outline-none focus:border-[#E95D22]" value={editProjectForm.electricity_contractor_mobile || ''} onChange={e => setEditProjectForm({...editProjectForm, electricity_contractor_mobile: e.target.value})} />
+                    <input placeholder="المهندس المسؤول" className="w-full p-3 bg-white rounded-xl border border-gray-200 font-bold outline-none focus:border-[#E95D22]" value={editProjectForm.electricity_contractor_engineer || ''} onChange={e => setEditProjectForm({...editProjectForm, electricity_contractor_engineer: e.target.value})} />
+                    <input placeholder="رقم التواصل" className="w-full p-3 bg-white rounded-xl border border-gray-200 font-bold outline-none focus:border-[#E95D22]" value={editProjectForm.electricity_contractor_mobile || ''} onChange={e => setEditProjectForm({...editProjectForm, electricity_contractor_mobile: e.target.value})} />
                 </div>
             </div>
 
             {/* المياه */}
-            <div className="space-y-3">
-                 <div className="flex items-center gap-2 mb-1"><Droplets size={16} className="text-cyan-500"/><span className="text-xs font-bold text-gray-400">مقاول المياه</span></div>
-                 <input placeholder="اسم شركة المياه" className="w-full p-3 bg-gray-50 rounded-xl border font-bold outline-none focus:border-[#E95D22]" value={editProjectForm.water_contractor || ''} onChange={e => setEditProjectForm({...editProjectForm, water_contractor: e.target.value})} />
+            <div className="space-y-3 p-4 bg-cyan-50/50 rounded-2xl border border-cyan-100">
+                 <div className="flex items-center gap-2 mb-1 text-cyan-600 font-bold"><Droplets size={18}/><span>مقاول المياه</span></div>
+                 <input placeholder="اسم شركة المياه" className="w-full p-3 bg-white rounded-xl border border-gray-200 font-bold outline-none focus:border-[#E95D22]" value={editProjectForm.water_contractor || ''} onChange={e => setEditProjectForm({...editProjectForm, water_contractor: e.target.value})} />
                  <div className="grid grid-cols-2 gap-3">
-                    <input placeholder="المهندس المسؤول" className="w-full p-3 bg-gray-50 rounded-xl border font-bold outline-none focus:border-[#E95D22]" value={editProjectForm.water_contractor_engineer || ''} onChange={e => setEditProjectForm({...editProjectForm, water_contractor_engineer: e.target.value})} />
-                    <input placeholder="رقم التواصل" className="w-full p-3 bg-gray-50 rounded-xl border font-bold outline-none focus:border-[#E95D22]" value={editProjectForm.water_contractor_mobile || ''} onChange={e => setEditProjectForm({...editProjectForm, water_contractor_mobile: e.target.value})} />
+                    <input placeholder="المهندس المسؤول" className="w-full p-3 bg-white rounded-xl border border-gray-200 font-bold outline-none focus:border-[#E95D22]" value={editProjectForm.water_contractor_engineer || ''} onChange={e => setEditProjectForm({...editProjectForm, water_contractor_engineer: e.target.value})} />
+                    <input placeholder="رقم التواصل" className="w-full p-3 bg-white rounded-xl border border-gray-200 font-bold outline-none focus:border-[#E95D22]" value={editProjectForm.water_contractor_mobile || ''} onChange={e => setEditProjectForm({...editProjectForm, water_contractor_mobile: e.target.value})} />
                 </div>
             </div>
 
