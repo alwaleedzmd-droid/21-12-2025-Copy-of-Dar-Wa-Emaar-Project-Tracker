@@ -1,11 +1,10 @@
 import React, { useState } from 'react';
-import { Plus, MoreHorizontal, Trash2, Edit, FileText, Building2, AlignLeft, CheckCircle2, Paperclip, Download } from 'lucide-react'; // أضفت أيقونات جديدة
+import { Plus, MoreHorizontal, Trash2, Edit, FileText, Building2, AlignLeft, CheckCircle2, Paperclip } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import { TechnicalRequest, ProjectSummary, User } from '../types';
 import Modal from './Modal';
 import ManageRequestModal from './ManageRequestModal';
 
-// 1. القوائم الثابتة
 const RAW_REVIEW_ENTITIES = [
   "وزارة الإسكان", "الشركة الوطنية للإسكان", "أمانة منطقة الرياض", "الشركة السعودية للكهرباء",
   "المركز الوطني للرقابة على الالتزام البيئي", "الشرطة", "شركة المياه الوطنية", "بلدية شمال الرياض",
@@ -48,9 +47,7 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
   const [isManageModalOpen, setIsManageModalOpen] = useState(false);
   const [activeRequest, setActiveRequest] = useState<TechnicalRequest | null>(null);
   
-  // حالة التحميل (عشان نمنع المستخدم يضغط مرتين وقت الرفع)
   const [isUploading, setIsUploading] = useState(false);
-
   const [attachment, setAttachment] = useState<File | null>(null);
 
   const [techForm, setTechForm] = useState({
@@ -62,7 +59,7 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
     details: '', 
     status: 'new', 
     progress: 0,
-    attachment_url: '' // حقل لتخزين الرابط القديم في حالة التعديل
+    attachment_url: '' 
   });
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -98,7 +95,7 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
       details: req.details, 
       status: req.status, 
       progress: req.progress || 0,
-      attachment_url: req['attachment_url'] || '' // استرجاع الرابط الموجود إذا وجد
+      attachment_url: req['attachment_url'] || '' 
     });
     setAttachment(null);
     setIsAddModalOpen(true);
@@ -110,21 +107,18 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
     if (!error) onRefresh();
   };
 
-  // --- دالة الحفظ المعدلة للتعامل مع رفع الملفات ---
   const handleSubmit = async () => {
     if (!techForm.project_id || !techForm.service_type || !techForm.reviewing_entity) return alert("يرجى تعبئة الحقول الأساسية");
     
-    setIsUploading(true); // بدء التحميل
+    setIsUploading(true); 
 
     let finalAttachmentUrl = techForm.attachment_url;
 
-    // 1. إذا كان هناك ملف جديد تم اختياره، نقوم برفعه
     if (attachment) {
       const fileExt = attachment.name.split('.').pop();
       const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
       const filePath = `${fileName}`;
 
-      // الرفع إلى Bucket اسمه 'attachments'
       const { error: uploadError } = await supabase.storage
         .from('attachments')
         .upload(filePath, attachment);
@@ -135,7 +129,6 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
         return;
       }
 
-      // الحصول على الرابط العام
       const { data: { publicUrl } } = supabase.storage
         .from('attachments')
         .getPublicUrl(filePath);
@@ -155,7 +148,7 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
       status: techForm.status, 
       progress: techForm.progress,
       project_name: selectedProj ? (selectedProj.client || selectedProj.title) : '',
-      attachment_url: finalAttachmentUrl // حفظ الرابط في قاعدة البيانات
+      attachment_url: finalAttachmentUrl 
     };
 
     if (techForm.id === 0) {
@@ -166,7 +159,7 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
       if (error) alert(error.message);
     }
     
-    setIsUploading(false); // انتهاء التحميل
+    setIsUploading(false); 
     setIsAddModalOpen(false);
     onRefresh();
   };
@@ -216,7 +209,7 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
               <th className="p-5">بيان العمل</th>
               <th className="p-5">جهة المراجعة</th>
               <th className="p-5">الإنجاز</th>
-              <th className="p-5">المرفقات</th> {/* عمود جديد للمرفقات */}
+              <th className="p-5">المرفقات</th> 
               <th className="p-5">الحالة</th>
               <th className="p-5">خيارات</th>
             </tr>
@@ -236,7 +229,6 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
                     </div>
                   </td>
                   
-                  {/* عرض أيقونة المرفق إذا وجد */}
                   <td className="p-5">
                     {req['attachment_url'] ? (
                       <a 
@@ -244,7 +236,7 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
                         target="_blank" 
                         rel="noopener noreferrer"
                         className="inline-flex items-center justify-center w-8 h-8 bg-gray-100 text-blue-600 rounded-full hover:bg-blue-100 transition-colors"
-                        onClick={(e) => e.stopPropagation()} // عشان ما يفتح المودال لما نضغط تحميل
+                        onClick={(e) => e.stopPropagation()} 
                         title="عرض المرفق"
                       >
                         <Paperclip size={16} />
@@ -273,7 +265,16 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
         </table>
       </div>
 
-      <Modal isOpen={isAddModalOpen} onClose={()=>setIsAddModalOpen(false)} title={techForm.id ? "تعديل بيانات العمل" : "إضافة عمل فني جديد"}>
+      <Modal 
+        isOpen={isAddModalOpen} 
+        onClose={()=>setIsAddModalOpen(false)} 
+        // === هنا العنوان يتغير بناءً على المكان ===
+        title={
+          techForm.id 
+            ? "تعديل بيانات العمل" 
+            : (scopeFilter === 'INTERNAL_WORK' ? "إضافة عمل جديد" : "إضافة طلب فني جديد")
+        }
+      >
         <div className="space-y-4 text-right font-cairo overflow-visible">
           
           <div>
