@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, ReactNode, useMemo } from 'react';
 import { 
   LayoutDashboard, Users, FileText, LogOut, 
@@ -108,7 +107,6 @@ const AppContent: React.FC = () => {
     setCurrentUser(updatedUser);
     safeStorage.setItem(STORAGE_KEYS.USER_CACHE, JSON.stringify(updatedUser));
 
-    // Role-based smart redirect
     if (userRole === 'TECHNICAL') setView('TECHNICAL_SERVICES');
     else if (userRole === 'CONVEYANCE' || userRole === 'FINANCE') setView('CONVEYANCE_SERVICES');
     else if (userRole === 'ADMIN' || userRole === 'PR_MANAGER' || userRole === 'PR_OFFICER') setView('DASHBOARD');
@@ -131,7 +129,21 @@ const AppContent: React.FC = () => {
       if (pRes.data) {
         const mappedProjects = pRes.data.map((p: any) => ({
           ...p,
-          name: p.client || p.title || p.name || 'مشروع جديد'
+          name: p.client || p.title || p.name || 'مشروع جديد',
+          // === قراءة البيانات التفصيلية الجديدة ===
+          consultant_name: p.consultant_name,
+          consultant_engineer: p.consultant_engineer,
+          consultant_mobile: p.consultant_mobile,
+          
+          water_contractor: p.water_contractor,
+          water_contractor_engineer: p.water_contractor_engineer, // جديد
+          water_contractor_mobile: p.water_contractor_mobile,     // جديد
+
+          electricity_contractor: p.electricity_contractor,
+          electricity_contractor_engineer: p.electricity_contractor_engineer, // جديد
+          electricity_contractor_mobile: p.electricity_contractor_mobile,     // جديد
+          
+          survey_decisions_count: p.survey_decisions_count || p.details?.surveyDecisionsCount || 0
         }));
         setProjects(mappedProjects);
         
@@ -161,7 +173,6 @@ const AppContent: React.FC = () => {
 
   useEffect(() => { if (currentUser) fetchAllData(); }, [currentUser?.id, view]);
 
-  // --- Handlers ---
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsAuthLoading(true);
@@ -177,10 +188,46 @@ const AppContent: React.FC = () => {
     setView('LOGIN');
   };
 
+  // === تحديث الحفظ ليشمل الحقول الجديدة ===
   const handleUpdateProjectDetails = async () => {
     if (!selectedProject) return;
-    const { error } = await supabase.from('projects').update({ details: editProjectForm }).eq('id', selectedProject.id);
-    if (!error) { alert("تم التحديث ✅"); setIsEditProjectModalOpen(false); fetchAllData(); }
+    
+    const directUpdate = {
+        survey_decisions_count: editProjectForm.surveyDecisionsCount,
+        // الاستشاري
+        consultant_name: editProjectForm.consultant_name,
+        consultant_engineer: editProjectForm.consultant_engineer,
+        consultant_mobile: editProjectForm.consultant_mobile,
+        // المياه
+        water_contractor: editProjectForm.water_contractor,
+        water_contractor_engineer: editProjectForm.water_contractor_engineer,
+        water_contractor_mobile: editProjectForm.water_contractor_mobile,
+        // الكهرباء
+        electricity_contractor: editProjectForm.electricity_contractor,
+        electricity_contractor_engineer: editProjectForm.electricity_contractor_engineer,
+        electricity_contractor_mobile: editProjectForm.electricity_contractor_mobile,
+    };
+
+    const detailsUpdate = {
+        unitsCount: editProjectForm.unitsCount,
+        electricityMetersCount: editProjectForm.electricityMetersCount,
+        waterMetersCount: editProjectForm.waterMetersCount,
+        buildingPermitsCount: editProjectForm.buildingPermitsCount,
+        occupancyCertificatesCount: editProjectForm.occupancyCertificatesCount,
+    };
+
+    const { error } = await supabase
+        .from('projects')
+        .update({ ...directUpdate, details: detailsUpdate })
+        .eq('id', selectedProject.id);
+
+    if (!error) { 
+        alert("تم التحديث وحفظ البيانات بنجاح ✅"); 
+        setIsEditProjectModalOpen(false); 
+        fetchAllData(); 
+    } else {
+        alert("خطأ في التحديث: " + error.message);
+    }
   };
 
   const handleExcelImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -281,7 +328,6 @@ const AppContent: React.FC = () => {
 
               {selectedProject && view === 'PROJECT_DETAIL' && (
                 <div className="animate-in fade-in slide-in-from-bottom-4 space-y-8">
-                  {/* Project Header Card */}
                   <div className="bg-white p-8 rounded-[40px] shadow-sm border border-gray-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
                     <div className="space-y-2">
                         <button onClick={() => { setSelectedProject(null); setView('DASHBOARD'); }} className="flex items-center gap-2 text-gray-400 hover:text-[#1B2B48] text-sm font-bold transition-all mb-2">
@@ -290,7 +336,25 @@ const AppContent: React.FC = () => {
                         <div className="flex items-center gap-3">
                           <h2 className="text-4xl font-black text-[#1B2B48] tracking-tight">{selectedProject.name}</h2>
                           {canAccess(['ADMIN', 'PR_MANAGER']) && (
-                            <button onClick={() => { setEditProjectForm(selectedProject.details || {}); setIsEditProjectModalOpen(true); }} className="p-2 text-gray-400 hover:text-[#E95D22] hover:bg-orange-50 rounded-full transition-all">
+                            <button onClick={() => { 
+                                setEditProjectForm({
+                                    ...selectedProject.details, 
+                                    surveyDecisionsCount: selectedProject['survey_decisions_count'],
+                                    // الاستشاري
+                                    consultant_name: selectedProject['consultant_name'],
+                                    consultant_engineer: selectedProject['consultant_engineer'],
+                                    consultant_mobile: selectedProject['consultant_mobile'],
+                                    // المياه
+                                    water_contractor: selectedProject['water_contractor'],
+                                    water_contractor_engineer: selectedProject['water_contractor_engineer'],
+                                    water_contractor_mobile: selectedProject['water_contractor_mobile'],
+                                    // الكهرباء
+                                    electricity_contractor: selectedProject['electricity_contractor'],
+                                    electricity_contractor_engineer: selectedProject['electricity_contractor_engineer'],
+                                    electricity_contractor_mobile: selectedProject['electricity_contractor_mobile'],
+                                }); 
+                                setIsEditProjectModalOpen(true); 
+                            }} className="p-2 text-gray-400 hover:text-[#E95D22] hover:bg-orange-50 rounded-full transition-all">
                               <Edit3 size={20} />
                             </button>
                           )}
@@ -311,7 +375,6 @@ const AppContent: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* Navigation Tabs */}
                   <div className="flex gap-4 p-1.5 bg-gray-100 rounded-[30px] w-fit shadow-inner overflow-x-auto max-w-full no-scrollbar">
                     <button onClick={() => setProjectTab('info')} className={`px-8 py-3 rounded-[25px] font-bold transition-all whitespace-nowrap ${projectTab === 'info' ? 'bg-[#1B2B48] text-white shadow-xl scale-105' : 'text-gray-500 hover:text-[#1B2B48] hover:bg-white/50'}`}>المعلومات الأساسية</button>
                     {canAccess(['ADMIN', 'PR_MANAGER', 'PR_OFFICER']) && (
@@ -325,10 +388,9 @@ const AppContent: React.FC = () => {
                     )}
                   </div>
 
-                  {/* Tab Content Rendering */}
                   <div className="animate-in fade-in duration-300">
                     {projectTab === 'info' && (
-                      <div className="space-y-12">
+                      <div className="space-y-8 animate-in fade-in duration-300">
                         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-6">
                             {[
                                 { label: 'الوحدات', icon: Building2, value: selectedProject.details?.unitsCount || 0, color: 'text-blue-600', bg: 'bg-blue-50' },
@@ -336,14 +398,88 @@ const AppContent: React.FC = () => {
                                 { label: 'المياه', icon: Droplets, value: selectedProject.details?.waterMetersCount || 0, color: 'text-cyan-500', bg: 'bg-cyan-50' },
                                 { label: 'رخص البناء', icon: ClipboardList, value: selectedProject.details?.buildingPermitsCount || 0, color: 'text-indigo-600', bg: 'bg-indigo-50' },
                                 { label: 'الأشغال', icon: ShieldCheck, value: selectedProject.details?.occupancyCertificatesCount || 0, color: 'text-emerald-600', bg: 'bg-emerald-50' },
-                                { label: 'المساحة', icon: Ruler, value: selectedProject.details?.surveyDecisionsCount || 0, color: 'text-rose-600', bg: 'bg-rose-50' },
+                                { label: 'المساحة', icon: Ruler, value: selectedProject['survey_decisions_count'] || 0, color: 'text-rose-600', bg: 'bg-rose-50' },
                             ].map((m, idx) => (
-                                <div key={idx} className="bg-white p-8 rounded-[40px] border border-gray-100 shadow-sm flex flex-col items-center hover:scale-105 transition-transform">
-                                    <div className={`w-14 h-14 ${m.bg} ${m.color} rounded-2xl flex items-center justify-center mb-4`}><m.icon size={28} /></div>
+                                <div key={idx} className="bg-white p-6 rounded-[30px] border border-gray-100 shadow-sm flex flex-col items-center justify-center hover:scale-105 transition-transform">
+                                    <div className={`w-12 h-12 ${m.bg} ${m.color} rounded-2xl flex items-center justify-center mb-3`}><m.icon size={24} /></div>
                                     <p className="text-[10px] text-gray-400 font-black uppercase tracking-tight">{m.label}</p>
-                                    <p className="text-4xl font-black text-[#1B2B48] mt-2">{m.value}</p>
+                                    <p className="text-3xl font-black text-[#1B2B48] mt-1">{m.value}</p>
                                 </div>
                             ))}
+                        </div>
+
+                        {/* === قسم المقاولين (التصميم الجديد بثلاث أعمدة) === */}
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            
+                            {/* بطاقة المكتب الاستشاري */}
+                            <div className="bg-white p-6 rounded-[30px] border border-gray-100 shadow-sm relative overflow-hidden group">
+                                <div className="absolute top-0 right-0 w-2 h-full bg-[#1B2B48]"></div>
+                                <div className="flex items-center gap-3 mb-6 pb-4 border-b border-gray-50">
+                                    <div className="p-3 bg-gray-50 text-[#1B2B48] rounded-2xl"><Briefcase size={20}/></div>
+                                    <h3 className="font-bold text-lg text-[#1B2B48]">المكتب الاستشاري</h3>
+                                </div>
+                                <div className="space-y-4">
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-gray-400 text-xs font-bold">اسم المكتب</span>
+                                        <span className="font-bold text-[#1B2B48]">{selectedProject['consultant_name'] || '-'}</span>
+                                    </div>
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-gray-400 text-xs font-bold">المهندس المسؤول</span>
+                                        <span className="font-bold text-[#1B2B48]">{selectedProject['consultant_engineer'] || '-'}</span>
+                                    </div>
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-gray-400 text-xs font-bold">رقم التواصل</span>
+                                        <span className="font-bold text-[#1B2B48] dir-ltr">{selectedProject['consultant_mobile'] || '-'}</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* بطاقة مقاول الكهرباء */}
+                            <div className="bg-white p-6 rounded-[30px] border border-gray-100 shadow-sm relative overflow-hidden group">
+                                <div className="absolute top-0 right-0 w-2 h-full bg-amber-400"></div>
+                                <div className="flex items-center gap-3 mb-6 pb-4 border-b border-gray-50">
+                                    <div className="p-3 bg-amber-50 text-amber-600 rounded-2xl"><Zap size={20}/></div>
+                                    <h3 className="font-bold text-lg text-[#1B2B48]">مقاول الكهرباء</h3>
+                                </div>
+                                <div className="space-y-4">
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-gray-400 text-xs font-bold">الجهة المنفذة</span>
+                                        <span className="font-bold text-[#1B2B48]">{selectedProject['electricity_contractor'] || '-'}</span>
+                                    </div>
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-gray-400 text-xs font-bold">المهندس المسؤول</span>
+                                        <span className="font-bold text-[#1B2B48]">{selectedProject['electricity_contractor_engineer'] || '-'}</span>
+                                    </div>
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-gray-400 text-xs font-bold">رقم التواصل</span>
+                                        <span className="font-bold text-[#1B2B48] dir-ltr">{selectedProject['electricity_contractor_mobile'] || '-'}</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* بطاقة مقاول المياه */}
+                            <div className="bg-white p-6 rounded-[30px] border border-gray-100 shadow-sm relative overflow-hidden group">
+                                <div className="absolute top-0 right-0 w-2 h-full bg-cyan-400"></div>
+                                <div className="flex items-center gap-3 mb-6 pb-4 border-b border-gray-50">
+                                    <div className="p-3 bg-cyan-50 text-cyan-600 rounded-2xl"><Droplets size={20}/></div>
+                                    <h3 className="font-bold text-lg text-[#1B2B48]">مقاول المياه</h3>
+                                </div>
+                                <div className="space-y-4">
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-gray-400 text-xs font-bold">الجهة المنفذة</span>
+                                        <span className="font-bold text-[#1B2B48]">{selectedProject['water_contractor'] || '-'}</span>
+                                    </div>
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-gray-400 text-xs font-bold">المهندس المسؤول</span>
+                                        <span className="font-bold text-[#1B2B48]">{selectedProject['water_contractor_engineer'] || '-'}</span>
+                                    </div>
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-gray-400 text-xs font-bold">رقم التواصل</span>
+                                        <span className="font-bold text-[#1B2B48] dir-ltr">{selectedProject['water_contractor_mobile'] || '-'}</span>
+                                    </div>
+                                </div>
+                            </div>
+
                         </div>
                       </div>
                     )}
@@ -459,7 +595,51 @@ const AppContent: React.FC = () => {
               <label className="text-xs text-gray-400 font-bold block mb-1">رخص البناء</label>
               <input type="number" className="w-full p-4 bg-gray-50 border rounded-2xl font-bold outline-none focus:border-[#E95D22] transition-all" value={editProjectForm.buildingPermitsCount || 0} onChange={e => setEditProjectForm({...editProjectForm, buildingPermitsCount: parseInt(e.target.value)})} />
             </div>
+            <div className="space-y-1">
+              <label className="text-xs text-gray-400 font-bold block mb-1">شهادات الأشغال</label>
+              <input type="number" className="w-full p-4 bg-gray-50 border rounded-2xl font-bold outline-none focus:border-[#E95D22] transition-all" value={editProjectForm.occupancyCertificatesCount || 0} onChange={e => setEditProjectForm({...editProjectForm, occupancyCertificatesCount: parseInt(e.target.value)})} />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs text-gray-400 font-bold block mb-1">القرارات المساحية</label>
+              <input type="number" className="w-full p-4 bg-gray-50 border rounded-2xl font-bold outline-none focus:border-[#E95D22] transition-all" value={editProjectForm.surveyDecisionsCount || 0} onChange={e => setEditProjectForm({...editProjectForm, surveyDecisionsCount: parseInt(e.target.value)})} />
+            </div>
           </div>
+
+          <div className="border-t border-gray-100 pt-4 mt-4">
+            <h4 className="text-sm font-bold text-[#1B2B48] mb-3">بيانات الاستشاري والمقاولين</h4>
+            
+            {/* الاستشاري */}
+            <div className="space-y-3 mb-4">
+                <div className="flex items-center gap-2 mb-1"><Briefcase size={16} className="text-[#1B2B48]"/><span className="text-xs font-bold text-gray-400">المكتب الاستشاري</span></div>
+                <input placeholder="اسم المكتب الاستشاري" className="w-full p-3 bg-gray-50 rounded-xl border font-bold outline-none focus:border-[#E95D22]" value={editProjectForm.consultant_name || ''} onChange={e => setEditProjectForm({...editProjectForm, consultant_name: e.target.value})} />
+                <div className="grid grid-cols-2 gap-3">
+                    <input placeholder="المهندس المسؤول" className="w-full p-3 bg-gray-50 rounded-xl border font-bold outline-none focus:border-[#E95D22]" value={editProjectForm.consultant_engineer || ''} onChange={e => setEditProjectForm({...editProjectForm, consultant_engineer: e.target.value})} />
+                    <input placeholder="رقم التواصل" className="w-full p-3 bg-gray-50 rounded-xl border font-bold outline-none focus:border-[#E95D22]" value={editProjectForm.consultant_mobile || ''} onChange={e => setEditProjectForm({...editProjectForm, consultant_mobile: e.target.value})} />
+                </div>
+            </div>
+
+            {/* الكهرباء */}
+            <div className="space-y-3 mb-4">
+                 <div className="flex items-center gap-2 mb-1"><Zap size={16} className="text-amber-500"/><span className="text-xs font-bold text-gray-400">مقاول الكهرباء</span></div>
+                 <input placeholder="اسم شركة الكهرباء" className="w-full p-3 bg-gray-50 rounded-xl border font-bold outline-none focus:border-[#E95D22]" value={editProjectForm.electricity_contractor || ''} onChange={e => setEditProjectForm({...editProjectForm, electricity_contractor: e.target.value})} />
+                 <div className="grid grid-cols-2 gap-3">
+                    <input placeholder="المهندس المسؤول" className="w-full p-3 bg-gray-50 rounded-xl border font-bold outline-none focus:border-[#E95D22]" value={editProjectForm.electricity_contractor_engineer || ''} onChange={e => setEditProjectForm({...editProjectForm, electricity_contractor_engineer: e.target.value})} />
+                    <input placeholder="رقم التواصل" className="w-full p-3 bg-gray-50 rounded-xl border font-bold outline-none focus:border-[#E95D22]" value={editProjectForm.electricity_contractor_mobile || ''} onChange={e => setEditProjectForm({...editProjectForm, electricity_contractor_mobile: e.target.value})} />
+                </div>
+            </div>
+
+            {/* المياه */}
+            <div className="space-y-3">
+                 <div className="flex items-center gap-2 mb-1"><Droplets size={16} className="text-cyan-500"/><span className="text-xs font-bold text-gray-400">مقاول المياه</span></div>
+                 <input placeholder="اسم شركة المياه" className="w-full p-3 bg-gray-50 rounded-xl border font-bold outline-none focus:border-[#E95D22]" value={editProjectForm.water_contractor || ''} onChange={e => setEditProjectForm({...editProjectForm, water_contractor: e.target.value})} />
+                 <div className="grid grid-cols-2 gap-3">
+                    <input placeholder="المهندس المسؤول" className="w-full p-3 bg-gray-50 rounded-xl border font-bold outline-none focus:border-[#E95D22]" value={editProjectForm.water_contractor_engineer || ''} onChange={e => setEditProjectForm({...editProjectForm, water_contractor_engineer: e.target.value})} />
+                    <input placeholder="رقم التواصل" className="w-full p-3 bg-gray-50 rounded-xl border font-bold outline-none focus:border-[#E95D22]" value={editProjectForm.water_contractor_mobile || ''} onChange={e => setEditProjectForm({...editProjectForm, water_contractor_mobile: e.target.value})} />
+                </div>
+            </div>
+
+          </div>
+
           <button onClick={handleUpdateProjectDetails} className="w-full bg-[#1B2B48] text-white py-5 rounded-[25px] font-black shadow-xl mt-4 hover:brightness-110 hover:-translate-y-1 transition-all active:scale-95">حفظ التغييرات</button>
         </div>
       </Modal>
