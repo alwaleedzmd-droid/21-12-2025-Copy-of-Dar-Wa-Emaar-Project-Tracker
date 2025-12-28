@@ -104,3 +104,20 @@ export type ViewState =
   | 'TECHNICAL_SERVICES' 
   | 'CONVEYANCE_SERVICES' 
   | 'STATISTICS';
+  // في ملف types.ts
+
+export interface TechnicalRequest {
+  id: number;
+  created_at: string;
+  updated_at?: string; // ✅ أضف هذا السطر
+  project_id: number;
+  // ... باقي الحقول كما هي
+}
+
+export interface ClearanceRequest {
+  id: number;
+  created_at: string;
+  updated_at?: string; // ✅ أضف هذا السطر
+  project_id: number;
+  // ... باقي الحقول كما هي
+}

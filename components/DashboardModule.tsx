@@ -1,4 +1,3 @@
-
 import React, { useMemo } from 'react';
 import { 
   Building2, Zap, FileText, Users, 
@@ -6,7 +5,7 @@ import {
   Clock, CheckCircle2, Plus, FileUp, 
   TrendingUp, Layers, MousePointer2
 } from 'lucide-react';
-import { ProjectSummary, TechnicalRequest, ClearanceRequest, User } from './types';
+import { ProjectSummary, TechnicalRequest, ClearanceRequest } from '../types';
 
 interface DashboardModuleProps {
   projects: ProjectSummary[];
@@ -60,13 +59,18 @@ const DashboardModule: React.FC<DashboardModuleProps> = ({
     return { sorted, total, gradient: gradientParts.join(', '), colors };
   }, [techRequests]);
 
-  // --- Recent Activity ---
+  // --- Recent Activity (تم التحديث: الترتيب حسب آخر تعديل) ---
   const recentActivities = useMemo(() => {
     const combined = [
       ...techRequests.map(r => ({ ...r, type: 'فني' })),
       ...clearanceRequests.map(r => ({ ...r, type: 'إفراغ', service_type: 'سجل إفراغ' }))
     ]
-    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+    .sort((a, b) => {
+      // نأخذ التاريخ الأحدث بين الإنشاء والتعديل
+      const dateA = new Date(a.updated_at || a.created_at).getTime();
+      const dateB = new Date(b.updated_at || b.created_at).getTime();
+      return dateB - dateA; // ترتيب تنازلي (الأحدث أولاً)
+    })
     .slice(0, 6);
     
     return combined;
@@ -124,7 +128,6 @@ const DashboardModule: React.FC<DashboardModuleProps> = ({
           </div>
 
           <div className="relative w-48 h-48 mb-8">
-            {/* Custom CSS Donut */}
             <div 
               className="w-full h-full rounded-full shadow-inner transform -rotate-90"
               style={{ background: `conic-gradient(${techAnalytics.gradient || '#f3f4f6 0% 100%'})` }}
@@ -222,8 +225,9 @@ const DashboardModule: React.FC<DashboardModuleProps> = ({
                                {act.status === 'completed' || act.status === 'منجز' ? 'منجز' : (act.status || 'جديد')}
                             </span>
                          </td>
+                         {/* نعرض تاريخ التحديث إن وجد، وإلا تاريخ الإنشاء */}
                          <td className="p-6 text-[10px] text-gray-400 font-bold" dir="ltr">
-                            {new Date(act.created_at).toLocaleDateString('en-GB')}
+                            {new Date(act.updated_at || act.created_at).toLocaleDateString('en-GB')}
                          </td>
                       </tr>
                     ))}
@@ -239,7 +243,6 @@ const DashboardModule: React.FC<DashboardModuleProps> = ({
 
         {/* Quick Actions Panel */}
         <div className="bg-[#1B2B48] p-8 rounded-[40px] text-white shadow-2xl relative overflow-hidden flex flex-col justify-between">
-           {/* Decorative Background */}
            <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -mr-20 -mt-20 blur-3xl pointer-events-none" />
            
            <div className="relative z-10">
