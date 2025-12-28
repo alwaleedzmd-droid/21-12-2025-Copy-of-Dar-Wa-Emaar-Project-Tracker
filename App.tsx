@@ -75,9 +75,16 @@ const AppContent: React.FC = () => {
   const [editProjectForm, setEditProjectForm] = useState<any>({});
   const [bulkProject, setBulkProject] = useState('');
 
-  // --- Derived State ---
-  const projectTechnicalRequests = useMemo(() => 
-    selectedProject ? technicalRequests.filter(r => r.project_name === selectedProject.name) : []
+  // --- Derived State (تم التعديل هنا لفصل البيانات بدقة) ---
+  
+  // 1. الأعمال الداخلية للمشروع (فقط التي تحمل تصنيف INTERNAL_WORK)
+  const projectInternalWorks = useMemo(() => 
+    selectedProject ? technicalRequests.filter(r => r.project_name === selectedProject.name && r.scope === 'INTERNAL_WORK') : []
+  , [technicalRequests, selectedProject]);
+
+  // 2. الطلبات الفنية الخارجية للمشروع (فقط التي تحمل تصنيف EXTERNAL أو لا يوجد تصنيف)
+  const projectExternalTechRequests = useMemo(() => 
+    selectedProject ? technicalRequests.filter(r => r.project_name === selectedProject.name && r.scope !== 'INTERNAL_WORK') : []
   , [technicalRequests, selectedProject]);
 
   const projectClearanceRequests = useMemo(() => 
@@ -86,14 +93,16 @@ const AppContent: React.FC = () => {
 
   const stats = useMemo(() => ({
     projects: projects.length,
-    techRequests: technicalRequests.length,
+    techRequests: technicalRequests.filter(r => r.scope !== 'INTERNAL_WORK').length, // عد فقط الطلبات الحقيقية
     clearRequests: clearanceRequests.length
   }), [projects.length, technicalRequests.length, clearanceRequests.length]);
 
+  // --- RBAC Helper ---
   const canAccess = (allowedRoles: string[]) => {
     return currentUser && allowedRoles.includes(currentUser.role);
   };
 
+  // --- Smart Redirect Logic ---
   const syncUserProfile = async (sessionUser: any) => {
     const { data } = await supabase.from('profiles').select('role, name').eq('id', sessionUser.id).single();
     let userRole = data?.role || 'PR_OFFICER';
@@ -128,14 +137,7 @@ const AppContent: React.FC = () => {
         const mappedProjects = pRes.data.map((p: any) => ({
           ...p,
           name: p.client || p.title || p.name || 'مشروع جديد',
-          // قراءة الأعمدة المباشرة بدلاً من details
-          units_count: p.units_count || 0,
-          electricity_meters: p.electricity_meters || 0,
-          water_meters: p.water_meters || 0,
-          building_permits: p.building_permits || 0,
-          occupancy_certificates: p.occupancy_certificates || 0,
-          survey_decisions_count: p.survey_decisions_count || 0,
-          
+          // Data Mapping
           consultant_name: p.consultant_name,
           consultant_engineer: p.consultant_engineer,
           consultant_mobile: p.consultant_mobile,
@@ -145,6 +147,7 @@ const AppContent: React.FC = () => {
           electricity_contractor: p.electricity_contractor,
           electricity_contractor_engineer: p.electricity_contractor_engineer,
           electricity_contractor_mobile: p.electricity_contractor_mobile,
+          survey_decisions_count: p.survey_decisions_count || p.details?.surveyDecisionsCount || 0
         }));
         setProjects(mappedProjects);
         
@@ -189,41 +192,28 @@ const AppContent: React.FC = () => {
     setView('LOGIN');
   };
 
-  // === دالة الحفظ المصححة (تكتب في الأعمدة المباشرة فقط وتتجاهل details) ===
   const handleUpdateProjectDetails = async () => {
     if (!selectedProject) return;
-    
-    // إزالة الاعتماد على عمود details نهائياً
-    const updatePayload = {
-        // العدادات والإحصائيات
-        units_count: editProjectForm.unitsCount,
-        electricity_meters: editProjectForm.electricityMetersCount,
-        water_meters: editProjectForm.waterMetersCount,
-        building_permits: editProjectForm.buildingPermitsCount,
-        occupancy_certificates: editProjectForm.occupancyCertificatesCount,
+    const directUpdate = {
         survey_decisions_count: editProjectForm.surveyDecisionsCount,
-        
-        // الاستشاري
         consultant_name: editProjectForm.consultant_name,
         consultant_engineer: editProjectForm.consultant_engineer,
         consultant_mobile: editProjectForm.consultant_mobile,
-        
-        // المياه
         water_contractor: editProjectForm.water_contractor,
         water_contractor_engineer: editProjectForm.water_contractor_engineer,
         water_contractor_mobile: editProjectForm.water_contractor_mobile,
-        
-        // الكهرباء
         electricity_contractor: editProjectForm.electricity_contractor,
         electricity_contractor_engineer: editProjectForm.electricity_contractor_engineer,
         electricity_contractor_mobile: editProjectForm.electricity_contractor_mobile,
     };
-
-    const { error } = await supabase
-        .from('projects')
-        .update(updatePayload)
-        .eq('id', selectedProject.id);
-
+    const detailsUpdate = {
+        unitsCount: editProjectForm.unitsCount,
+        electricityMetersCount: editProjectForm.electricityMetersCount,
+        waterMetersCount: editProjectForm.waterMetersCount,
+        buildingPermitsCount: editProjectForm.buildingPermitsCount,
+        occupancyCertificatesCount: editProjectForm.occupancyCertificatesCount,
+    };
+    const { error } = await supabase.from('projects').update({ ...directUpdate, details: detailsUpdate }).eq('id', selectedProject.id);
     if (!error) { 
         alert("تم حفظ البيانات بنجاح ✅"); 
         setIsEditProjectModalOpen(false); 
@@ -262,6 +252,7 @@ const AppContent: React.FC = () => {
   };
 
   const getProjectProgress = (pName: string) => {
+    // حساب الإنجاز يستثني الأعمال الداخلية من النسبة العامة إذا أردت، أو يبقيها حسب الرغبة. هنا سأبقيها.
     const tech = technicalRequests.filter(r => r.project_name === pName);
     const clear = clearanceRequests.filter(r => r.project_name === pName);
     const total = tech.length + clear.length;
@@ -332,7 +323,7 @@ const AppContent: React.FC = () => {
 
               {selectedProject && view === 'PROJECT_DETAIL' && (
                 <div className="animate-in fade-in slide-in-from-bottom-4 space-y-8">
-                  {/* ... (رأس الصفحة) ... */}
+                  {/* ... (Project Header) ... */}
                   <div className="bg-white p-8 rounded-[40px] shadow-sm border border-gray-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
                     <div className="space-y-2">
                         <button onClick={() => { setSelectedProject(null); setView('DASHBOARD'); }} className="flex items-center gap-2 text-gray-400 hover:text-[#1B2B48] text-sm font-bold transition-all mb-2">
@@ -342,27 +333,15 @@ const AppContent: React.FC = () => {
                           <h2 className="text-4xl font-black text-[#1B2B48] tracking-tight">{selectedProject.name}</h2>
                           {canAccess(['ADMIN', 'PR_MANAGER']) && (
                             <button onClick={() => { 
-                                // تحميل البيانات في الفورم من الأعمدة المباشرة
                                 setEditProjectForm({
-                                    // العدادات
-                                    unitsCount: selectedProject['units_count'],
-                                    electricityMetersCount: selectedProject['electricity_meters'],
-                                    waterMetersCount: selectedProject['water_meters'],
-                                    buildingPermitsCount: selectedProject['building_permits'],
-                                    occupancyCertificatesCount: selectedProject['occupancy_certificates'],
+                                    ...selectedProject.details, 
                                     surveyDecisionsCount: selectedProject['survey_decisions_count'],
-                                    
-                                    // الاستشاري
                                     consultant_name: selectedProject['consultant_name'],
                                     consultant_engineer: selectedProject['consultant_engineer'],
                                     consultant_mobile: selectedProject['consultant_mobile'],
-                                    
-                                    // المياه
                                     water_contractor: selectedProject['water_contractor'],
                                     water_contractor_engineer: selectedProject['water_contractor_engineer'],
                                     water_contractor_mobile: selectedProject['water_contractor_mobile'],
-                                    
-                                    // الكهرباء
                                     electricity_contractor: selectedProject['electricity_contractor'],
                                     electricity_contractor_engineer: selectedProject['electricity_contractor_engineer'],
                                     electricity_contractor_mobile: selectedProject['electricity_contractor_mobile'],
@@ -423,7 +402,7 @@ const AppContent: React.FC = () => {
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                            {/* بطاقات الاستشاري والمقاولين (كما هي) */}
+                            {/* بطاقة الاستشاري */}
                             <div className="bg-white p-6 rounded-[30px] border border-gray-100 shadow-sm relative overflow-hidden group">
                                 <div className="absolute top-0 right-0 w-2 h-full bg-[#1B2B48]"></div>
                                 <div className="flex items-center gap-3 mb-6 pb-4 border-b border-gray-50">
@@ -446,6 +425,7 @@ const AppContent: React.FC = () => {
                                 </div>
                             </div>
 
+                            {/* بطاقة الكهرباء */}
                             <div className="bg-white p-6 rounded-[30px] border border-gray-100 shadow-sm relative overflow-hidden group">
                                 <div className="absolute top-0 right-0 w-2 h-full bg-amber-400"></div>
                                 <div className="flex items-center gap-3 mb-6 pb-4 border-b border-gray-50">
@@ -468,6 +448,7 @@ const AppContent: React.FC = () => {
                                 </div>
                             </div>
 
+                            {/* بطاقة المياه */}
                             <div className="bg-white p-6 rounded-[30px] border border-gray-100 shadow-sm relative overflow-hidden group">
                                 <div className="absolute top-0 right-0 w-2 h-full bg-cyan-400"></div>
                                 <div className="flex items-center gap-3 mb-6 pb-4 border-b border-gray-50">
@@ -489,15 +470,13 @@ const AppContent: React.FC = () => {
                                     </div>
                                 </div>
                             </div>
-
                         </div>
                       </div>
                     )}
 
-                    {/* ... (بقية التبويبات) ... */}
                     {projectTab === 'work' && (
                       <TechnicalModule 
-                        requests={projectTechnicalRequests}
+                        requests={projectInternalWorks}  // === تعديل هام: تمرير الأعمال الداخلية فقط هنا
                         projects={[selectedProject]}
                         currentUser={currentUser}
                         usersList={usersList}
@@ -509,7 +488,7 @@ const AppContent: React.FC = () => {
 
                     {projectTab === 'tech' && (
                       <TechnicalModule 
-                        requests={projectTechnicalRequests}
+                        requests={projectExternalTechRequests} // === تعديل هام: تمرير الطلبات الخارجية فقط هنا
                         projects={[selectedProject]}
                         currentUser={currentUser}
                         usersList={usersList}
@@ -533,10 +512,10 @@ const AppContent: React.FC = () => {
                 </div>
               )}
 
-              {/* ... (بقية الصفحات) ... */}
               {view === 'TECHNICAL_SERVICES' && !selectedProject && (
                   <TechnicalModule 
-                    requests={technicalRequests}
+                    // === تعديل هام جداً: استثناء الأعمال الداخلية من الشاشة العامة للقسم الفني ===
+                    requests={technicalRequests.filter(r => r.scope !== 'INTERNAL_WORK')}
                     projects={projects}
                     currentUser={currentUser}
                     usersList={usersList}
@@ -588,6 +567,7 @@ const AppContent: React.FC = () => {
         </div>
       </main>
 
+      {/* نافذة التعديل كما هي ... */}
       <Modal isOpen={isEditProjectModalOpen} onClose={() => setIsEditProjectModalOpen(false)} title="تعديل تفاصيل المشروع">
         <div className="space-y-6 text-right font-cairo">
           <div className="grid grid-cols-2 gap-4">
@@ -620,7 +600,6 @@ const AppContent: React.FC = () => {
           <div className="border-t border-gray-100 pt-4 mt-4 space-y-6">
             <h4 className="text-sm font-bold text-[#1B2B48] mb-1">بيانات الاستشاري والمقاولين</h4>
             
-            {/* الاستشاري */}
             <div className="space-y-3 p-4 bg-gray-50 rounded-2xl border border-gray-100">
                 <div className="flex items-center gap-2 mb-1 text-[#1B2B48] font-bold"><Briefcase size={18}/><span>المكتب الاستشاري</span></div>
                 <input placeholder="اسم المكتب الاستشاري" className="w-full p-3 bg-white rounded-xl border border-gray-200 font-bold outline-none focus:border-[#E95D22]" value={editProjectForm.consultant_name || ''} onChange={e => setEditProjectForm({...editProjectForm, consultant_name: e.target.value})} />
@@ -630,7 +609,6 @@ const AppContent: React.FC = () => {
                 </div>
             </div>
 
-            {/* الكهرباء */}
             <div className="space-y-3 p-4 bg-amber-50/50 rounded-2xl border border-amber-100">
                  <div className="flex items-center gap-2 mb-1 text-amber-600 font-bold"><Zap size={18}/><span>مقاول الكهرباء</span></div>
                  <input placeholder="اسم شركة الكهرباء" className="w-full p-3 bg-white rounded-xl border border-gray-200 font-bold outline-none focus:border-[#E95D22]" value={editProjectForm.electricity_contractor || ''} onChange={e => setEditProjectForm({...editProjectForm, electricity_contractor: e.target.value})} />
@@ -640,7 +618,6 @@ const AppContent: React.FC = () => {
                 </div>
             </div>
 
-            {/* المياه */}
             <div className="space-y-3 p-4 bg-cyan-50/50 rounded-2xl border border-cyan-100">
                  <div className="flex items-center gap-2 mb-1 text-cyan-600 font-bold"><Droplets size={18}/><span>مقاول المياه</span></div>
                  <input placeholder="اسم شركة المياه" className="w-full p-3 bg-white rounded-xl border border-gray-200 font-bold outline-none focus:border-[#E95D22]" value={editProjectForm.water_contractor || ''} onChange={e => setEditProjectForm({...editProjectForm, water_contractor: e.target.value})} />
@@ -649,7 +626,6 @@ const AppContent: React.FC = () => {
                     <input placeholder="رقم التواصل" className="w-full p-3 bg-white rounded-xl border border-gray-200 font-bold outline-none focus:border-[#E95D22]" value={editProjectForm.water_contractor_mobile || ''} onChange={e => setEditProjectForm({...editProjectForm, water_contractor_mobile: e.target.value})} />
                 </div>
             </div>
-
           </div>
 
           <button onClick={handleUpdateProjectDetails} className="w-full bg-[#1B2B48] text-white py-5 rounded-[25px] font-black shadow-xl mt-4 hover:brightness-110 hover:-translate-y-1 transition-all active:scale-95">حفظ التغييرات</button>
