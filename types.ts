@@ -1,4 +1,3 @@
-
 export type UserRole = 'ADMIN' | 'PR_MANAGER' | 'CONVEYANCE' | 'TECHNICAL' | 'FINANCE' | 'PR_OFFICER';
 
 export interface User {
@@ -21,6 +20,22 @@ export interface ProjectSummary {
   details?: any;
   image_url?: string;
   isPinned?: boolean;
+  // Added fields to fix dot notation errors in ProjectsModule and support mapped data
+  units_count?: number;
+  electricity_meters?: number;
+  water_meters?: number;
+  building_permits?: number;
+  occupancy_certificates?: number;
+  survey_decisions_count?: number;
+  consultant_name?: string;
+  consultant_engineer?: string;
+  consultant_mobile?: string;
+  water_contractor?: string;
+  water_contractor_engineer?: string;
+  water_contractor_mobile?: string;
+  electricity_contractor?: string;
+  electricity_contractor_engineer?: string;
+  electricity_contractor_mobile?: string;
 }
 
 export interface Comment {
@@ -46,6 +61,7 @@ export interface TechnicalRequest {
   requesting_entity?: string;
   assigned_to?: string;
   submitted_by?: string;
+  attachment_url?: string; // Added field to support attachments in TechnicalModule
 }
 
 export interface ClearanceRequest {
@@ -65,6 +81,7 @@ export interface ClearanceRequest {
   deed_number?: string;
   submitted_by?: string;
   assigned_to?: string;
+  attachment_url?: string; // Added field to fix TypeScript errors in ClearanceModule
 }
 
 export interface Task {
@@ -81,6 +98,7 @@ export interface Task {
 export type ViewState = 
   | 'LOGIN' 
   | 'DASHBOARD' 
+  | 'PROJECTS_LIST'      // ✅ تمت الإضافة هنا (مهم جداً)
   | 'PROJECT_DETAIL' 
   | 'USERS' 
   | 'TECHNICAL_SERVICES' 

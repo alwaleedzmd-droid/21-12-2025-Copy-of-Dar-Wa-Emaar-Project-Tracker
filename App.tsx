@@ -26,6 +26,9 @@ import ClearanceModule from './components/ClearanceModule';
 import TechnicalModule from './components/TechnicalModule';
 import ProjectsModule from './components/ProjectsModule';
 
+// ✅ المسار الصحيح (تأكد أن هذا السطر موجود كما هو)
+import DashboardModule from './components/DashboardModule';
+
 const STORAGE_KEYS = {
     SIDEBAR_COLLAPSED: 'dar_sidebar_v2_collapsed',
     USER_CACHE: 'dar_user_v2_cache'
@@ -61,7 +64,7 @@ const AppContent: React.FC = () => {
     return cached ? JSON.parse(cached) : null;
   });
 
-  const [view, setView] = useState<ViewState>('LOGIN');
+  const [view, setView] = useState<ViewState | 'PROJECTS_LIST'>('LOGIN');
   const [selectedProject, setSelectedProject] = useState<ProjectSummary | null>(null);
   const [projectTab, setProjectTab] = useState<'info' | 'work' | 'tech' | 'clearance'>('info');
   const [isAuthLoading, setIsAuthLoading] = useState(true);
@@ -75,14 +78,11 @@ const AppContent: React.FC = () => {
   const [editProjectForm, setEditProjectForm] = useState<any>({});
   const [bulkProject, setBulkProject] = useState('');
 
-  // --- Derived State (تم التعديل هنا لفصل البيانات بدقة) ---
-  
-  // 1. الأعمال الداخلية للمشروع (فقط التي تحمل تصنيف INTERNAL_WORK)
+  // --- Derived State ---
   const projectInternalWorks = useMemo(() => 
     selectedProject ? technicalRequests.filter(r => r.project_name === selectedProject.name && r.scope === 'INTERNAL_WORK') : []
   , [technicalRequests, selectedProject]);
 
-  // 2. الطلبات الفنية الخارجية للمشروع (فقط التي تحمل تصنيف EXTERNAL أو لا يوجد تصنيف)
   const projectExternalTechRequests = useMemo(() => 
     selectedProject ? technicalRequests.filter(r => r.project_name === selectedProject.name && r.scope !== 'INTERNAL_WORK') : []
   , [technicalRequests, selectedProject]);
@@ -93,7 +93,7 @@ const AppContent: React.FC = () => {
 
   const stats = useMemo(() => ({
     projects: projects.length,
-    techRequests: technicalRequests.filter(r => r.scope !== 'INTERNAL_WORK').length, // عد فقط الطلبات الحقيقية
+    techRequests: technicalRequests.filter(r => r.scope !== 'INTERNAL_WORK').length,
     clearRequests: clearanceRequests.length
   }), [projects.length, technicalRequests.length, clearanceRequests.length]);
 
@@ -116,8 +116,9 @@ const AppContent: React.FC = () => {
 
     if (userRole === 'TECHNICAL') setView('TECHNICAL_SERVICES');
     else if (userRole === 'CONVEYANCE' || userRole === 'FINANCE') setView('CONVEYANCE_SERVICES');
-    else if (userRole === 'ADMIN' || userRole === 'PR_MANAGER' || userRole === 'PR_OFFICER') setView('DASHBOARD');
-    else setView('DASHBOARD');
+    else if (userRole === 'ADMIN' || userRole === 'PR_MANAGER') setView('DASHBOARD');
+    else if (userRole === 'PR_OFFICER') setView('PROJECTS_LIST');
+    else setView('PROJECTS_LIST');
 
     return updatedUser;
   };
@@ -127,7 +128,7 @@ const AppContent: React.FC = () => {
     setIsDbLoading(true);
     try {
       const [pRes, trRes, crRes, profilesRes] = await Promise.all([
-        supabase.from('projects').select('*'),
+        supabase.from('projects').select('*').order('created_at', { ascending: false }),
         supabase.from('technical_requests').select('*').order('created_at', { ascending: false }),
         supabase.from('clearance_requests').select('*').order('created_at', { ascending: false }),
         supabase.from('profiles').select('*')
@@ -137,7 +138,6 @@ const AppContent: React.FC = () => {
         const mappedProjects = pRes.data.map((p: any) => ({
           ...p,
           name: p.client || p.title || p.name || 'مشروع جديد',
-          // Data Mapping
           consultant_name: p.consultant_name,
           consultant_engineer: p.consultant_engineer,
           consultant_mobile: p.consultant_mobile,
@@ -147,7 +147,12 @@ const AppContent: React.FC = () => {
           electricity_contractor: p.electricity_contractor,
           electricity_contractor_engineer: p.electricity_contractor_engineer,
           electricity_contractor_mobile: p.electricity_contractor_mobile,
-          survey_decisions_count: p.survey_decisions_count || p.details?.surveyDecisionsCount || 0
+          survey_decisions_count: p.survey_decisions_count || p.details?.surveyDecisionsCount || 0,
+          units_count: p.units_count,
+          electricity_meters: p.electricity_meters,
+          water_meters: p.water_meters,
+          building_permits: p.building_permits,
+          occupancy_certificates: p.occupancy_certificates
         }));
         setProjects(mappedProjects);
         
@@ -192,8 +197,15 @@ const AppContent: React.FC = () => {
     setView('LOGIN');
   };
 
+  const handleQuickAction = (action: string) => {
+    if (action === 'add_project') setView('PROJECTS_LIST'); 
+    else if (action === 'add_request') setView('TECHNICAL_SERVICES');
+    else if (action === 'upload_excel') setIsBulkUploadModalOpen(true);
+  };
+
   const handleUpdateProjectDetails = async () => {
     if (!selectedProject) return;
+    
     const directUpdate = {
         survey_decisions_count: editProjectForm.surveyDecisionsCount,
         consultant_name: editProjectForm.consultant_name,
@@ -205,15 +217,18 @@ const AppContent: React.FC = () => {
         electricity_contractor: editProjectForm.electricity_contractor,
         electricity_contractor_engineer: editProjectForm.electricity_contractor_engineer,
         electricity_contractor_mobile: editProjectForm.electricity_contractor_mobile,
+        units_count: editProjectForm.unitsCount,
+        electricity_meters: editProjectForm.electricityMetersCount,
+        water_meters: editProjectForm.waterMetersCount,
+        building_permits: editProjectForm.buildingPermitsCount,
+        occupancy_certificates: editProjectForm.occupancyCertificatesCount,
     };
-    const detailsUpdate = {
-        unitsCount: editProjectForm.unitsCount,
-        electricityMetersCount: editProjectForm.electricityMetersCount,
-        waterMetersCount: editProjectForm.waterMetersCount,
-        buildingPermitsCount: editProjectForm.buildingPermitsCount,
-        occupancyCertificatesCount: editProjectForm.occupancyCertificatesCount,
-    };
-    const { error } = await supabase.from('projects').update({ ...directUpdate, details: detailsUpdate }).eq('id', selectedProject.id);
+
+    const { error } = await supabase
+        .from('projects')
+        .update(directUpdate)
+        .eq('id', selectedProject.id);
+
     if (!error) { 
         alert("تم حفظ البيانات بنجاح ✅"); 
         setIsEditProjectModalOpen(false); 
@@ -252,7 +267,6 @@ const AppContent: React.FC = () => {
   };
 
   const getProjectProgress = (pName: string) => {
-    // حساب الإنجاز يستثني الأعمال الداخلية من النسبة العامة إذا أردت، أو يبقيها حسب الرغبة. هنا سأبقيها.
     const tech = technicalRequests.filter(r => r.project_name === pName);
     const clear = clearanceRequests.filter(r => r.project_name === pName);
     const total = tech.length + clear.length;
@@ -279,8 +293,11 @@ const AppContent: React.FC = () => {
       <aside className={`bg-[#1B2B48] text-white flex flex-col transition-all duration-300 ${isSidebarCollapsed ? 'w-24' : 'w-72 shadow-2xl z-30'}`}>
         <div className="p-8 border-b border-white/5 flex flex-col items-center"><img src={DAR_LOGO} className={isSidebarCollapsed ? 'h-10' : 'h-24'} alt="Logo" /></div>
         <nav className="flex-1 p-4 space-y-3">
+          {canAccess(['ADMIN', 'PR_MANAGER']) && (
+            <button onClick={() => { setView('DASHBOARD'); setSelectedProject(null); }} className={`w-full flex items-center gap-4 p-4 rounded-2xl transition-all ${view === 'DASHBOARD' ? 'bg-[#E95D22]' : 'hover:bg-white/5'}`}><LayoutDashboard size={22}/> {!isSidebarCollapsed && 'لوحة المعلومات'}</button>
+          )}
           {canAccess(['ADMIN', 'PR_MANAGER', 'PR_OFFICER']) && (
-            <button onClick={() => { setView('DASHBOARD'); setSelectedProject(null); }} className={`w-full flex items-center gap-4 p-4 rounded-2xl transition-all ${view === 'DASHBOARD' ? 'bg-[#E95D22]' : 'hover:bg-white/5'}`}><LayoutDashboard size={22}/> {!isSidebarCollapsed && 'الرئيسية'}</button>
+            <button onClick={() => { setView('PROJECTS_LIST'); setSelectedProject(null); }} className={`w-full flex items-center gap-4 p-4 rounded-2xl transition-all ${view === 'PROJECTS_LIST' ? 'bg-[#E95D22]' : 'hover:bg-white/5'}`}><Building2 size={22}/> {!isSidebarCollapsed && 'المشاريع'}</button>
           )}
           {canAccess(['ADMIN', 'PR_MANAGER', 'TECHNICAL']) && (
             <button onClick={() => { setView('TECHNICAL_SERVICES'); setSelectedProject(null); }} className={`w-full flex items-center gap-4 p-4 rounded-2xl transition-all ${view === 'TECHNICAL_SERVICES' ? 'bg-[#E95D22]' : 'hover:bg-white/5'}`}><Zap size={22}/> {!isSidebarCollapsed && 'الطلبات الفنية'}</button>
@@ -311,7 +328,17 @@ const AppContent: React.FC = () => {
           {isDbLoading ? <div className="h-full flex flex-col items-center justify-center"><Loader2 className="animate-spin text-[#E95D22] w-12 h-12" /></div> : (
             <div className="max-w-7xl mx-auto space-y-8">
               
-              {view === 'DASHBOARD' && !selectedProject && (
+              {view === 'DASHBOARD' && canAccess(['ADMIN', 'PR_MANAGER']) && !selectedProject && (
+                <DashboardModule 
+                  projects={projects}
+                  techRequests={technicalRequests}
+                  clearanceRequests={clearanceRequests}
+                  users={usersList}
+                  onQuickAction={handleQuickAction}
+                />
+              )}
+
+              {(view === 'PROJECTS_LIST' || (view === 'DASHBOARD' && !canAccess(['ADMIN', 'PR_MANAGER']))) && !selectedProject && (
                 <ProjectsModule 
                   projects={projects.map(p => ({...p, progress: getProjectProgress(p.name)}))}
                   stats={stats}
@@ -323,18 +350,16 @@ const AppContent: React.FC = () => {
 
               {selectedProject && view === 'PROJECT_DETAIL' && (
                 <div className="animate-in fade-in slide-in-from-bottom-4 space-y-8">
-                  {/* ... (Project Header) ... */}
                   <div className="bg-white p-8 rounded-[40px] shadow-sm border border-gray-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
                     <div className="space-y-2">
-                        <button onClick={() => { setSelectedProject(null); setView('DASHBOARD'); }} className="flex items-center gap-2 text-gray-400 hover:text-[#1B2B48] text-sm font-bold transition-all mb-2">
-                          <ArrowLeft size={16} /> العودة للرئيسية
+                        <button onClick={() => { setSelectedProject(null); setView('PROJECTS_LIST'); }} className="flex items-center gap-2 text-gray-400 hover:text-[#1B2B48] text-sm font-bold transition-all mb-2">
+                          <ArrowLeft size={16} /> العودة للقائمة
                         </button>
                         <div className="flex items-center gap-3">
                           <h2 className="text-4xl font-black text-[#1B2B48] tracking-tight">{selectedProject.name}</h2>
                           {canAccess(['ADMIN', 'PR_MANAGER']) && (
                             <button onClick={() => { 
                                 setEditProjectForm({
-                                    ...selectedProject.details, 
                                     surveyDecisionsCount: selectedProject['survey_decisions_count'],
                                     consultant_name: selectedProject['consultant_name'],
                                     consultant_engineer: selectedProject['consultant_engineer'],
@@ -345,6 +370,11 @@ const AppContent: React.FC = () => {
                                     electricity_contractor: selectedProject['electricity_contractor'],
                                     electricity_contractor_engineer: selectedProject['electricity_contractor_engineer'],
                                     electricity_contractor_mobile: selectedProject['electricity_contractor_mobile'],
+                                    unitsCount: selectedProject['units_count'],
+                                    electricityMetersCount: selectedProject['electricity_meters'],
+                                    waterMetersCount: selectedProject['water_meters'],
+                                    buildingPermitsCount: selectedProject['building_permits'],
+                                    occupancyCertificatesCount: selectedProject['occupancy_certificates'],
                                 }); 
                                 setIsEditProjectModalOpen(true); 
                             }} className="p-2 text-gray-400 hover:text-[#E95D22] hover:bg-orange-50 rounded-full transition-all">
@@ -402,7 +432,6 @@ const AppContent: React.FC = () => {
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                            {/* بطاقة الاستشاري */}
                             <div className="bg-white p-6 rounded-[30px] border border-gray-100 shadow-sm relative overflow-hidden group">
                                 <div className="absolute top-0 right-0 w-2 h-full bg-[#1B2B48]"></div>
                                 <div className="flex items-center gap-3 mb-6 pb-4 border-b border-gray-50">
@@ -425,7 +454,6 @@ const AppContent: React.FC = () => {
                                 </div>
                             </div>
 
-                            {/* بطاقة الكهرباء */}
                             <div className="bg-white p-6 rounded-[30px] border border-gray-100 shadow-sm relative overflow-hidden group">
                                 <div className="absolute top-0 right-0 w-2 h-full bg-amber-400"></div>
                                 <div className="flex items-center gap-3 mb-6 pb-4 border-b border-gray-50">
@@ -448,7 +476,6 @@ const AppContent: React.FC = () => {
                                 </div>
                             </div>
 
-                            {/* بطاقة المياه */}
                             <div className="bg-white p-6 rounded-[30px] border border-gray-100 shadow-sm relative overflow-hidden group">
                                 <div className="absolute top-0 right-0 w-2 h-full bg-cyan-400"></div>
                                 <div className="flex items-center gap-3 mb-6 pb-4 border-b border-gray-50">
@@ -476,7 +503,7 @@ const AppContent: React.FC = () => {
 
                     {projectTab === 'work' && (
                       <TechnicalModule 
-                        requests={projectInternalWorks}  // === تعديل هام: تمرير الأعمال الداخلية فقط هنا
+                        requests={projectInternalWorks}
                         projects={[selectedProject]}
                         currentUser={currentUser}
                         usersList={usersList}
@@ -488,7 +515,7 @@ const AppContent: React.FC = () => {
 
                     {projectTab === 'tech' && (
                       <TechnicalModule 
-                        requests={projectExternalTechRequests} // === تعديل هام: تمرير الطلبات الخارجية فقط هنا
+                        requests={projectExternalTechRequests}
                         projects={[selectedProject]}
                         currentUser={currentUser}
                         usersList={usersList}
@@ -514,7 +541,6 @@ const AppContent: React.FC = () => {
 
               {view === 'TECHNICAL_SERVICES' && !selectedProject && (
                   <TechnicalModule 
-                    // === تعديل هام جداً: استثناء الأعمال الداخلية من الشاشة العامة للقسم الفني ===
                     requests={technicalRequests.filter(r => r.scope !== 'INTERNAL_WORK')}
                     projects={projects}
                     currentUser={currentUser}
@@ -567,7 +593,6 @@ const AppContent: React.FC = () => {
         </div>
       </main>
 
-      {/* نافذة التعديل كما هي ... */}
       <Modal isOpen={isEditProjectModalOpen} onClose={() => setIsEditProjectModalOpen(false)} title="تعديل تفاصيل المشروع">
         <div className="space-y-6 text-right font-cairo">
           <div className="grid grid-cols-2 gap-4">
