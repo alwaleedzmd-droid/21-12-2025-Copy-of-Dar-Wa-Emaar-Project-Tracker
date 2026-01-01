@@ -6,7 +6,7 @@ import {
   X, Printer, User as UserIcon, Building2,
   CheckCircle2, LayoutList, FileSpreadsheet,
   CreditCard, Calendar, Hash, Phone, MapPin, Filter,
-  ShieldCheck, ScrollText
+  ShieldCheck
 } from 'lucide-react';
 
 // --- ثوابت القوائم ---
@@ -91,8 +91,20 @@ const DeedsDashboard: React.FC<{ currentUserRole?: string }> = ({ currentUserRol
     };
 
     return (
-        <div className="space-y-8 animate-in fade-in duration-500 font-cairo text-right" dir="rtl">
-             {/* Header */}
+        // Added ID here to target specific print area
+        <div id="printable-dashboard" className="space-y-8 animate-in fade-in duration-500 font-cairo text-right" dir="rtl">
+             
+             {/* --- Print Only Header (يظهر فقط في الـ PDF) --- */}
+             <div className="hidden print:flex flex-col items-center justify-center mb-8 border-b-2 border-gray-100 pb-6">
+                <h1 className="text-3xl font-black text-[#1B2B48] mb-2">تقرير سجل الإفراغات</h1>
+                <div className="flex gap-4 text-sm text-gray-500">
+                    <span>تاريخ التقرير: {new Date().toLocaleDateString('ar-SA')}</span>
+                    <span>|</span>
+                    <span>عدد السجلات: {filteredDeeds.length}</span>
+                </div>
+             </div>
+
+             {/* Header Section (Hidden in Print) */}
              <div className="flex flex-col md:flex-row justify-between items-center gap-4 no-print">
                 <div>
                     <h2 className="text-2xl font-black text-[#1B2B48]">سجل الإفراغات</h2>
@@ -111,8 +123,8 @@ const DeedsDashboard: React.FC<{ currentUserRole?: string }> = ({ currentUserRol
                 </div>
             </div>
 
-            {/* KPIs */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 no-print">
+            {/* KPIs (Visible in Print but simplified) */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 <KPICard title="إجمالي الطلبات" value={stats.total} icon={<FileStack size={24}/>} color="text-[#1B2B48]" bg="bg-white" />
                 <KPICard title="تم الإفراغ" value={stats.completed} icon={<CheckCircle size={24}/>} color="text-green-600" bg="bg-green-50" />
                 <KPICard title="قيد المعالجة" value={stats.processing} icon={<Clock size={24}/>} color="text-blue-600" bg="bg-blue-50" />
@@ -120,7 +132,7 @@ const DeedsDashboard: React.FC<{ currentUserRole?: string }> = ({ currentUserRol
             </div>
 
             {/* Table */}
-            <div className="bg-white rounded-[30px] border border-gray-100 shadow-sm overflow-hidden">
+            <div className="bg-white rounded-[30px] border border-gray-100 shadow-sm overflow-hidden print:border-none print:shadow-none">
                 <div className="flex justify-between items-center p-6 border-b border-gray-100 no-print">
                     <div className="relative w-full max-w-md">
                         <Search className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
@@ -129,7 +141,7 @@ const DeedsDashboard: React.FC<{ currentUserRole?: string }> = ({ currentUserRol
                 </div>
                 <div className="overflow-x-auto">
                     <table className="w-full">
-                        <thead className="bg-gray-50/50 border-b border-gray-100">
+                        <thead className="bg-gray-50/50 border-b border-gray-100 print:bg-gray-100">
                             <tr className="text-right text-gray-400 text-xs font-black">
                                 <th className="p-6">العميل</th>
                                 <th className="p-6">الهوية</th>
@@ -143,7 +155,7 @@ const DeedsDashboard: React.FC<{ currentUserRole?: string }> = ({ currentUserRol
                                 <React.Fragment key={deed.id}>
                                     <tr className={`hover:bg-gray-50 cursor-pointer transition-colors ${expandedRows.has(deed.id) ? 'bg-blue-50/10' : ''}`} onClick={() => toggleRow(deed.id)}>
                                         <td className="p-6 font-bold text-[#1B2B48] flex items-center gap-3">
-                                            <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-500"><UserIcon size={14}/></div>
+                                            <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 no-print"><UserIcon size={14}/></div>
                                             {deed.clientName}
                                         </td>
                                         <td className="p-6 text-sm font-mono font-bold text-gray-500">{deed.idNumber}</td>
@@ -151,13 +163,14 @@ const DeedsDashboard: React.FC<{ currentUserRole?: string }> = ({ currentUserRol
                                         <td className="p-6"><span className={`px-3 py-1 rounded-lg text-[10px] font-black border ${getStatusColor(deed.status)}`}>{deed.status}</span></td>
                                         <td className="p-6 text-gray-400 no-print">{expandedRows.has(deed.id) ? <ChevronUp size={18}/> : <ChevronDown size={18}/>}</td>
                                     </tr>
+                                    {/* Accordion Content - Always expanded in print if needed, currently conditional */}
                                     {expandedRows.has(deed.id) && (
                                         <tr className="bg-gray-50/30 animate-in fade-in">
-                                            <td colSpan={5} className="p-6">
-                                                <div className="bg-white rounded-2xl border border-gray-100 p-6">
+                                            <td colSpan={6} className="p-6">
+                                                <div className="bg-white rounded-2xl border border-gray-100 p-6 print:border-black">
                                                     <h4 className="text-xs font-black text-[#1B2B48] mb-4 flex items-center gap-2"><Building2 size={16}/> الوحدات المرتبطة</h4>
                                                     {deed.units.map(unit => (
-                                                        <div key={unit.id} className="flex justify-between items-center p-4 bg-gray-50 rounded-xl border border-gray-100 mb-2">
+                                                        <div key={unit.id} className="flex justify-between items-center p-4 bg-gray-50 rounded-xl border border-gray-100 mb-2 print:bg-white print:border-b print:rounded-none">
                                                             <span className="font-bold text-sm text-[#1B2B48]">وحدة {unit.number} <span className="text-gray-400 text-xs">({unit.type})</span></span>
                                                             <span className="font-mono font-bold text-[#1B2B48]">{unit.price} ر.س</span>
                                                         </div>
@@ -173,7 +186,7 @@ const DeedsDashboard: React.FC<{ currentUserRole?: string }> = ({ currentUserRol
                 </div>
             </div>
 
-            {/* --- نافذة تسجيل إفراغ جديد (18 حقل كاملة) --- */}
+            {/* --- نافذة تسجيل إفراغ جديد (18 حقل) --- */}
             {isModalOpen && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[#1B2B48]/60 backdrop-blur-sm no-print">
                     <div className="bg-white rounded-[30px] w-full max-w-6xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col animate-in zoom-in-95 duration-200">
@@ -190,7 +203,7 @@ const DeedsDashboard: React.FC<{ currentUserRole?: string }> = ({ currentUserRol
                         
                         <div className="p-8 overflow-y-auto custom-scrollbar flex-1 bg-gray-50/30">
                             <div className="space-y-8">
-                                {/* القسم 1: بيانات المستفيد (4 خانات) */}
+                                {/* القسم 1: بيانات المستفيد */}
                                 <div>
                                     <SectionHeader title="بيانات المستفيد" icon={<UserIcon size={18} className="text-blue-500"/>} color="border-blue-500"/>
                                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
@@ -201,7 +214,7 @@ const DeedsDashboard: React.FC<{ currentUserRole?: string }> = ({ currentUserRol
                                     </div>
                                 </div>
 
-                                {/* القسم 2: بيانات العقار والوحدة (7 خانات) - تمت إضافة رقم القطعة */}
+                                {/* القسم 2: بيانات العقار */}
                                 <div>
                                     <SectionHeader title="بيانات العقار والوحدة" icon={<Building2 size={18} className="text-green-500"/>} color="border-green-500"/>
                                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
@@ -209,21 +222,21 @@ const DeedsDashboard: React.FC<{ currentUserRole?: string }> = ({ currentUserRol
                                         <Select label="مدينة العقار" options={['الرياض', 'جدة', 'الدمام', 'مكة المكرمة']} />
                                         <Select label="اسم المشروع" options={PROJECTS_LIST} />
                                         <Input label="رقم المخطط" placeholder="مثال: 3045/أ" />
-                                        <Input label="رقم القطعة" placeholder="مثال: 543" /> {/* <-- خانة جديدة */}
+                                        <Input label="رقم القطعة" placeholder="مثال: 543" /> 
                                         <Input label="رقم الوحدة" placeholder="مثال: A-101" icon={<MapPin size={16}/>} />
                                         <Input label="قيمة الوحدة" placeholder="0.00" type="number" icon={<CreditCard size={16}/>} suffix="ر.س" />
                                     </div>
                                 </div>
 
-                                {/* القسم 3: البيانات المالية والصك (7 خانات) - تمت إضافة الصك الجديد وتاريخه */}
+                                {/* القسم 3: البيانات المالية والصك */}
                                 <div>
                                     <SectionHeader title="البيانات المالية والصكوك" icon={<ShieldCheck size={18} className="text-purple-500"/>} color="border-purple-500"/>
                                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
                                         <Input label="رقم الصك (الأساس)" placeholder="XXXXXXXXXXXX" />
                                         <Input label="تاريخ الصك (الأساس)" type="date" />
                                         
-                                        <Input label="رقم الصك الجديد" placeholder="XXXXXXXXXXXX" /> {/* <-- خانة جديدة */}
-                                        <Input label="تاريخ الصك الجديد" type="date" /> {/* <-- خانة جديدة */}
+                                        <Input label="رقم الصك الجديد" placeholder="XXXXXXXXXXXX" />
+                                        <Input label="تاريخ الصك الجديد" type="date" />
 
                                         <Input label="الرقم الضريبي" placeholder="3XXXXXXXXXXXXX" type="number" />
                                         <Select label="الجهة التمويلية" options={BANKS_LIST} />
@@ -243,11 +256,38 @@ const DeedsDashboard: React.FC<{ currentUserRole?: string }> = ({ currentUserRol
                 </div>
             )}
 
+            {/* Smart Print Logic: Hides everything on body and only shows this component cleanly */}
             <style>{`
                 @media print {
-                    .no-print { display: none !important; }
-                    body { background: white; -webkit-print-color-adjust: exact; }
-                    .shadow-sm, .shadow-lg { box-shadow: none !important; }
+                    body * {
+                        visibility: hidden;
+                    }
+                    #printable-dashboard, #printable-dashboard * {
+                        visibility: visible;
+                    }
+                    #printable-dashboard {
+                        position: absolute;
+                        left: 0;
+                        top: 0;
+                        width: 100%;
+                        background: white;
+                        padding: 20px;
+                        margin: 0;
+                    }
+                    .no-print { 
+                        display: none !important; 
+                    }
+                    .shadow-sm, .shadow-lg, .shadow-2xl {
+                        box-shadow: none !important;
+                    }
+                    /* Ensure table fits */
+                    table { width: 100%; }
+                    
+                    /* Reset background colors for print to save ink/clean look */
+                    .bg-gray-50, .bg-blue-50, .bg-green-50, .bg-red-50 {
+                        background-color: white !important;
+                        border: 1px solid #eee;
+                    }
                 }
             `}</style>
         </div>
