@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, ReactNode, useMemo } from 'react';
 import { 
   LayoutDashboard, Users, FileText, LogOut, 
@@ -7,7 +6,8 @@ import {
   Edit3, AlertCircle, Building2,
   Briefcase, User as UserIcon, ShieldCheck, 
   Search, FileStack, CheckCircle, Clock, ChevronDown, ChevronUp, X, LayoutList, Printer,
-  Calendar, Hash, Phone, MapPin, CreditCard, UserCheck, AlertTriangle, WifiOff
+  Calendar, Hash, Phone, MapPin, CreditCard, UserCheck, AlertTriangle, WifiOff,
+  ClipboardList, Ruler 
 } from 'lucide-react';
 import { supabase } from './supabaseClient';
 import * as XLSX from 'xlsx';
@@ -19,59 +19,12 @@ import {
   DAR_LOGO
 } from './constants';
 import Modal from './components/Modal';
+
+// --- استيراد المكونات الفرعية (تم تصحيح المسار) ---
 import ClearanceModule from './components/ClearanceModule';
 import TechnicalModule from './components/TechnicalModule';
 import ProjectsModule from './components/ProjectsModule';
-
-// --- CONSTANTS & MOCKS FOR DEEDS ---
-const BANKS_LIST = ['مصرف الراجحي', 'البنك الأهلي', 'بنك الرياض', 'مصرف الإنماء', 'بنك البلاد'];
-const LOCATIONS_ORDER = ['المنطقة الوسطى', 'المنطقة الغربية', 'المنطقة الشرقية', 'المنطقة الشمالية', 'المنطقة الجنوبي'];
-
-interface Unit {
-  id: string;
-  number: string;
-  type: string;
-  price: string;
-  status: 'متاح' | 'محجوز' | 'مباع';
-}
-
-interface DeedRequest {
-  id: number;
-  clientName: string;
-  idNumber: string;
-  projectName: string;
-  status: 'جديد' | 'قيد المعالجة' | 'منجز' | 'مطلوب تعديل';
-  date: string;
-  units: Unit[];
-}
-
-const MOCK_DEEDS: DeedRequest[] = [
-  {
-    id: 1,
-    clientName: "أحمد بن محمد القحطاني",
-    idNumber: "1098273645",
-    projectName: "مشروع دار الصفوة - متعدد",
-    status: "منجز",
-    date: "2024/05/12",
-    units: [
-      { id: 'u1', number: 'A-101', type: 'شقة سكنية', status: 'مباع', price: '850,000' },
-      { id: 'u2', number: 'Park-05', type: 'موقف خاص', status: 'مباع', price: '25,000' }
-    ]
-  },
-  {
-    id: 2,
-    clientName: "شركة الرؤية العقارية",
-    idNumber: "7001928374",
-    projectName: "مشروع لؤلؤة جدة",
-    status: "قيد المعالجة",
-    date: "2024/05/14",
-    units: [
-      { id: 'u3', number: 'Villa-09', type: 'فيلا دوبلكس', status: 'محجوز', price: '1,200,000' },
-      { id: 'u4', number: 'Villa-10', type: 'فيلا دوبلكس', status: 'محجوز', price: '1,200,000' },
-      { id: 'u5', number: 'Villa-11', type: 'فيلا منفصلة', status: 'متاح', price: '1,800,000' }
-    ]
-  }
-];
+import DeedsDashboard from './components/DeedsDashboard'; // <--- تم التصحيح هنا
 
 const STORAGE_KEYS = {
     SIDEBAR_COLLAPSED: 'dar_sidebar_v2_collapsed',
@@ -91,212 +44,16 @@ class ErrorBoundary extends React.Component<{ children: ReactNode }, { hasError:
     if (this.state.hasError) return <div className="min-h-screen flex items-center justify-center text-red-500 font-bold bg-white p-10 text-center flex-col gap-4">
       <AlertTriangle size={48} />
       <h2 className="text-2xl font-black">حدث خطأ غير متوقع</h2>
-      <p>يرجى تحديث الصفحة أو المحاولة لاحقاً.</p>
       <button onClick={() => window.location.reload()} className="bg-[#1B2B48] text-white px-8 py-3 rounded-2xl font-bold">تحديث الصفحة</button>
     </div>;
     return this.props.children;
   }
 }
 
-// --- NEW COMPONENT: DEEDS DASHBOARD ---
-const DeedsDashboard: React.FC = () => {
-    const [searchQuery, setSearchQuery] = useState('');
-    const [isModalOpen, setIsModalOpen] = useState(false);
-    const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
-    const [deeds] = useState<DeedRequest[]>(MOCK_DEEDS);
-
-    const toggleRow = (id: number) => {
-        const newExpanded = new Set(expandedRows);
-        if (newExpanded.has(id)) newExpanded.delete(id);
-        else newExpanded.add(id);
-        setExpandedRows(newExpanded);
-    };
-
-    const filteredDeeds = useMemo(() => {
-        return deeds.filter(d => 
-            d.clientName.includes(searchQuery) || 
-            d.idNumber.includes(searchQuery) || 
-            d.projectName.includes(searchQuery)
-        );
-    }, [deeds, searchQuery]);
-
-    const kpis = useMemo(() => ({
-        total: deeds.length,
-        completed: deeds.filter(d => d.status === 'منجز').length,
-        processing: deeds.filter(d => d.status === 'قيد المعالجة').length,
-        pending: deeds.filter(d => d.status === 'جديد' || d.status === 'مطلوب تعديل').length,
-    }), [deeds]);
-
-    const getStatusColor = (status: string) => {
-        switch(status) {
-            case 'منجز': return 'bg-green-50 text-green-700 border-green-200';
-            case 'قيد المعالجة': return 'bg-blue-50 text-blue-700 border-blue-200';
-            case 'مطلوب تعديل': return 'bg-orange-50 text-orange-700 border-orange-200';
-            default: return 'bg-gray-50 text-gray-700 border-gray-200';
-        }
-    };
-
-    const SectionHeader = ({title, icon, color}: any) => (
-        <div className={`flex items-center gap-2 border-r-4 ${color} pr-3`}>
-            {icon}
-            <h4 className="text-sm font-black text-[#1B2B48] uppercase">{title}</h4>
-        </div>
-    );
-    const FormInput = ({ label, type = 'text', icon, suffix }: any) => (
-        <div className="space-y-2">
-            <label className="text-[10px] font-bold text-gray-400">{label}</label>
-            <div className="relative">
-                {icon && <div className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">{icon}</div>}
-                <input type={type} className={`w-full ${icon ? 'pr-10' : 'pr-4'} ${suffix ? 'pl-10' : 'pl-4'} py-3 bg-white border border-gray-200 rounded-xl focus:border-[#E95D22] outline-none text-sm font-bold text-[#1B2B48] transition-all`} />
-                {suffix && <div className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-400">{suffix}</div>}
-            </div>
-        </div>
-    );
-    const FormSelect = ({ label, options }: any) => (
-        <div className="space-y-2">
-            <label className="text-[10px] font-bold text-gray-400">{label}</label>
-            <div className="relative">
-                <select className="w-full pr-4 pl-10 py-3 bg-white border border-gray-200 rounded-xl focus:border-[#E95D22] outline-none text-sm font-bold text-[#1B2B48] appearance-none">
-                    <option value="">اختر...</option>
-                    {options.map((o: string) => <option key={o} value={o}>{o}</option>)}
-                </select>
-                <ChevronDown className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={16}/>
-            </div>
-        </div>
-    );
-    const KPICard = ({ title, value, icon, color, bg }: any) => (
-        <div className={`${bg} p-6 rounded-2xl border border-gray-100/50 shadow-sm flex items-center justify-between`}>
-            <div><p className="text-[10px] font-bold text-gray-400 uppercase mb-1">{title}</p><h3 className={`text-2xl font-black ${color}`}>{value}</h3></div>
-            <div className={`p-3 rounded-xl bg-white/60 ${color}`}>{icon}</div>
-        </div>
-    );
-
-    return (
-        <div className="space-y-6 animate-in fade-in duration-500">
-             <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-                <div className="flex items-center gap-3 w-full md:w-auto">
-                    <button onClick={() => setIsModalOpen(true)} className="flex items-center gap-2 px-6 py-3 bg-[#E95D22] text-white rounded-xl font-bold text-sm hover:brightness-110 shadow-lg shadow-orange-100 transition-all active:scale-95">
-                        <Plus size={18} /> تسجيل إفراغ جديد
-                    </button>
-                    <button onClick={() => alert('جار تحميل ملف Excel')} className="p-3 bg-white border border-gray-200 text-green-600 rounded-xl hover:bg-green-50 transition-all"><LayoutList size={20} /></button>
-                    <button onClick={() => alert('جار تحميل ملف PDF')} className="p-3 bg-white border border-gray-200 text-blue-600 rounded-xl hover:bg-blue-50 transition-all"><Printer size={20} /></button>
-                </div>
-                <div className="relative w-full md:w-96">
-                    <Search className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-                    <input type="text" placeholder="بحث برقم الهوية أو اسم العميل..." className="w-full pr-12 pl-4 py-3 bg-white rounded-xl border border-gray-200 focus:border-[#E95D22] outline-none transition-all font-semibold text-sm" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
-                </div>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <KPICard title="إجمالي الطلبات" value={kpis.total} icon={<FileStack size={20}/>} color="text-[#1B2B48]" bg="bg-white" />
-                <KPICard title="تم الإفراغ" value={kpis.completed} icon={<CheckCircle size={20}/>} color="text-green-600" bg="bg-green-50" />
-                <KPICard title="تحت الإجراء" value={kpis.processing} icon={<Clock size={20}/>} color="text-blue-600" bg="bg-blue-50" />
-                <KPICard title="تنبيهات" value={kpis.pending} icon={<AlertCircle size={20}/>} color="text-red-500" bg="bg-red-50" />
-            </div>
-
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-                <table className="w-full">
-                    <thead className="bg-gray-50 border-b border-gray-100">
-                        <tr className="text-right text-gray-400 text-xs uppercase tracking-wider">
-                            <th className="p-5 font-bold">العميل</th>
-                            <th className="p-5 font-bold">رقم الهوية</th>
-                            <th className="p-5 font-bold">المشروع</th>
-                            <th className="p-5 font-bold">الوحدات</th>
-                            <th className="p-5 font-bold">الحالة</th>
-                            <th className="p-5"></th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-50">
-                        {filteredDeeds.map((deed) => (
-                            <React.Fragment key={deed.id}>
-                                <tr className={`transition-all hover:bg-gray-50 cursor-pointer ${expandedRows.has(deed.id) ? 'bg-orange-50/10' : ''}`} onClick={() => toggleRow(deed.id)}>
-                                    <td className="p-5 font-bold text-[#1B2B48] flex items-center gap-3">
-                                        <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 text-xs"><UserIcon size={14}/></div>
-                                        {deed.clientName}
-                                    </td>
-                                    <td className="p-5 text-sm font-mono text-gray-500">{deed.idNumber}</td>
-                                    <td className="p-5 text-sm font-semibold text-gray-600">{deed.projectName}</td>
-                                    <td className="p-5"><span className="px-3 py-1 bg-gray-100 rounded-lg text-xs font-bold text-gray-600">{deed.units.length} وحدات</span></td>
-                                    <td className="p-5"><span className={`px-3 py-1 rounded-full text-[10px] font-bold border ${getStatusColor(deed.status)}`}>{deed.status}</span></td>
-                                    <td className="p-5 text-gray-400">{expandedRows.has(deed.id) ? <ChevronUp size={18} className="text-[#E95D22]"/> : <ChevronDown size={18}/>}</td>
-                                </tr>
-                                {expandedRows.has(deed.id) && (
-                                    <tr className="bg-gray-50/50 animate-in fade-in duration-200">
-                                        <td colSpan={6} className="p-4 pr-16">
-                                            <div className="bg-white rounded-xl border border-gray-200 p-4">
-                                                <h4 className="text-xs font-bold text-gray-400 mb-3 uppercase tracking-wider flex items-center gap-2"><Building2 size={14}/> تفاصيل الوحدات التابعة للعميل</h4>
-                                                <table className="w-full text-sm text-right">
-                                                    <thead><tr className="text-gray-400 text-[10px]"><th className="pb-2">رقم الوحدة</th><th className="pb-2">النوع</th><th className="pb-2">السعر</th><th className="pb-2">الحالة</th></tr></thead>
-                                                    <tbody>
-                                                        {deed.units.map(unit => (
-                                                            <tr key={unit.id} className="border-t border-gray-50">
-                                                                <td className="py-2 font-bold text-[#1B2B48]">{unit.number}</td>
-                                                                <td className="py-2 text-gray-500">{unit.type}</td>
-                                                                <td className="py-2 text-gray-500 font-mono">{unit.price} ر.س</td>
-                                                                <td className="py-2"><span className={`text-[10px] px-2 py-0.5 rounded border ${unit.status === 'مباع' ? 'bg-green-50 text-green-600 border-green-100' : 'bg-orange-50 text-orange-600 border-orange-100'}`}>{unit.status}</span></td>
-                                                            </tr>
-                                                        ))}
-                                                    </tbody>
-                                                </table>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                )}
-                            </React.Fragment>
-                        ))}
-                    </tbody>
-                </table>
-            </div>
-
-            {isModalOpen && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[#1B2B48]/50 backdrop-blur-sm animate-in fade-in">
-                    <div className="bg-white rounded-3xl w-full max-w-6xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
-                        <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50">
-                            <div className="flex items-center gap-3"><div className="p-2 bg-[#E95D22] text-white rounded-lg"><Plus size={20} /></div><div><h3 className="text-xl font-black text-[#1B2B48]">تسجيل إفراغ جديد</h3></div></div>
-                            <button onClick={() => setIsModalOpen(false)} className="p-2 text-gray-400 hover:bg-red-50 hover:text-red-500 rounded-lg transition-all"><X size={24} /></button>
-                        </div>
-                        <div className="p-8 overflow-y-auto custom-scrollbar flex-1">
-                            <div className="space-y-8">
-                                <SectionHeader title="بيانات المستفيد" icon={<UserCheck size={18} className="text-blue-500"/>} color="border-blue-500"/>
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
-                                    <FormInput label="اسم المستفيد" icon={<UserIcon size={16}/>} />
-                                    <FormInput label="رقم الهوية" type="number" icon={<Hash size={16}/>} />
-                                    <FormInput label="رقم الجوال" type="tel" icon={<Phone size={16}/>} />
-                                    <FormInput label="تاريخ الميلاد (هجري)" icon={<Calendar size={16}/>} />
-                                </div>
-                                <SectionHeader title="بيانات العقار" icon={<Building2 size={18} className="text-green-500"/>} color="border-green-500"/>
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-                                    <FormSelect label="المنطقة" options={LOCATIONS_ORDER} />
-                                    <FormSelect label="المدينة" options={['الرياض', 'جدة', 'الدمام']} />
-                                    <FormSelect label="المشروع" options={['مشروع دار الصفوة', 'مشروع لؤلؤة جدة']} />
-                                    <FormInput label="رقم المخطط" />
-                                    <FormInput label="رقم الوحدة" icon={<MapPin size={16}/>} />
-                                    <FormInput label="قيمة الوحدة" type="number" icon={<CreditCard size={16}/>} suffix="ر.س" />
-                                </div>
-                                <SectionHeader title="البيانات المالية والصك" icon={<ShieldCheck size={18} className="text-purple-500"/>} color="border-purple-500"/>
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
-                                    <FormInput label="رقم الصك" />
-                                    <FormInput label="تاريخ الصك" type="date" />
-                                    <FormInput label="الرقم الضريبي" />
-                                    <FormSelect label="الجهة التمويلية" options={BANKS_LIST} />
-                                    <FormSelect label="نوع العقد" options={['مرابحة', 'إجارة', 'كاش']} />
-                                </div>
-                            </div>
-                        </div>
-                        <div className="p-6 border-t border-gray-100 bg-gray-50 flex justify-end gap-3">
-                            <button onClick={() => setIsModalOpen(false)} className="px-6 py-3 border border-gray-200 text-gray-500 rounded-xl font-bold text-sm hover:bg-white transition-all">إلغاء</button>
-                            <button onClick={() => { alert("تم الحفظ!"); setIsModalOpen(false); }} className="px-8 py-3 bg-[#E95D22] text-white rounded-xl font-bold text-sm shadow-lg hover:bg-[#d14d15] transition-all flex items-center gap-2"><CheckCircle2 size={18} /> حفظ السجل</button>
-                        </div>
-                    </div>
-                </div>
-            )}
-        </div>
-    );
-};
-
-// --- MAIN APP COMPONENT ---
+// --- المكون الرئيسي للتطبيق ---
 
 const AppContent: React.FC = () => {
+  // --- State Variables ---
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [technicalRequests, setTechnicalRequests] = useState<TechnicalRequest[]>([]);
   const [clearanceRequests, setClearanceRequests] = useState<ClearanceRequest[]>([]);
@@ -317,11 +74,15 @@ const AppContent: React.FC = () => {
   const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [loginData, setLoginData] = useState({ email: 'adaldawsari@darwaemaar.com', password: '' });
 
+  // Modals State
   const [isBulkUploadModalOpen, setIsBulkUploadModalOpen] = useState(false);
   const [isEditProjectModalOpen, setIsEditProjectModalOpen] = useState(false);
+  
+  // Edit Form State
   const [editProjectForm, setEditProjectForm] = useState<any>({});
   const [bulkProject, setBulkProject] = useState('');
 
+  // --- Derived Data ---
   const projectInternalWorks = useMemo(() => 
     selectedProject ? technicalRequests.filter(r => r.project_name === selectedProject.name && r.scope === 'INTERNAL_WORK') : []
   , [technicalRequests, selectedProject]);
@@ -340,6 +101,7 @@ const AppContent: React.FC = () => {
     clearRequests: clearanceRequests.length
   }), [projects.length, technicalRequests.length, clearanceRequests.length]);
 
+  // --- Helper Functions ---
   const canAccess = (allowedRoles: string[]) => {
     return currentUser && allowedRoles.includes(currentUser.role);
   };
@@ -393,6 +155,7 @@ const AppContent: React.FC = () => {
         const mappedProjects = pRes.data.map((p: any) => ({
           ...p,
           name: p.client || p.title || p.name || 'مشروع جديد',
+          // MAPPING ALL DETAILS
           consultant_name: p.consultant_name,
           consultant_engineer: p.consultant_engineer,
           consultant_mobile: p.consultant_mobile,
@@ -402,9 +165,16 @@ const AppContent: React.FC = () => {
           electricity_contractor: p.electricity_contractor,
           electricity_contractor_engineer: p.electricity_contractor_engineer,
           electricity_contractor_mobile: p.electricity_contractor_mobile,
+          // Stats Mapping
+          units_count: p.units_count || p.details?.unitsCount || 0,
+          electricity_meters: p.electricity_meters || p.details?.electricityMetersCount || 0,
+          water_meters: p.water_meters || p.details?.waterMetersCount || 0,
+          building_permits: p.building_permits || p.details?.buildingPermitsCount || 0,
+          occupancy_certificates: p.occupancy_certificates || p.details?.occupancyCertificatesCount || 0,
           survey_decisions_count: p.survey_decisions_count || p.details?.surveyDecisionsCount || 0
         }));
         setProjects(mappedProjects);
+        
         if (selectedProject) {
             const updated = mappedProjects.find((px: any) => px.id === selectedProject.id);
             if (updated) setSelectedProject(updated);
@@ -459,9 +229,7 @@ const AppContent: React.FC = () => {
   };
 
   const handleLogout = async () => {
-    try {
-        await supabase.auth.signOut();
-    } catch (e) { console.error(e); }
+    try { await supabase.auth.signOut(); } catch (e) { console.error(e); }
     setCurrentUser(null);
     safeStorage.removeItem(STORAGE_KEYS.USER_CACHE);
     setView('LOGIN');
@@ -472,6 +240,11 @@ const AppContent: React.FC = () => {
     try {
         const directUpdate = {
             survey_decisions_count: editProjectForm.surveyDecisionsCount,
+            units_count: editProjectForm.unitsCount,
+            electricity_meters: editProjectForm.electricityMetersCount,
+            water_meters: editProjectForm.waterMetersCount,
+            building_permits: editProjectForm.buildingPermitsCount,
+            occupancy_certificates: editProjectForm.occupancyCertificatesCount,
             consultant_name: editProjectForm.consultant_name,
             consultant_engineer: editProjectForm.consultant_engineer,
             consultant_mobile: editProjectForm.consultant_mobile,
@@ -530,21 +303,6 @@ const AppContent: React.FC = () => {
     return total > 0 ? Math.round(([...tech, ...clear].filter(r => r.status === 'completed' || r.status === 'منجز').length / total) * 100) : 0;
   };
 
-  // --- Render logic for Error states ---
-  const ErrorScreen = () => (
-    <div className="flex-1 flex flex-col items-center justify-center p-12 text-center bg-gray-50 animate-in fade-in">
-        <div className="bg-red-100 p-6 rounded-full text-red-600 mb-6 shadow-sm"><WifiOff size={48}/></div>
-        <h2 className="text-2xl font-black text-[#1B2B48] mb-3">عذراً، تعذر الاتصال بالخادم</h2>
-        <p className="text-gray-500 mb-8 max-w-md font-bold leading-relaxed">{errorState}</p>
-        <button 
-            onClick={() => { setErrorState(null); fetchAllData(); }} 
-            className="flex items-center gap-3 px-10 py-4 bg-[#1B2B48] text-white rounded-[25px] font-black shadow-xl hover:scale-105 transition-all active:scale-95"
-        >
-            <RefreshCw size={20} className={isDbLoading ? 'animate-spin' : ''} /> إعادة المحاولة
-        </button>
-    </div>
-  );
-
   if (isAuthLoading) return <div className="min-h-screen flex items-center justify-center bg-gray-50"><Loader2 className="animate-spin text-[#E95D22] w-12 h-12" /></div>;
 
   if (view === 'LOGIN' && !currentUser) return (
@@ -562,6 +320,7 @@ const AppContent: React.FC = () => {
 
   return (
     <div className="flex h-screen bg-[#f8f9fa] font-cairo overflow-hidden" dir="rtl">
+      
       <aside className={`bg-[#1B2B48] text-white flex flex-col transition-all duration-300 ${isSidebarCollapsed ? 'w-24' : 'w-72 shadow-2xl z-30'}`}>
         <div className="p-8 border-b border-white/5 flex flex-col items-center"><img src={DAR_LOGO} className={isSidebarCollapsed ? 'h-10' : 'h-24'} alt="Logo" /></div>
         <nav className="flex-1 p-4 space-y-3">
@@ -595,9 +354,19 @@ const AppContent: React.FC = () => {
 
         <div className="flex-1 overflow-y-auto p-12 bg-[#f8f9fa]">
           {isDbLoading ? <div className="h-full flex flex-col items-center justify-center"><Loader2 className="animate-spin text-[#E95D22] w-12 h-12" /></div> : 
-           errorState ? <ErrorScreen /> : (
+           errorState ? (
+            <div className="flex-1 flex flex-col items-center justify-center p-12 text-center bg-gray-50 animate-in fade-in">
+                <div className="bg-red-100 p-6 rounded-full text-red-600 mb-6 shadow-sm"><WifiOff size={48}/></div>
+                <h2 className="text-2xl font-black text-[#1B2B48] mb-3">عذراً، تعذر الاتصال بالخادم</h2>
+                <p className="text-gray-500 mb-8 max-w-md font-bold leading-relaxed">{errorState}</p>
+                <button onClick={() => { setErrorState(null); fetchAllData(); }} className="flex items-center gap-3 px-10 py-4 bg-[#1B2B48] text-white rounded-[25px] font-black shadow-xl hover:scale-105 transition-all active:scale-95">
+                    <RefreshCw size={20} className={isDbLoading ? 'animate-spin' : ''} /> إعادة المحاولة
+                </button>
+            </div>
+           ) : (
             <div className="max-w-7xl mx-auto space-y-8">
               
+              {/* === DASHBOARD VIEW (Projects) === */}
               {view === 'DASHBOARD' && !selectedProject && (
                 <ProjectsModule 
                   projects={projects.map(p => ({...p, progress: getProjectProgress(p.name)}))}
@@ -608,6 +377,7 @@ const AppContent: React.FC = () => {
                 />
               )}
 
+              {/* === PROJECT DETAIL VIEW === */}
               {selectedProject && view === 'PROJECT_DETAIL' && (
                 <div className="animate-in fade-in slide-in-from-bottom-4 space-y-8">
                   <div className="bg-white p-8 rounded-[40px] shadow-sm border border-gray-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
@@ -621,13 +391,22 @@ const AppContent: React.FC = () => {
                             <button onClick={() => { 
                                 setEditProjectForm({
                                     ...selectedProject.details, 
+                                    // Mapping for Edit Form
                                     surveyDecisionsCount: selectedProject['survey_decisions_count'],
+                                    unitsCount: selectedProject['units_count'],
+                                    electricityMetersCount: selectedProject['electricity_meters'],
+                                    waterMetersCount: selectedProject['water_meters'],
+                                    buildingPermitsCount: selectedProject['building_permits'],
+                                    occupancyCertificatesCount: selectedProject['occupancy_certificates'],
+                                    
                                     consultant_name: selectedProject['consultant_name'],
                                     consultant_engineer: selectedProject['consultant_engineer'],
                                     consultant_mobile: selectedProject['consultant_mobile'],
+                                    
                                     water_contractor: selectedProject['water_contractor'],
                                     water_contractor_engineer: selectedProject['water_contractor_engineer'],
                                     water_contractor_mobile: selectedProject['water_contractor_mobile'],
+                                    
                                     electricity_contractor: selectedProject['electricity_contractor'],
                                     electricity_contractor_engineer: selectedProject['electricity_contractor_engineer'],
                                     electricity_contractor_mobile: selectedProject['electricity_contractor_mobile'],
@@ -635,6 +414,10 @@ const AppContent: React.FC = () => {
                                 setIsEditProjectModalOpen(true); 
                             }} className="p-2 text-gray-400 hover:text-[#E95D22] hover:bg-orange-50 rounded-full transition-all"><Edit3 size={20} /></button>
                           )}
+                        </div>
+                        <div className="flex items-center gap-2 text-gray-400">
+                          <MapPin size={16} className="text-[#E95D22]" /> 
+                          <span>{selectedProject.location || 'الرياض'}</span>
                         </div>
                     </div>
                   </div>
@@ -647,23 +430,101 @@ const AppContent: React.FC = () => {
                   </div>
 
                   <div className="animate-in fade-in duration-300">
+                    {/* === TAB 1: BASIC INFO (Fully Restored) === */}
                     {projectTab === 'info' && (
                       <div className="space-y-8 animate-in fade-in duration-300">
+                        {/* Stats Cards */}
                         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-6 text-right" dir="rtl">
                             {[
                                 { label: 'الوحدات', icon: Building2, value: selectedProject['units_count'] || 0, color: 'text-blue-600', bg: 'bg-blue-50' },
                                 { label: 'الكهرباء', icon: Zap, value: selectedProject['electricity_meters'] || 0, color: 'text-amber-500', bg: 'bg-amber-50' },
                                 { label: 'المياه', icon: Droplets, value: selectedProject['water_meters'] || 0, color: 'text-cyan-500', bg: 'bg-cyan-50' },
+                                { label: 'رخص البناء', icon: ClipboardList, value: selectedProject['building_permits'] || 0, color: 'text-indigo-600', bg: 'bg-indigo-50' },
+                                { label: 'الأشغال', icon: ShieldCheck, value: selectedProject['occupancy_certificates'] || 0, color: 'text-emerald-600', bg: 'bg-emerald-50' },
+                                { label: 'المساحة', icon: Ruler, value: selectedProject['survey_decisions_count'] || 0, color: 'text-rose-600', bg: 'bg-rose-50' },
                             ].map((m, idx) => (
                                 <div key={idx} className="bg-white p-6 rounded-[30px] border border-gray-100 shadow-sm flex flex-col items-center justify-center hover:scale-105 transition-transform">
                                     <div className={`w-12 h-12 ${m.bg} ${m.color} rounded-2xl flex items-center justify-center mb-3`}><m.icon size={24} /></div>
+                                    <p className="text-[10px] text-gray-400 font-black uppercase tracking-tight">{m.label}</p>
                                     <p className="text-3xl font-black text-[#1B2B48] mt-1">{m.value}</p>
-                                    <p className="text-xs font-bold text-gray-400">{m.label}</p>
                                 </div>
                             ))}
                         </div>
+
+                        {/* Details Cards: Consultant & Contractors */}
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            {/* Consultant Card */}
+                            <div className="bg-white p-6 rounded-[30px] border border-gray-100 shadow-sm relative overflow-hidden group">
+                                <div className="absolute top-0 right-0 w-2 h-full bg-[#1B2B48]"></div>
+                                <div className="flex items-center gap-3 mb-6 pb-4 border-b border-gray-50">
+                                    <div className="p-3 bg-gray-50 text-[#1B2B48] rounded-2xl"><Briefcase size={20}/></div>
+                                    <h3 className="font-bold text-lg text-[#1B2B48]">المكتب الاستشاري</h3>
+                                </div>
+                                <div className="space-y-4">
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-gray-400 text-xs font-bold">اسم المكتب</span>
+                                        <span className="font-bold text-[#1B2B48]">{selectedProject['consultant_name'] || '-'}</span>
+                                    </div>
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-gray-400 text-xs font-bold">المهندس المسؤول</span>
+                                        <span className="font-bold text-[#1B2B48]">{selectedProject['consultant_engineer'] || '-'}</span>
+                                    </div>
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-gray-400 text-xs font-bold">رقم التواصل</span>
+                                        <span className="font-bold text-[#1B2B48] dir-ltr">{selectedProject['consultant_mobile'] || '-'}</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Electricity Contractor Card */}
+                            <div className="bg-white p-6 rounded-[30px] border border-gray-100 shadow-sm relative overflow-hidden group">
+                                <div className="absolute top-0 right-0 w-2 h-full bg-amber-400"></div>
+                                <div className="flex items-center gap-3 mb-6 pb-4 border-b border-gray-50">
+                                    <div className="p-3 bg-amber-50 text-amber-600 rounded-2xl"><Zap size={20}/></div>
+                                    <h3 className="font-bold text-lg text-[#1B2B48]">مقاول الكهرباء</h3>
+                                </div>
+                                <div className="space-y-4">
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-gray-400 text-xs font-bold">الجهة المنفذة</span>
+                                        <span className="font-bold text-[#1B2B48]">{selectedProject['electricity_contractor'] || '-'}</span>
+                                    </div>
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-gray-400 text-xs font-bold">المهندس المسؤول</span>
+                                        <span className="font-bold text-[#1B2B48]">{selectedProject['electricity_contractor_engineer'] || '-'}</span>
+                                    </div>
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-gray-400 text-xs font-bold">رقم التواصل</span>
+                                        <span className="font-bold text-[#1B2B48] dir-ltr">{selectedProject['electricity_contractor_mobile'] || '-'}</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Water Contractor Card */}
+                            <div className="bg-white p-6 rounded-[30px] border border-gray-100 shadow-sm relative overflow-hidden group">
+                                <div className="absolute top-0 right-0 w-2 h-full bg-cyan-400"></div>
+                                <div className="flex items-center gap-3 mb-6 pb-4 border-b border-gray-50">
+                                    <div className="p-3 bg-cyan-50 text-cyan-600 rounded-2xl"><Droplets size={20}/></div>
+                                    <h3 className="font-bold text-lg text-[#1B2B48]">مقاول المياه</h3>
+                                </div>
+                                <div className="space-y-4">
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-gray-400 text-xs font-bold">الجهة المنفذة</span>
+                                        <span className="font-bold text-[#1B2B48]">{selectedProject['water_contractor'] || '-'}</span>
+                                    </div>
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-gray-400 text-xs font-bold">المهندس المسؤول</span>
+                                        <span className="font-bold text-[#1B2B48]">{selectedProject['water_contractor_engineer'] || '-'}</span>
+                                    </div>
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-gray-400 text-xs font-bold">رقم التواصل</span>
+                                        <span className="font-bold text-[#1B2B48] dir-ltr">{selectedProject['water_contractor_mobile'] || '-'}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                       </div>
                     )}
+
                     {projectTab === 'work' && <TechnicalModule requests={projectInternalWorks} projects={[selectedProject]} currentUser={currentUser} usersList={usersList} onRefresh={fetchAllData} filteredByProject={selectedProject.name} scopeFilter="INTERNAL_WORK" />}
                     {projectTab === 'tech' && <TechnicalModule requests={projectExternalTechRequests} projects={[selectedProject]} currentUser={currentUser} usersList={usersList} onRefresh={fetchAllData} filteredByProject={selectedProject.name} scopeFilter="EXTERNAL" />}
                     {projectTab === 'clearance' && <ClearanceModule requests={projectClearanceRequests} projects={[selectedProject]} currentUser={currentUser} usersList={usersList} onRefresh={fetchAllData} filteredByProject={selectedProject.name} />}
@@ -671,14 +532,17 @@ const AppContent: React.FC = () => {
                 </div>
               )}
 
+              {/* === عرض الطلبات الفنية (العام) === */}
               {view === 'TECHNICAL_SERVICES' && !selectedProject && (
                   <TechnicalModule requests={technicalRequests.filter(r => r.scope !== 'INTERNAL_WORK')} projects={projects} currentUser={currentUser} usersList={usersList} onRefresh={fetchAllData} />
               )}
 
+              {/* === عرض لوحة الإفراغات (الجديد المستقل) === */}
               {view === 'CONVEYANCE_SERVICES' && !selectedProject && (
-                  <DeedsDashboard />
+                  <DeedsDashboard currentUserRole={currentUser.role} />
               )}
 
+              {/* === عرض إدارة الفريق === */}
               {view === 'USERS' && !selectedProject && (
                   <div className="bg-white rounded-[40px] p-8 shadow-sm border border-gray-100 animate-in fade-in">
                       <h2 className="text-2xl font-black mb-6 text-[#1B2B48]">إدارة فريق العمل</h2>
@@ -708,9 +572,67 @@ const AppContent: React.FC = () => {
       <Modal isOpen={isEditProjectModalOpen} onClose={() => setIsEditProjectModalOpen(false)} title="تعديل تفاصيل المشروع">
         <div className="space-y-6 text-right font-cairo">
              <div className="grid grid-cols-2 gap-4">
-               <input type="number" placeholder="عدد الوحدات" className="w-full p-4 bg-gray-50 border rounded-2xl" value={editProjectForm.unitsCount || 0} onChange={e => setEditProjectForm({...editProjectForm, unitsCount: parseInt(e.target.value)})} />
+               {/* --- الحقول المستعادة للتعديل --- */}
+               <div className="space-y-1">
+                  <label className="text-xs text-gray-400 font-bold block mb-1">عدد الوحدات</label>
+                  <input type="number" className="w-full p-4 bg-gray-50 border rounded-2xl font-bold" value={editProjectForm.unitsCount || 0} onChange={e => setEditProjectForm({...editProjectForm, unitsCount: parseInt(e.target.value)})} />
+               </div>
+               <div className="space-y-1">
+                  <label className="text-xs text-gray-400 font-bold block mb-1">عدادات الكهرباء</label>
+                  <input type="number" className="w-full p-4 bg-gray-50 border rounded-2xl font-bold" value={editProjectForm.electricityMetersCount || 0} onChange={e => setEditProjectForm({...editProjectForm, electricityMetersCount: parseInt(e.target.value)})} />
+               </div>
+               <div className="space-y-1">
+                  <label className="text-xs text-gray-400 font-bold block mb-1">عدادات المياه</label>
+                  <input type="number" className="w-full p-4 bg-gray-50 border rounded-2xl font-bold" value={editProjectForm.waterMetersCount || 0} onChange={e => setEditProjectForm({...editProjectForm, waterMetersCount: parseInt(e.target.value)})} />
+               </div>
+               <div className="space-y-1">
+                  <label className="text-xs text-gray-400 font-bold block mb-1">رخص البناء</label>
+                  <input type="number" className="w-full p-4 bg-gray-50 border rounded-2xl font-bold" value={editProjectForm.buildingPermitsCount || 0} onChange={e => setEditProjectForm({...editProjectForm, buildingPermitsCount: parseInt(e.target.value)})} />
+               </div>
+               <div className="space-y-1">
+                  <label className="text-xs text-gray-400 font-bold block mb-1">شهادات الأشغال</label>
+                  <input type="number" className="w-full p-4 bg-gray-50 border rounded-2xl font-bold" value={editProjectForm.occupancyCertificatesCount || 0} onChange={e => setEditProjectForm({...editProjectForm, occupancyCertificatesCount: parseInt(e.target.value)})} />
+               </div>
+               <div className="space-y-1">
+                  <label className="text-xs text-gray-400 font-bold block mb-1">قرارات المساحة</label>
+                  <input type="number" className="w-full p-4 bg-gray-50 border rounded-2xl font-bold" value={editProjectForm.surveyDecisionsCount || 0} onChange={e => setEditProjectForm({...editProjectForm, surveyDecisionsCount: parseInt(e.target.value)})} />
+               </div>
              </div>
-             <button onClick={handleUpdateProjectDetails} className="w-full bg-[#1B2B48] text-white py-5 rounded-[25px] font-black shadow-xl mt-4">حفظ التغييرات</button>
+             
+             {/* --- حقول الاستشاري والمقاولين للتعديل --- */}
+             <div className="border-t border-gray-100 pt-4 mt-4 space-y-6">
+                {/* مكتب الاستشاري */}
+                <div className="space-y-3 p-4 bg-gray-50 rounded-2xl border border-gray-100">
+                    <div className="flex items-center gap-2 mb-1 text-[#1B2B48] font-bold"><Briefcase size={18}/><span>المكتب الاستشاري</span></div>
+                    <input placeholder="اسم المكتب" className="w-full p-3 bg-white rounded-xl border" value={editProjectForm.consultant_name || ''} onChange={e => setEditProjectForm({...editProjectForm, consultant_name: e.target.value})} />
+                    <div className="grid grid-cols-2 gap-3">
+                        <input placeholder="المهندس" className="w-full p-3 bg-white rounded-xl border" value={editProjectForm.consultant_engineer || ''} onChange={e => setEditProjectForm({...editProjectForm, consultant_engineer: e.target.value})} />
+                        <input placeholder="الجوال" className="w-full p-3 bg-white rounded-xl border" value={editProjectForm.consultant_mobile || ''} onChange={e => setEditProjectForm({...editProjectForm, consultant_mobile: e.target.value})} />
+                    </div>
+                </div>
+
+                {/* مقاول الكهرباء */}
+                <div className="space-y-3 p-4 bg-amber-50 rounded-2xl border border-amber-100">
+                    <div className="flex items-center gap-2 mb-1 text-amber-700 font-bold"><Zap size={18}/><span>مقاول الكهرباء</span></div>
+                    <input placeholder="اسم المقاول" className="w-full p-3 bg-white rounded-xl border" value={editProjectForm.electricity_contractor || ''} onChange={e => setEditProjectForm({...editProjectForm, electricity_contractor: e.target.value})} />
+                    <div className="grid grid-cols-2 gap-3">
+                        <input placeholder="المهندس" className="w-full p-3 bg-white rounded-xl border" value={editProjectForm.electricity_contractor_engineer || ''} onChange={e => setEditProjectForm({...editProjectForm, electricity_contractor_engineer: e.target.value})} />
+                        <input placeholder="الجوال" className="w-full p-3 bg-white rounded-xl border" value={editProjectForm.electricity_contractor_mobile || ''} onChange={e => setEditProjectForm({...editProjectForm, electricity_contractor_mobile: e.target.value})} />
+                    </div>
+                </div>
+
+                {/* مقاول المياه */}
+                <div className="space-y-3 p-4 bg-cyan-50 rounded-2xl border border-cyan-100">
+                    <div className="flex items-center gap-2 mb-1 text-cyan-700 font-bold"><Droplets size={18}/><span>مقاول المياه</span></div>
+                    <input placeholder="اسم المقاول" className="w-full p-3 bg-white rounded-xl border" value={editProjectForm.water_contractor || ''} onChange={e => setEditProjectForm({...editProjectForm, water_contractor: e.target.value})} />
+                    <div className="grid grid-cols-2 gap-3">
+                        <input placeholder="المهندس" className="w-full p-3 bg-white rounded-xl border" value={editProjectForm.water_contractor_engineer || ''} onChange={e => setEditProjectForm({...editProjectForm, water_contractor_engineer: e.target.value})} />
+                        <input placeholder="الجوال" className="w-full p-3 bg-white rounded-xl border" value={editProjectForm.water_contractor_mobile || ''} onChange={e => setEditProjectForm({...editProjectForm, water_contractor_mobile: e.target.value})} />
+                    </div>
+                </div>
+             </div>
+
+             <button onClick={handleUpdateProjectDetails} className="w-full bg-[#1B2B48] text-white py-5 rounded-[25px] font-black shadow-xl mt-4 hover:brightness-110 active:scale-95 transition-all">حفظ التغييرات</button>
         </div>
       </Modal>
 
