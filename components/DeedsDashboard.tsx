@@ -1,12 +1,13 @@
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import * as XLSX from 'xlsx'; 
+import { supabase } from '../supabaseClient'; // استيراد العميل للاتصال بقاعدة البيانات
 import { 
-  FileText, Plus, Search, CheckCircle, Clock, 
+  Plus, Search, CheckCircle, Clock, 
   AlertCircle, FileStack, ChevronDown, ChevronUp, 
   X, Printer, User as UserIcon, Building2,
-  CheckCircle2, LayoutList, FileSpreadsheet,
-  CreditCard, Calendar, Hash, Phone, MapPin, Filter,
-  ShieldCheck, Edit2, Send, MessageSquare, Info, UploadCloud
+  CheckCircle2, FileSpreadsheet,
+  CreditCard, Calendar, Hash, Phone, MapPin,
+  ShieldCheck, Send, MessageSquare, Info, UploadCloud
 } from 'lucide-react';
 
 // --- Types ---
@@ -23,45 +24,140 @@ const BANKS_LIST = ['مصرف الراجحي', 'البنك الأهلي', 'بن�
 const LOCATIONS_ORDER = ['المنطقة الوسطى', 'المنطقة الغربية', 'المنطقة الشرقية', 'المنطقة الشمالية', 'المنطقة الجنوبي'];
 const PROJECTS_LIST = ['سرايا الجوان', 'سرايا البدر', 'حي الصحافة', 'الأرجس ريزيدنس', 'مشروع شمس الرياض'];
 
-// بيانات تجريبية
-const MOCK_DEEDS = [
-  {
-    id: 1, 
-    clientName: "أحمد بن محمد القحطاني", 
-    idNumber: "1098273645", 
-    mobile: "0551234567",
-    dob: "1405/01/01",
-    projectName: "سرايا الجوان", 
-    status: "منجز", 
-    date: "2024/05/12",
-    region: "المنطقة الوسطى",
-    city: "الرياض",
-    planNumber: "3045/أ",
-    unitNumber: "A-101",
-    unitValue: "850,000",
-    unitType: "شقة",
-    oldDeedNumber: "4102938475",
-    oldDeedDate: "1444/05/10",
-    newDeedNumber: "9102938400",
-    newDeedDate: "1445/11/12",
-    taxNumber: "300123456700003",
-    bank: "مصرف الراجحي",
-    contractType: "مرابحة",
-    comments: [{ id: 1, text: "تم استلام الصك الأساسي", author: "نورة المالكي", role: "Conveyance", date: "10:30 AM" }]
-  }
-];
-
 const DeedsDashboard: React.FC<{ currentUserRole?: string, currentUserName?: string }> = ({ currentUserRole, currentUserName }) => {
     const [searchQuery, setSearchQuery] = useState('');
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
-    const [deeds, setDeeds] = useState(MOCK_DEEDS);
+    const [deeds, setDeeds] = useState<any[]>([]); // نبدأ بمصفوفة فارغة لجلب البيانات من القاعدة
     const [commentInputs, setCommentInputs] = useState<{[key: number]: string}>({});
     
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [newDeedForm, setNewDeedForm] = useState<any>({});
 
     const canEditStatus = ['PR_MANAGER', 'PR_OFFICER', 'ADMIN'].includes(currentUserRole || '');
+
+    // --- 1. جلب البيانات من Supabase عند فتح الصفحة ---
+    useEffect(() => {
+        const fetchDeeds = async () => {
+            const { data, error } = await supabase
+                .from('deeds_requests')
+                .select('*')
+                .order('created_at', { ascending: false });
+
+            if (error) {
+                console.error('Error fetching deeds:', error);
+            } else if (data) {
+                // تحويل بيانات قاعدة البيانات (snake_case) إلى بيانات التطبيق (camelCase)
+                const formattedDeeds = data.map((d: any) => ({
+                    id: d.id,
+                    clientName: d.client_name,
+                    idNumber: d.id_number,
+                    mobile: d.mobile,
+                    dob: d.dob,
+                    region: d.region,
+                    city: d.city,
+                    projectName: d.project_name,
+                    planNumber: d.plan_number,
+                    plotNumber: d.plot_number,
+                    unitNumber: d.unit_number,
+                    unitValue: d.unit_value,
+                    oldDeedNumber: d.old_deed_number,
+                    oldDeedDate: d.old_deed_date,
+                    newDeedNumber: d.new_deed_number,
+                    newDeedDate: d.new_deed_date,
+                    taxNumber: d.tax_number,
+                    bank: d.bank_name,
+                    contractType: d.contract_type,
+                    status: d.status,
+                    date: new Date(d.created_at).toLocaleDateString('en-CA'), // تنسيق التاريخ
+                    units: [{ 
+                        id: `u-${d.id}`, 
+                        number: d.unit_number || '-', 
+                        type: 'وحدة', 
+                        status: 'متاح', 
+                        price: d.unit_value ? Number(d.unit_value).toLocaleString() : '0' 
+                    }],
+                    comments: [] // التعليقات يمكن جلبها في مرحلة لاحقة أو عبر Join
+                }));
+                setDeeds(formattedDeeds);
+            }
+        };
+
+        fetchDeeds();
+    }, []); // تعمل مرة واحدة عند التحميل
+
+    // --- 2. دالة الحفظ في Supabase (تستخدم لليدوي وللاكسل) ---
+    const saveToSupabase = async (newDeedsData: any[]) => {
+        try {
+            // تحويل البيانات لتناسب أعمدة قاعدة البيانات
+            const dbData = newDeedsData.map(d => ({
+                client_name: d.clientName,
+                id_number: d.idNumber,
+                mobile: d.mobile,
+                dob: d.dob,
+                region: d.region,
+                city: d.city,
+                project_name: d.projectName,
+                plan_number: d.planNumber,
+                plot_number: d.plotNumber,
+                unit_number: d.unitNumber,
+                // إزالة الفواصل من السعر لتحويله لرقم
+                unit_value: d.unitValue ? parseFloat(String(d.unitValue).replace(/,/g, '')) : 0,
+                old_deed_number: d.oldDeedNumber,
+                old_deed_date: d.oldDeedDate,
+                new_deed_number: d.newDeedNumber,
+                new_deed_date: d.newDeedDate,
+                tax_number: d.taxNumber,
+                bank_name: d.bank,
+                contract_type: d.contractType,
+                status: 'جديد',
+                submitted_by: currentUserName // اسم الموظف الحالي (مثل: مساعد العقيل)
+            }));
+
+            const { data, error } = await supabase
+                .from('deeds_requests')
+                .insert(dbData)
+                .select(); // لاسترجاع الـ ID الحقيقي
+
+            if (error) throw error;
+
+            alert('تم الحفظ في قاعدة البيانات بنجاح ✅');
+            
+            // تحديث القائمة المحلية بالبيانات الجديدة من السيرفر (لضمان وجود الـ ID)
+            if (data) {
+                const newEntries = data.map((d: any) => ({
+                    id: d.id,
+                    clientName: d.client_name,
+                    idNumber: d.id_number,
+                    mobile: d.mobile,
+                    dob: d.dob,
+                    region: d.region,
+                    city: d.city,
+                    projectName: d.project_name,
+                    planNumber: d.plan_number,
+                    plotNumber: d.plot_number,
+                    unitNumber: d.unit_number,
+                    unitValue: d.unit_value,
+                    oldDeedNumber: d.old_deed_number,
+                    oldDeedDate: d.old_deed_date,
+                    newDeedNumber: d.new_deed_number,
+                    newDeedDate: d.new_deed_date,
+                    taxNumber: d.tax_number,
+                    bank: d.bank_name,
+                    contractType: d.contract_type,
+                    status: d.status,
+                    date: new Date(d.created_at).toLocaleDateString('en-CA'),
+                    units: [{ id: `u-${d.id}`, number: d.unit_number, type: 'وحدة', status: 'متاح', price: d.unit_value }],
+                    comments: []
+                }));
+                setDeeds(prev => [...newEntries, ...prev]);
+            }
+
+        } catch (error: any) {
+            console.error('Error saving to DB:', error.message);
+            alert('حدث خطأ أثناء الحفظ في قاعدة البيانات: ' + error.message);
+        }
+    };
 
     const filteredDeeds = useMemo(() => {
         return deeds.filter(d => 
@@ -78,55 +174,40 @@ const DeedsDashboard: React.FC<{ currentUserRole?: string, currentUserName?: str
         actionRequired: deeds.filter(d => d.status === 'مطلوب تعديل' || d.status === 'جديد' || d.status === 'مرفوض').length,
     }), [deeds]);
 
-    // --- دالة الاستيراد المحسنة (تدعم اللغة العربية 100%) ---
+    // --- دالة الاستيراد من Excel ---
     const handleImportExcel = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
 
         const reader = new FileReader();
-        
-        // استخدام ArrayBuffer بدلاً من BinaryString لحل مشاكل الترميز العربي
-        reader.readAsArrayBuffer(file);
+        reader.readAsArrayBuffer(file); // لدعم اللغة العربية
 
-        reader.onload = (evt) => {
+        reader.onload = async (evt) => {
             try {
                 const data = new Uint8Array(evt.target?.result as ArrayBuffer);
                 const wb = XLSX.read(data, { type: 'array' });
                 const ws = wb.Sheets[wb.SheetNames[0]];
-                const jsonData: any[] = XLSX.utils.sheet_to_json(ws); // قراءة تلقائية من الصف الأول
+                const jsonData: any[] = XLSX.utils.sheet_to_json(ws);
 
                 if (jsonData.length === 0) {
-                    alert("الملف فارغ!");
-                    return;
+                    alert("الملف فارغ!"); return;
                 }
 
-                // التحقق الذكي من العناوين (Fuzzy Matching)
                 const firstRow = jsonData[0];
                 const headers = Object.keys(firstRow);
-                
-                // دالة مساعدة للبحث عن العمود بغض النظر عن المسافات الزائدة
-                const findCol = (possibleNames: string[]) => {
-                    return headers.find(h => possibleNames.includes(h.trim()));
-                };
+                const findCol = (possibleNames: string[]) => headers.find(h => possibleNames.includes(h.trim()));
 
                 const nameKey = findCol(['اسم المستفيد', 'اسم العميل', 'الاسم', 'Client Name']);
                 const idKey = findCol(['رقم الهوية', 'الهوية', 'ID']);
 
                 if (!nameKey || !idKey) {
-                    alert(`فشل الاستيراد.\nلم يتم العثور على عمود "اسم المستفيد" أو "رقم الهوية".\nالأعمدة الموجودة في ملفك هي:\n[ ${headers.join(' , ')} ]`);
-                    return;
+                    alert("فشل الاستيراد. لم يتم العثور على عمود الاسم أو الهوية."); return;
                 }
 
-                const importedDeeds = jsonData.map((row: any, index: number) => ({
-                    id: Date.now() + index,
-                    status: 'جديد',
-                    date: new Date().toLocaleDateString('en-CA'),
-                    
-                    // استخدام المفاتيح التي تم العثور عليها
+                const importedDeeds = jsonData.map((row: any) => ({
+                    // نجهز البيانات بشكل مؤقت قبل إرسالها لـ Supabase
                     clientName: row[nameKey!] || '',
                     idNumber: String(row[idKey!] || ''),
-                    
-                    // باقي الحقول (محاولة المطابقة)
                     mobile: String(row[findCol(['رقم الجوال', 'الجوال']) || ''] || ''),
                     dob: row[findCol(['تاريخ الميلاد (هجري)', 'تاريخ الميلاد']) || ''] || '',
                     region: row[findCol(['المنطقة']) || ''] || '',
@@ -136,32 +217,25 @@ const DeedsDashboard: React.FC<{ currentUserRole?: string, currentUserName?: str
                     plotNumber: row[findCol(['رقم القطعة', 'القطعة']) || ''] || '',
                     unitNumber: row[findCol(['رقم الوحدة', 'الوحدة']) || ''] || '',
                     unitValue: row[findCol(['قيمة الوحدة', 'القيمة']) || ''] || '',
-                    
                     oldDeedNumber: row[findCol(['رقم الصك (الأساس)', 'رقم الصك']) || ''] || '',
                     oldDeedDate: row[findCol(['تاريخ الصك (الأساس)', 'تاريخ الصك']) || ''] || '',
                     newDeedNumber: row[findCol(['رقم الصك الجديد']) || ''] || '',
                     newDeedDate: row[findCol(['تاريخ الصك الجديد']) || ''] || '',
-                    
                     taxNumber: row[findCol(['الرقم الضريبي', 'الضريبة']) || ''] || '',
                     bank: row[findCol(['الجهة التمويلية', 'البنك']) || ''] || '',
                     contractType: row[findCol(['نوع العقد', 'العقد']) || ''] || '',
+                })).filter(d => d.clientName && d.idNumber);
 
-                    units: [{ 
-                        id: `u-${Date.now()}-${index}`, 
-                        number: row[findCol(['رقم الوحدة', 'الوحدة']) || ''] || '-', 
-                        type: 'وحدة', 
-                        status: 'متاح', 
-                        price: row[findCol(['قيمة الوحدة', 'القيمة']) || ''] || '0' 
-                    }],
-                    comments: []
-                }));
-
-                setDeeds([...importedDeeds, ...deeds]);
-                alert(`تم بنجاح استيراد ${importedDeeds.length} سجل ✅`);
+                if (importedDeeds.length > 0) {
+                    // الحفظ الفعلي في القاعدة
+                    await saveToSupabase(importedDeeds);
+                } else {
+                    alert("لم يتم العثور على بيانات صالحة.");
+                }
 
             } catch (error) {
                 console.error(error);
-                alert("حدث خطأ غير متوقع أثناء قراءة الملف.");
+                alert("حدث خطأ أثناء قراءة الملف.");
             }
             if (fileInputRef.current) fileInputRef.current.value = '';
         };
@@ -171,23 +245,26 @@ const DeedsDashboard: React.FC<{ currentUserRole?: string, currentUserName?: str
         setNewDeedForm({ ...newDeedForm, [key]: value });
     };
 
-    const handleSaveNewDeed = () => {
+    // --- دالة الحفظ اليدوي ---
+    const handleSaveNewDeed = async () => {
         if (!newDeedForm.clientName || !newDeedForm.idNumber) {
             alert("يرجى إدخال اسم العميل ورقم الهوية على الأقل");
             return;
         }
-        const newDeed = {
-            id: Date.now(),
+        
+        // تجهيز البيانات للحفظ
+        const deedToSave = {
             ...newDeedForm,
-            status: 'جديد',
-            date: new Date().toLocaleDateString('en-CA'),
-            units: [{ id: `u-${Date.now()}`, number: newDeedForm.unitNumber || '-', type: 'وحدة', status: 'متاح', price: newDeedForm.unitValue || '0' }],
-            comments: []
+            // التأكد من تعبئة باقي الحقول بقيم نصية لتجنب المشاكل
+            mobile: newDeedForm.mobile || '',
+            unitValue: newDeedForm.unitValue || '0',
         };
-        setDeeds([newDeed, ...deeds]);
+
+        // الحفظ في القاعدة
+        await saveToSupabase([deedToSave]);
+        
         setIsModalOpen(false);
         setNewDeedForm({});
-        alert("تم إضافة الطلب بنجاح");
     };
 
     const handleAddComment = (deedId: number) => {
@@ -259,7 +336,6 @@ const DeedsDashboard: React.FC<{ currentUserRole?: string, currentUserName?: str
                     <p className="text-gray-400 text-xs font-bold mt-1">نظام إدارة الصكوك والعقود</p>
                 </div>
                 <div className="flex items-center gap-3">
-                    {/* زر استيراد Excel */}
                     <input type="file" ref={fileInputRef} className="hidden" accept=".xlsx, .xls, .csv" onChange={handleImportExcel} />
                     
                     <button onClick={() => fileInputRef.current?.click()} className="flex items-center gap-2 px-4 py-3 bg-white border border-gray-200 text-gray-700 rounded-xl hover:bg-gray-50 font-bold text-xs transition-all shadow-sm">
