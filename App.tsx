@@ -26,6 +26,7 @@ import ClearanceModule from './components/ClearanceModule';
 import TechnicalModule from './components/TechnicalModule';
 import ProjectsModule from './components/ProjectsModule';
 import DeedsDashboard from './components/DeedsDashboard';
+import AIAssistant from './components/AIAssistant';
 
 const STORAGE_KEYS = {
     SIDEBAR_COLLAPSED: 'dar_sidebar_v2_collapsed',
@@ -57,6 +58,7 @@ const AppContent: React.FC = () => {
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [technicalRequests, setTechnicalRequests] = useState<TechnicalRequest[]>([]);
   const [clearanceRequests, setClearanceRequests] = useState<ClearanceRequest[]>([]);
+  const [deedsRequests, setDeedsRequests] = useState<any[]>([]);
   const [deedsRequestsCount, setDeedsRequestsCount] = useState(0);
   const [appUsers, setAppUsers] = useState<any[]>([]);
   const [usersList, setUsersList] = useState<any[]>([]);
@@ -138,7 +140,7 @@ const AppContent: React.FC = () => {
         supabase.from('technical_requests').select('*').order('created_at', { ascending: false }),
         supabase.from('clearance_requests').select('*').order('created_at', { ascending: false }),
         supabase.from('profiles').select('*'),
-        supabase.from('deeds_requests').select('count', { count: 'exact', head: true })
+        supabase.from('deeds_requests').select('*').order('created_at', { ascending: false })
       ]);
 
       const [pRes, trRes, crRes, profilesRes, deedsRes] = results;
@@ -152,20 +154,15 @@ const AppContent: React.FC = () => {
         const mappedProjects = pRes.data.map((p: any) => ({
           ...p,
           name: p.client || p.title || p.name || 'مشروع جديد',
-          // جلب الحقول مع دعم التراجع لخانة details لضمان عدم فقدان البيانات القديمة
           consultant_name: p.consultant_name || p.details?.consultant_name || p.details?.consultantName,
           consultant_engineer: p.consultant_engineer || p.details?.consultant_engineer || p.details?.consultantEngineer,
           consultant_mobile: p.consultant_mobile || p.details?.consultant_mobile || p.details?.consultantMobile,
-          
           water_contractor: p.water_contractor || p.details?.water_contractor || p.details?.waterContractor,
           water_contractor_engineer: p.water_contractor_engineer || p.details?.water_contractor_engineer || p.details?.waterContractorEngineer,
           water_contractor_mobile: p.water_contractor_mobile || p.details?.water_contractor_mobile || p.details?.waterContractorMobile,
-          
           electricity_contractor: p.electricity_contractor || p.details?.electricity_contractor || p.details?.electricityContractor,
           electricity_contractor_engineer: p.electricity_contractor_engineer || p.details?.electricity_contractor_engineer || p.details?.electricityContractorEngineer,
           electricity_contractor_mobile: p.electricity_contractor_mobile || p.details?.electricity_contractor_mobile || p.details?.electricityContractorMobile,
-          
-          // الإحصائيات
           units_count: p.units_count || p.details?.unitsCount || 0,
           electricity_meters: p.electricity_meters || p.details?.electricityMetersCount || 0,
           water_meters: p.water_meters || p.details?.waterMetersCount || 0,
@@ -186,7 +183,10 @@ const AppContent: React.FC = () => {
           setAppUsers(profilesRes.data);
           setUsersList(profilesRes.data);
       }
-      if (deedsRes.count !== null) setDeedsRequestsCount(deedsRes.count);
+      if (deedsRes.data) {
+          setDeedsRequests(deedsRes.data);
+          setDeedsRequestsCount(deedsRes.data.length);
+      }
 
     } catch (e: any) { 
         setErrorState("تعذر جلب البيانات من الخادم. يرجى التأكد من اتصال الإنترنت.");
@@ -238,7 +238,6 @@ const AppContent: React.FC = () => {
   const handleUpdateProjectDetails = async () => {
     if (!selectedProject) return;
     try {
-        // تجهيز بيانات التحديث للأعمدة المباشرة في جدول المشاريع
         const directUpdate = {
             survey_decisions_count: editProjectForm.surveyDecisionsCount,
             units_count: editProjectForm.unitsCount,
@@ -246,18 +245,12 @@ const AppContent: React.FC = () => {
             water_meters: editProjectForm.waterMetersCount,
             building_permits: editProjectForm.buildingPermitsCount,
             occupancy_certificates: editProjectForm.occupancyCertificatesCount,
-            
-            // بيانات الاستشاري
             consultant_name: editProjectForm.consultant_name,
             consultant_engineer: editProjectForm.consultant_engineer,
             consultant_mobile: editProjectForm.consultant_mobile,
-            
-            // بيانات مقاول المياه
             water_contractor: editProjectForm.water_contractor,
             water_contractor_engineer: editProjectForm.water_contractor_engineer,
             water_contractor_mobile: editProjectForm.water_contractor_mobile,
-            
-            // بيانات مقاول الكهرباء
             electricity_contractor: editProjectForm.electricity_contractor,
             electricity_contractor_engineer: editProjectForm.electricity_contractor_engineer,
             electricity_contractor_mobile: editProjectForm.electricity_contractor_mobile,
@@ -387,7 +380,6 @@ const AppContent: React.FC = () => {
                           <h2 className="text-4xl font-black text-[#1B2B48] tracking-tight">{selectedProject.name}</h2>
                           {canAccess(['ADMIN', 'PR_MANAGER']) && (
                             <button onClick={() => { 
-                                // تهيئة النموذج بكافة الحقول لضمان ظهورها في نافذة التعديل
                                 setEditProjectForm({
                                     ...selectedProject, 
                                     surveyDecisionsCount: selectedProject['survey_decisions_count'],
@@ -396,7 +388,6 @@ const AppContent: React.FC = () => {
                                     waterMetersCount: selectedProject['water_meters'],
                                     buildingPermitsCount: selectedProject['building_permits'],
                                     occupancyCertificatesCount: selectedProject['occupancy_certificates'],
-                                    // بيانات الاستشاري والمقاولين
                                     consultant_name: selectedProject['consultant_name'] || '',
                                     consultant_engineer: selectedProject['consultant_engineer'] || '',
                                     consultant_mobile: selectedProject['consultant_mobile'] || '',
@@ -442,7 +433,6 @@ const AppContent: React.FC = () => {
                             ))}
                         </div>
 
-                        {/* بطاقات البيانات التفصيلية */}
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                             <div className="bg-white p-6 rounded-[30px] border border-gray-100 shadow-sm relative overflow-hidden group">
                                 <div className="absolute top-0 right-0 w-2 h-full bg-[#1B2B48]"></div>
@@ -526,6 +516,15 @@ const AppContent: React.FC = () => {
         </div>
       </main>
 
+      {currentUser && (
+        <AIAssistant 
+          projects={projects}
+          technicalRequests={technicalRequests}
+          clearanceRequests={clearanceRequests}
+          deedsRequests={deedsRequests}
+        />
+      )}
+
       <Modal isOpen={isEditProjectModalOpen} onClose={() => setIsEditProjectModalOpen(false)} title="تعديل تفاصيل المشروع">
         <div className="space-y-6 text-right font-cairo">
              <div className="grid grid-cols-2 gap-4">
@@ -558,7 +557,6 @@ const AppContent: React.FC = () => {
              <div className="space-y-4 border-t pt-4">
                 <h4 className="font-bold text-[#1B2B48] text-sm">بيانات الاستشاري والمقاولين</h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* الاستشاري */}
                   <div className="space-y-1">
                     <label className="text-xs text-gray-400 font-bold block mb-1">المكتب الاستشاري</label>
                     <input type="text" className="w-full p-4 bg-gray-50 border rounded-2xl font-bold" value={editProjectForm.consultant_name || ''} onChange={e => setEditProjectForm({...editProjectForm, consultant_name: e.target.value})} />
@@ -571,8 +569,6 @@ const AppContent: React.FC = () => {
                     <label className="text-xs text-gray-400 font-bold block mb-1">جوال الاستشاري</label>
                     <input type="text" className="w-full p-4 bg-gray-50 border rounded-2xl font-bold" value={editProjectForm.consultant_mobile || ''} onChange={e => setEditProjectForm({...editProjectForm, consultant_mobile: e.target.value})} />
                   </div>
-                  
-                  {/* مقاول الكهرباء */}
                   <div className="space-y-1">
                     <label className="text-xs text-gray-400 font-bold block mb-1">مقاول الكهرباء</label>
                     <input type="text" className="w-full p-4 bg-gray-50 border rounded-2xl font-bold" value={editProjectForm.electricity_contractor || ''} onChange={e => setEditProjectForm({...editProjectForm, electricity_contractor: e.target.value})} />
@@ -585,8 +581,6 @@ const AppContent: React.FC = () => {
                     <label className="text-xs text-gray-400 font-bold block mb-1">جوال مقاول الكهرباء</label>
                     <input type="text" className="w-full p-4 bg-gray-50 border rounded-2xl font-bold" value={editProjectForm.electricity_contractor_mobile || ''} onChange={e => setEditProjectForm({...editProjectForm, electricity_contractor_mobile: e.target.value})} />
                   </div>
-
-                  {/* مقاول المياه */}
                   <div className="space-y-1">
                     <label className="text-xs text-gray-400 font-bold block mb-1">مقاول المياه</label>
                     <input type="text" className="w-full p-4 bg-gray-50 border rounded-2xl font-bold" value={editProjectForm.water_contractor || ''} onChange={e => setEditProjectForm({...editProjectForm, water_contractor: e.target.value})} />
