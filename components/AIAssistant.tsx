@@ -1,5 +1,6 @@
+
 import React, { useState, useRef, useEffect } from 'react';
-import { X, Send, Sparkles, Bot, BarChart3, ArrowUpLeft, Search, Zap, CheckCircle2, AlertCircle } from 'lucide-react';
+import { X, Send, Sparkles, Bot, BarChart3, ArrowUpLeft, Search, Zap, CheckCircle2, AlertCircle, Clock } from 'lucide-react';
 
 interface AIAssistantProps {
   projects: any[];
@@ -28,11 +29,10 @@ const AIAssistant: React.FC<AIAssistantProps> = ({ projects, technicalRequests, 
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   
-  // رسالة ترحيبية ذكية ومتغيرة حسب الوقت
   const getGreeting = () => {
       const hour = new Date().getHours();
       const greeting = hour < 12 ? 'صباح الخير ☀️' : 'مساء الخير 🌙';
-      return `${greeting}، أنا مساعدك الذكي.\nاكتب اسم أي مشروع أو عميل وسأعطيك التفاصيل فوراً.`;
+      return `${greeting}، أنا مساعدك الذكي.\nيمكنك سؤالي عن مشروع محدد، أو طلب "ملخص النظام" أو "الأعمال المتابعة".`;
   };
 
   const [messages, setMessages] = useState<Message[]>([
@@ -45,108 +45,119 @@ const AIAssistant: React.FC<AIAssistantProps> = ({ projects, technicalRequests, 
   ]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, isTyping]);
+  useEffect(() => { 
+    if (isOpen) {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); 
+    }
+  }, [messages, isTyping, isOpen]);
 
-  // --- 🛠️ دالة تنظيف واستخراج اسم العمل ---
+  // --- دالة استخراج اسم العمل الحقيقي (حل مشكلة Untitled Work) ---
   const getWorkTitle = (work: any) => {
-      if (work.service_type) return work.service_type; // الأولوية لنوع الخدمة
+      if (work.service_type) return work.service_type;
       if (work.title) return work.title;
-      if (work.request_type) {
-          const map: any = { 'electricity': '⚡ كهرباء', 'water': '💧 مياه', 'paint': '🎨 دهانات', 'maintenance': '🔧 صيانة' };
-          return map[work.request_type] || work.request_type;
-      }
-      return work.description ? work.description.substring(0, 25) + '...' : 'عمل إداري/فني';
+      if (work.type) return work.type;
+      
+      // الترجمة اليدوية للحقول البرمجية الشائعة
+      const typeMap: Record<string, string> = {
+          'electricity': '⚡ أعمال الكهرباء',
+          'water': '💧 أعمال المياه',
+          'paint': '🎨 أعمال الدهانات',
+          'internal': '🏠 أعمال داخلية',
+          'external': '🏗️ أعمال خارجية'
+      };
+      
+      if (work.request_type && typeMap[work.request_type]) return typeMap[work.request_type];
+      if (work.request_type) return work.request_type;
+      
+      return work.description ? (work.description.substring(0, 30) + '...') : `مهمة رقم ${work.id}`;
   };
 
-  // --- 🧠 المحرك الذكي المطور (NLP-Lite) ---
+  // --- المحرك الذكي المطور ---
   const processQuery = (rawQuery: string) => {
     const query = rawQuery.toLowerCase().trim();
     let responseText = "";
     let actions: ActionButton[] = [];
 
-    // الكلمات المفتاحية للفهم (Keywords)
-    const intentProject = query.includes('مشروع') || query.includes('وضع') || query.includes('اخبار') || query.includes('تفاصيل') || query.includes('وش') || query.includes('ابي');
-    const intentDeed = query.includes('افراغ') || query.includes('صك') || query.includes('عميل') || query.includes('هوية');
-    const intentSummary = query.includes('ملخص') || query.includes('تقرير') || query.includes('حالة') || query.includes('عام');
+    // كلمات الفلترة
+    const isCompletedQuery = query.includes('منجز') || query.includes('تم') || query.includes('خالص');
+    const isPendingQuery = query.includes('متابعة') || query.includes('جاري') || query.includes('باقي') || query.includes('تحت');
 
-    // 1️⃣ البحث الذكي عن المشاريع (Fuzzy Search)
-    // نبحث عن أي مشروع يحتوي اسمه على جزء من نص المستخدم
-    const matchedProjects = projects.filter(p => query.includes(p.name.toLowerCase()) || p.name.toLowerCase().includes(query));
+    // 1️⃣ البحث عن مشروع محدد
+    const project = projects.find(p => query.includes(p.name.toLowerCase()) || query.includes((p.title || '').toLowerCase()));
     
-    // إذا وجدنا مشروعاً واحداً مطابقاً تماماً أو جزئياً
-    if (matchedProjects.length === 1) {
-        const project = matchedProjects[0];
+    if (project && !query.includes('ملخص عام')) {
+        const works = [...technicalRequests, ...clearanceRequests].filter(r => r.project_name === project.name || r.projectName === project.name);
         
-        // جلب الأعمال
-        const works = [...technicalRequests, ...clearanceRequests].filter(r => r.project_name === project.name);
-        
-        // تحليل الحالة
-        const completed = works.filter(w => w.status === 'completed' || w.status === 'منجز').length;
-        const pending = works.length - completed;
-        const completionRate = works.length > 0 ? Math.round((completed / works.length) * 100) : 0;
+        let displayedWorks = works;
+        let statusTitle = "جميع الأعمال";
 
-        // أهم 5 أعمال حديثة (غير المنجزة أولاً)
-        const recentWorks = works
-            .sort((a, b) => (a.status === 'completed' ? 1 : -1)) // ترتيب: غير المنجز أولاً
-            .slice(0, 5)
-            .map(w => `• ${getWorkTitle(w)} (${w.status === 'completed' || w.status === 'منجز' ? '✅' : '⏳'})`)
-            .join('\n');
+        if (isCompletedQuery) {
+            displayedWorks = works.filter(w => w.status === 'completed' || w.status === 'منجز');
+            statusTitle = "✅ الأعمال المنجزة";
+        } else if (isPendingQuery) {
+            displayedWorks = works.filter(w => w.status !== 'completed' && w.status !== 'منجز');
+            statusTitle = "⏳ الأعمال قيد المتابعة";
+        }
 
-        responseText = `🏗️ **${project.name}**\n` +
-                       `📍 ${project.location || 'الرياض'} | 📊 الإنجاز: ${completionRate}%\n` +
+        const completionRate = works.length > 0 ? Math.round((works.filter(w => w.status === 'completed' || w.status === 'منجز').length / works.length) * 100) : 0;
+
+        const listText = displayedWorks.slice(0, 8).map((w, i) => {
+            const title = getWorkTitle(w);
+            const statusIcon = (w.status === 'completed' || w.status === 'منجز') ? '✅' : '⏳';
+            return `${i+1}. ${title} ${statusIcon}`;
+        }).join('\n');
+
+        responseText = `🏗️ **تقرير مشروع: ${project.name}**\n` +
+                       `📍 الموقع: ${project.location || 'غير محدد'}\n` +
+                       `📊 نسبة الإنجاز: ${completionRate}%\n` +
                        `ــــــــــــــــــــــــــــــــــــــــــــــــ\n` +
-                       `⚡ **حالة الأعمال (${works.length}):**\n` +
-                       (recentWorks || "لا توجد أعمال مسجلة حالياً.") + 
-                       `\n\n💡 **المقاولين:**\n` + 
-                       `- كهرباء: ${project.electricity_contractor || 'غير محدد'}\n` +
-                       `- مياه: ${project.water_contractor || 'غير محدد'}`;
+                       `🔍 **${statusTitle} (${displayedWorks.length}):**\n` +
+                       (listText || "لا توجد سجلات في هذا التصنيف.") + 
+                       (displayedWorks.length > 8 ? `\n...و ${displayedWorks.length - 8} أخرى` : '');
 
-        actions.push({ label: `فتح ${project.name}`, type: 'PROJECT', data: project });
-    
+        actions.push({ label: `فتح ملف ${project.name}`, type: 'PROJECT', data: project });
     } 
-    // إذا وجدنا أكثر من مشروع (Ambiguous)
-    else if (matchedProjects.length > 1) {
-        responseText = "وجدنا أكثر من مشروع بهذا الاسم، أيهم تقصد؟ 👇";
-        matchedProjects.slice(0, 4).forEach(p => {
-            actions.push({ label: p.name, type: 'PROJECT', data: p });
-        });
+
+    // 2️⃣ ملخص حالة النظام (Dashboard Summary)
+    else if (query.includes('ملخص') || query.includes('حالة') || query.includes('تقرير')) {
+        const completedDeeds = deedsRequests.filter(d => d.status === 'منجز').length;
+        const pendingDeeds = deedsRequests.length - completedDeeds;
+        const completedTech = technicalRequests.filter(t => t.status === 'completed' || t.status === 'منجز').length;
+        const pendingTech = technicalRequests.length - completedTech;
+
+        responseText = `📊 **تقرير حالة النظام الحالية:**\n\n` +
+                       `📝 **سجل الإفراغات:**\n` +
+                       `- ✅ المنجز: ${completedDeeds}\n` +
+                       `- ⏳ المتابعة: ${pendingDeeds}\n\n` +
+                       `🔧 **الطلبات الفنية والأعمال:**\n` +
+                       `- ✅ المنجز: ${completedTech}\n` +
+                       `- ⏳ المتابعة: ${pendingTech}\n\n` +
+                       `هل تريد تفاصيل مشروع معين؟`;
     }
-    
-    // 2️⃣ البحث عن إفراغ (بالاسم أو الهوية)
-    else if (intentDeed || (!intentProject && !intentSummary && query.length > 2)) {
-        // محاولة البحث في الإفراغات حتى لو لم يكتب "إفراغ"
+
+    // 3️⃣ البحث عن إفراغ عميل
+    else if (query.includes('افراغ') || query.includes('إفراغ') || query.includes('عميل')) {
         const deed = deedsRequests.find(d => 
             query.includes(d.client_name?.toLowerCase()) || 
             query.includes(String(d.id_number))
         );
 
         if (deed) {
-            responseText = `👤 **العميل:** ${deed.client_name}\n` +
-                           `🆔 **الهوية:** ${deed.id_number}\n` +
-                           `🏠 **المشروع:** ${deed.project_name}\n` +
-                           `ــــــــــــــــــــــــــــــــــــــــــــــــ\n` +
-                           `📊 **الحالة:** ${deed.status} ${deed.status === 'منجز' ? '✅' : '⏳'}\n` +
-                           `💰 **القيمة:** ${Number(deed.unit_value).toLocaleString()} ر.س`;
+            responseText = `📄 **بيانات الإفراغ:**\n` +
+                           `👤 العميل: ${deed.client_name}\n` +
+                           `🏠 المشروع: ${deed.project_name}\n` +
+                           `📊 الحالة: ${deed.status}\n` +
+                           `📅 التاريخ: ${new Date(deed.created_at).toLocaleDateString('ar-SA')}`;
             
-            if (deed.sakani_support_number) responseText += `\n✅ **دعم سكني:** ${deed.sakani_support_number}`;
-            
-            actions.push({ label: 'عرض السجل', type: 'DEED', data: deed });
-        } else if (intentDeed) {
-            responseText = "لم أجد إفراغاً بهذا الاسم. تأكد من صحة الاسم أو رقم الهوية.";
+            actions.push({ label: 'عرض في سجل الإفراغات', type: 'DEED', data: deed });
+        } else {
+            responseText = "عذراً، لم أجد إفراغاً بهذا الاسم أو الهوية. يرجى التأكد من البيانات.";
         }
     }
 
-    // 3️⃣ الملخص العام (Fallback للإحصائيات)
-    if (!responseText && (intentSummary || query === 'ملخص')) {
-        const total = projects.length;
-        const deeds = deedsRequests.length;
-        const tech = technicalRequests.length;
-        responseText = `📊 **نظرة سريعة:**\n🏢 ${total} مشروع\n📝 ${deeds} إفراغ\n🔧 ${tech} طلب فني\n\nاكتب اسم أي مشروع للتفاصيل.`;
-    }
-
-    // 4️⃣ الرد الافتراضي (اقتراحات)
+    // 4️⃣ الرد الافتراضي
     if (!responseText) {
-        responseText = "لم أتعرف على هذا الاسم في النظام 🤔\nجرب كتابة اسم المشروع مباشرة (مثل: 'النرجس' أو 'سرايا') أو اسم العميل.";
+        responseText = "لم أفهم طلبك تماماً. جرب سؤالي عن:\n- ملخص عام للنظام\n- حالة مشروع معين (مثال: 'مشروع سرايا')\n- إفراغ عميل محدد بالاسم";
     }
 
     return { text: responseText, actions };
@@ -160,7 +171,6 @@ const AIAssistant: React.FC<AIAssistantProps> = ({ projects, technicalRequests, 
     setInput('');
     setIsTyping(true);
 
-    // محاكاة ذكية للتفكير (تأخير بسيط)
     setTimeout(() => {
         const { text, actions } = processQuery(textInput);
         const botMsg: Message = { 
@@ -172,103 +182,82 @@ const AIAssistant: React.FC<AIAssistantProps> = ({ projects, technicalRequests, 
         };
         setMessages(prev => [...prev, botMsg]);
         setIsTyping(false);
-    }, 700);
+    }, 600);
   };
 
   return (
     <>
-      <button onClick={() => setIsOpen(true)} className={`fixed bottom-6 left-6 z-50 bg-[#E95D22] text-white p-4 rounded-full shadow-2xl hover:scale-110 transition-transform duration-300 ${isOpen ? 'hidden' : 'flex'}`}>
+      <button 
+        onClick={() => setIsOpen(true)} 
+        className={`fixed bottom-6 left-6 z-50 bg-[#E95D22] text-white p-4 rounded-full shadow-2xl hover:scale-110 transition-transform duration-300 ${isOpen ? 'hidden' : 'flex'}`}
+      >
         <Sparkles size={28} className="animate-pulse" />
       </button>
 
       {isOpen && (
         <div className="fixed bottom-6 left-6 z-50 w-full max-w-sm bg-white rounded-[30px] shadow-2xl border border-gray-100 overflow-hidden flex flex-col animate-in slide-in-from-bottom-10 duration-300 h-[600px] max-h-[80vh] font-cairo" dir="rtl">
           
-          {/* Header */}
           <div className="bg-[#1B2B48] p-5 flex justify-between items-center text-white shadow-md">
             <div className="flex items-center gap-3">
-                <div className="bg-white/10 p-2 rounded-xl backdrop-blur-md relative">
+                <div className="bg-white/10 p-2 rounded-xl backdrop-blur-md">
                     <Bot size={24} className="text-[#E95D22]" />
-                    <span className="absolute top-0 right-0 w-2.5 h-2.5 bg-green-400 rounded-full border-2 border-[#1B2B48]"></span>
                 </div>
                 <div>
-                    <h3 className="font-bold text-lg">مساعدك الذكي</h3>
-                    <p className="text-[10px] text-gray-300 opacity-80">جاهز للإجابة...</p>
+                    <h3 className="font-bold text-lg">مساعد دار وإعمار</h3>
+                    <p className="text-[10px] text-green-400 font-bold">متصل الآن</p>
                 </div>
             </div>
             <button onClick={() => setIsOpen(false)} className="text-white/60 hover:text-white hover:bg-white/10 p-2 rounded-full transition-all"><X size={20} /></button>
           </div>
 
-          {/* Messages Body */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-5 bg-[#f8f9fa] custom-scrollbar">
+          <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-[#f8f9fa] custom-scrollbar">
             {messages.map((msg) => (
-                <div key={msg.id} className={`flex flex-col ${msg.sender === 'user' ? 'items-end' : 'items-start'} animate-in fade-in slide-in-from-bottom-2`}>
-                    <div className={`max-w-[85%] rounded-2xl p-4 text-sm font-medium leading-relaxed whitespace-pre-line shadow-sm ${msg.sender === 'user' ? 'bg-[#E95D22] text-white rounded-bl-none' : 'bg-white text-[#1B2B48] border border-gray-100 rounded-br-none'}`}>
+                <div key={msg.id} className={`flex flex-col ${msg.sender === 'user' ? 'items-end' : 'items-start'}`}>
+                    <div className={`max-w-[85%] rounded-2xl p-4 text-sm font-bold leading-relaxed whitespace-pre-line shadow-sm ${msg.sender === 'user' ? 'bg-[#E95D22] text-white rounded-bl-none' : 'bg-white text-[#1B2B48] border border-gray-100 rounded-br-none'}`}>
                         {msg.text}
                     </div>
-                    
-                    {/* Action Chips */}
                     {msg.actions && msg.actions.length > 0 && (
-                        <div className="mt-2 flex flex-wrap gap-2 w-full">
+                        <div className="mt-2 flex flex-wrap gap-2">
                             {msg.actions.map((action, idx) => (
                                 <button 
                                     key={idx}
-                                    onClick={() => {
-                                        onNavigate(action.type, action.data);
-                                        // Optional: Close chat on navigate
-                                        // setIsOpen(false); 
-                                    }}
-                                    className="flex items-center gap-1.5 bg-blue-50 text-[#1B2B48] text-xs font-bold px-4 py-2 rounded-xl hover:bg-[#1B2B48] hover:text-white transition-all shadow-sm border border-blue-100"
+                                    onClick={() => { onNavigate(action.type, action.data); setIsOpen(false); }}
+                                    className="flex items-center gap-1.5 bg-[#1B2B48] text-white text-xs font-black px-4 py-2.5 rounded-xl hover:bg-blue-900 transition-all shadow-md"
                                 >
-                                    {action.type === 'PROJECT' ? <BarChart3 size={14}/> : <Search size={14}/>}
-                                    {action.label} 
-                                    <ArrowUpLeft size={14} />
+                                    {action.label} <ArrowUpLeft size={14} />
                                 </button>
                             ))}
                         </div>
                     )}
-                    <span className="text-[9px] text-gray-400 mt-1 px-1 opacity-70">{msg.time}</span>
+                    <span className="text-[9px] text-gray-400 mt-1 px-1">{msg.time}</span>
                 </div>
             ))}
             
-            {/* Typing Indicator */}
             {isTyping && (
                 <div className="flex items-start">
-                    <div className="bg-white border border-gray-100 p-3 rounded-2xl rounded-br-none shadow-sm flex gap-1">
-                        <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce"></span>
-                        <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce delay-75"></span>
-                        <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce delay-150"></span>
+                    <div className="bg-white border border-gray-100 p-3 rounded-2xl flex gap-1">
+                        <span className="w-1.5 h-1.5 bg-gray-300 rounded-full animate-bounce"></span>
+                        <span className="w-1.5 h-1.5 bg-gray-300 rounded-full animate-bounce delay-75"></span>
+                        <span className="w-1.5 h-1.5 bg-gray-300 rounded-full animate-bounce delay-150"></span>
                     </div>
                 </div>
             )}
             <div ref={messagesEndRef} />
           </div>
 
-          {/* Quick Suggestions */}
-          {messages.length < 2 && (
-             <div className="px-4 py-2 bg-white/50 backdrop-blur-sm flex gap-2 overflow-x-auto no-scrollbar">
-                {['📊 ملخص عام', '🏗️ مشاريع الرياض', '📝 أحدث الإفراغات'].map((s, i) => (
-                    <button key={i} onClick={() => handleSend(s)} className="text-[10px] font-bold bg-white border border-gray-200 text-gray-600 px-3 py-1.5 rounded-full hover:border-[#E95D22] hover:text-[#E95D22] transition-colors whitespace-nowrap shadow-sm">
-                        {s}
-                    </button>
-                ))}
-             </div>
-          )}
-
-          {/* Input Area */}
           <div className="p-4 bg-white border-t border-gray-100">
             <div className="relative flex items-center gap-2">
                 <input 
                     type="text" 
-                    placeholder="اكتب اسم المشروع أو العميل..." 
-                    className="w-full pl-4 pr-12 py-3.5 bg-gray-50 border border-gray-200 rounded-[20px] focus:outline-none focus:border-[#E95D22] focus:bg-white text-sm font-bold text-[#1B2B48] transition-all placeholder:text-gray-400" 
+                    placeholder="اكتب استفسارك هنا..." 
+                    className="w-full pl-4 pr-12 py-3.5 bg-gray-50 border border-gray-200 rounded-[20px] focus:outline-none focus:border-[#E95D22] text-sm font-bold text-[#1B2B48] transition-all" 
                     value={input} 
                     onChange={(e) => setInput(e.target.value)} 
                     onKeyPress={(e) => e.key === 'Enter' && handleSend()} 
                 />
                 <button 
                     onClick={() => handleSend()} 
-                    className={`absolute left-2 p-2 rounded-xl transition-all ${input.trim() ? 'bg-[#E95D22] text-white shadow-lg shadow-orange-100 scale-100' : 'bg-transparent text-gray-300 scale-90'}`}
+                    className={`absolute left-2 p-2 rounded-xl transition-all ${input.trim() ? 'bg-[#1B2B48] text-white shadow-lg' : 'bg-gray-100 text-gray-300'}`}
                     disabled={!input.trim()}
                 >
                     <Send size={18} />

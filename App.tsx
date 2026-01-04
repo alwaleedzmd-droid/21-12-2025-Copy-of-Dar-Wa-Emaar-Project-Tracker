@@ -90,20 +90,22 @@ const AppContent: React.FC = () => {
     selectedProject ? technicalRequests.filter(r => r.project_name === selectedProject.name && r.scope !== 'INTERNAL_WORK') : []
   , [technicalRequests, selectedProject]);
 
-  const projectClearanceRequests = useMemo(() => 
-    selectedProject ? clearanceRequests.filter(r => r.project_name === selectedProject.name) : []
-  , [clearanceRequests, selectedProject]);
-
   const stats = useMemo(() => ({
     projects: projects.length,
     techRequests: technicalRequests.filter(r => r.scope !== 'INTERNAL_WORK').length,
-    clearRequests: clearanceRequests.length,
+    clearRequests: deedsRequestsCount, 
     deeds: deedsRequestsCount 
-  }), [projects.length, technicalRequests.length, clearanceRequests.length, deedsRequestsCount]);
+  }), [projects.length, technicalRequests.length, deedsRequestsCount]);
 
   const canAccess = (allowedRoles: string[]) => {
     return currentUser && allowedRoles.includes(currentUser.role);
   };
+
+  // --- AI Assistant Strict Access Control ---
+  // Must only be System Manager (ADMIN) or Public Relations (PR_MANAGER)
+  const canSeeAIAssistant = useMemo(() => {
+    return currentUser && ['ADMIN', 'PR_MANAGER'].includes(currentUser.role);
+  }, [currentUser]);
 
   const syncUserProfile = async (sessionUser: any) => {
     try {
@@ -119,7 +121,7 @@ const AppContent: React.FC = () => {
         safeStorage.setItem(STORAGE_KEYS.USER_CACHE, JSON.stringify(updatedUser));
 
         if (userRole === 'TECHNICAL') setView('TECHNICAL_SERVICES');
-        else if (userRole === 'CONVEYANCE' || userRole === 'FINANCE') setView('CONVEYANCE_SERVICES');
+        else if (userRole === 'CONVEYANCE' || userRole === 'FINANCE' || userRole === 'DEEDS_OFFICER') setView('CONVEYANCE_SERVICES');
         else if (userRole === 'ADMIN' || userRole === 'PR_MANAGER' || userRole === 'PR_OFFICER') setView('DASHBOARD');
         else setView('DASHBOARD');
 
@@ -293,9 +295,11 @@ const AppContent: React.FC = () => {
 
   const getProjectProgress = (pName: string) => {
     const tech = technicalRequests.filter(r => r.project_name === pName);
-    const clear = clearanceRequests.filter(r => r.project_name === pName);
-    const total = tech.length + clear.length;
-    return total > 0 ? Math.round(([...tech, ...clear].filter(r => r.status === 'completed' || r.status === 'منجز').length / total) * 100) : 0;
+    const deeds = deedsRequests.filter(d => d.project_name === pName);
+    const total = tech.length + deeds.length;
+    const completed = tech.filter(r => r.status === 'completed' || r.status === 'منجز').length + 
+                    deeds.filter(d => d.status === 'منجز').length;
+    return total > 0 ? Math.round((completed / total) * 100) : 0;
   };
 
   const handleAssistantNavigate = (type: 'PROJECT' | 'DEED', data: any) => {
@@ -336,7 +340,7 @@ const AppContent: React.FC = () => {
           {canAccess(['ADMIN', 'PR_MANAGER', 'TECHNICAL']) && (
             <button onClick={() => { setView('TECHNICAL_SERVICES'); setSelectedProject(null); }} className={`w-full flex items-center gap-4 p-4 rounded-2xl transition-all ${view === 'TECHNICAL_SERVICES' ? 'bg-[#E95D22]' : 'hover:bg-white/5'}`}><Zap size={22}/> {!isSidebarCollapsed && 'الطلبات الفنية'}</button>
           )}
-          {canAccess(['ADMIN', 'PR_MANAGER', 'CONVEYANCE', 'FINANCE']) && (
+          {canAccess(['ADMIN', 'PR_MANAGER', 'CONVEYANCE', 'FINANCE', 'DEEDS_OFFICER']) && (
             <button onClick={() => { setView('CONVEYANCE_SERVICES'); setSelectedProject(null); }} className={`w-full flex items-center gap-4 p-4 rounded-2xl transition-all ${view === 'CONVEYANCE_SERVICES' ? 'bg-[#E95D22]' : 'hover:bg-white/5'}`}><FileText size={22}/> {!isSidebarCollapsed && 'الإفراغات'}</button>
           )}
           {canAccess(['ADMIN', 'PR_MANAGER']) && (
@@ -350,7 +354,7 @@ const AppContent: React.FC = () => {
         <header className="bg-white border-b h-20 flex items-center justify-between px-10 shrink-0 shadow-sm z-20">
           <div className="flex items-center gap-4">
             <button onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)} className="p-2 text-gray-400 hover:bg-gray-100 rounded-xl transition-all"><RefreshCw size={20} /></button>
-            <h1 className="text-2xl font-bold text-[#1B2B48]">{selectedProject ? selectedProject.name : (view === 'CONVEYANCE_SERVICES' ? 'سجل الإفراغات' : 'بوابة المشاريع')}</h1>
+            <h1 className="text-2xl font-bold text-[#1B2B48]">{selectedProject ? selectedProject.name : (view === 'CONVEYANCE_SERVICES' ? 'سجل الإفراغات العام' : 'بوابة المشاريع')}</h1>
           </div>
           <div className="flex items-center gap-4">
             <div className="text-left border-r pr-6"><p className="text-sm font-bold text-[#1B2B48]">{currentUser?.name}</p><p className="text-[10px] text-[#E95D22] font-bold uppercase">{currentUser?.role}</p></div>
@@ -422,7 +426,7 @@ const AppContent: React.FC = () => {
                     <button onClick={() => setProjectTab('info')} className={`px-8 py-3 rounded-[25px] font-bold transition-all whitespace-nowrap ${projectTab === 'info' ? 'bg-[#1B2B48] text-white shadow-xl scale-105' : 'text-gray-500 hover:text-[#1B2B48] hover:bg-white/50'}`}>المعلومات الأساسية</button>
                     {canAccess(['ADMIN', 'PR_MANAGER', 'PR_OFFICER']) && <button onClick={() => setProjectTab('work')} className={`px-8 py-3 rounded-[25px] font-bold transition-all whitespace-nowrap ${projectTab === 'work' ? 'bg-[#1B2B48] text-white shadow-xl scale-105' : 'text-gray-500 hover:text-[#1B2B48] hover:bg-white/50'}`}>أعمال المشروع الداخلية</button>}
                     {canAccess(['ADMIN', 'PR_MANAGER', 'TECHNICAL']) && <button onClick={() => setProjectTab('tech')} className={`px-8 py-3 rounded-[25px] font-bold transition-all whitespace-nowrap ${projectTab === 'tech' ? 'bg-[#1B2B48] text-white shadow-xl scale-105' : 'text-gray-500 hover:text-[#1B2B48] hover:bg-white/50'}`}>المراجعات والطلبات الفنية</button>}
-                    {canAccess(['ADMIN', 'PR_MANAGER', 'CONVEYANCE', 'FINANCE']) && <button onClick={() => setProjectTab('clearance')} className={`px-8 py-3 rounded-[25px] font-bold transition-all whitespace-nowrap ${projectTab === 'clearance' ? 'bg-[#1B2B48] text-white shadow-xl scale-105' : 'text-gray-500 hover:text-[#1B2B48] hover:bg-white/50'}`}>إجراءات الإفراغ</button>}
+                    {canAccess(['ADMIN', 'PR_MANAGER', 'CONVEYANCE', 'FINANCE', 'DEEDS_OFFICER']) && <button onClick={() => setProjectTab('clearance')} className={`px-8 py-3 rounded-[25px] font-bold transition-all whitespace-nowrap ${projectTab === 'clearance' ? 'bg-[#1B2B48] text-white shadow-xl scale-105' : 'text-gray-500 hover:text-[#1B2B48] hover:bg-white/50'}`}>إجراءات الإفراغ</button>}
                   </div>
 
                   <div className="animate-in fade-in duration-300">
@@ -462,7 +466,7 @@ const AppContent: React.FC = () => {
                             <div className="bg-white p-6 rounded-[30px] border border-gray-100 shadow-sm relative overflow-hidden group">
                                 <div className="absolute top-0 right-0 w-2 h-full bg-amber-400"></div>
                                 <div className="flex items-center gap-3 mb-6 pb-4 border-b border-gray-50">
-                                    <div className="p-3 bg-amber-50 text-amber-600 rounded-2xl"><Zap size={20}/></div>
+                                    <div className="p-3 bg-amber-50 text-yellow-600 rounded-2xl"><Zap size={20}/></div>
                                     <h3 className="font-bold text-lg text-[#1B2B48]">مقاول الكهرباء</h3>
                                 </div>
                                 <div className="space-y-4">
@@ -489,7 +493,13 @@ const AppContent: React.FC = () => {
                     )}
                     {projectTab === 'work' && <TechnicalModule requests={projectInternalWorks} projects={[selectedProject]} currentUser={currentUser} usersList={usersList} onRefresh={fetchAllData} filteredByProject={selectedProject.name} scopeFilter="INTERNAL_WORK" />}
                     {projectTab === 'tech' && <TechnicalModule requests={projectExternalTechRequests} projects={[selectedProject]} currentUser={currentUser} usersList={usersList} onRefresh={fetchAllData} filteredByProject={selectedProject.name} scopeFilter="EXTERNAL" />}
-                    {projectTab === 'clearance' && <ClearanceModule requests={projectClearanceRequests} projects={[selectedProject]} currentUser={currentUser} usersList={usersList} onRefresh={fetchAllData} filteredByProject={selectedProject.name} />}
+                    {projectTab === 'clearance' && (
+                      <DeedsDashboard 
+                        filteredProjectName={selectedProject.name} 
+                        currentUserRole={currentUser.role} 
+                        currentUserName={currentUser.name} 
+                      />
+                    )}
                   </div>
                 </div>
               )}
@@ -528,7 +538,8 @@ const AppContent: React.FC = () => {
         </div>
       </main>
 
-      {currentUser && (
+      {/* STRICT AI ASSISTANT RESTRICTION */}
+      {canSeeAIAssistant && (
         <AIAssistant 
           projects={projects}
           technicalRequests={technicalRequests}
