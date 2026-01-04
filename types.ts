@@ -42,7 +42,11 @@ export interface ProjectSummary {
   consultant_engineer?: string;
   consultant_mobile?: string;
   water_contractor?: string;
+  water_contractor_engineer?: string;
+  water_contractor_mobile?: string;
   electricity_contractor?: string;
+  electricity_contractor_engineer?: string;
+  electricity_contractor_mobile?: string;
 }
 
 /**
