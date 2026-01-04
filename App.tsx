@@ -298,6 +298,18 @@ const AppContent: React.FC = () => {
     return total > 0 ? Math.round(([...tech, ...clear].filter(r => r.status === 'completed' || r.status === 'منجز').length / total) * 100) : 0;
   };
 
+  const handleAssistantNavigate = (type: 'PROJECT' | 'DEED', data: any) => {
+    if (type === 'PROJECT') {
+      const targetProject = projects.find(p => p.name === data.name || p.id === data.id) || data;
+      setSelectedProject(targetProject);
+      setProjectTab('info');
+      setView('PROJECT_DETAIL');
+    } else if (type === 'DEED') {
+      setSelectedProject(null);
+      setView('CONVEYANCE_SERVICES');
+    }
+  };
+
   if (isAuthLoading) return <div className="min-h-screen flex items-center justify-center bg-gray-50"><Loader2 className="animate-spin text-[#E95D22] w-12 h-12" /></div>;
 
   if (view === 'LOGIN' && !currentUser) return (
@@ -522,6 +534,7 @@ const AppContent: React.FC = () => {
           technicalRequests={technicalRequests}
           clearanceRequests={clearanceRequests}
           deedsRequests={deedsRequests}
+          onNavigate={handleAssistantNavigate}
         />
       )}
 

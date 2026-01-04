@@ -1,10 +1,16 @@
-import React, { useState } from 'react';
-import { Plus, MoreHorizontal, Trash2, Edit, FileText, Building2, AlignLeft, CheckCircle2, Paperclip } from 'lucide-react';
+import React, { useState, useRef } from 'react';
+import { 
+  Plus, MoreHorizontal, Trash2, Edit, FileText, 
+  Building2, AlignLeft, CheckCircle2, Paperclip, 
+  FileUp, Sheet, Search, Filter, Zap 
+} from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import { TechnicalRequest, ProjectSummary, User } from '../types';
 import Modal from './Modal';
 import ManageRequestModal from './ManageRequestModal';
+import * as XLSX from 'xlsx';
 
+// --- Constants ---
 const RAW_REVIEW_ENTITIES = [
   "وزارة الإسكان", "الشركة الوطنية للإسكان", "أمانة منطقة الرياض", "الشركة السعودية للكهرباء",
   "المركز الوطني للرقابة على الالتزام البيئي", "الشرطة", "شركة المياه الوطنية", "بلدية شمال الرياض",
@@ -43,12 +49,17 @@ interface TechnicalModuleProps {
 const TechnicalModule: React.FC<TechnicalModuleProps> = ({ 
   requests, projects, currentUser, usersList, onRefresh, filteredByProject, scopeFilter 
 }) => {
+  // --- State ---
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isManageModalOpen, setIsManageModalOpen] = useState(false);
+  const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
   const [activeRequest, setActiveRequest] = useState<TechnicalRequest | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
   
   const [isUploading, setIsUploading] = useState(false);
   const [attachment, setAttachment] = useState<File | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [techForm, setTechForm] = useState({
     id: 0, 
@@ -62,6 +73,9 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
     attachment_url: '' 
   });
 
+  // --- Handlers ---
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       setAttachment(e.target.files[0]);
@@ -69,7 +83,7 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
   };
 
   const openAddModal = () => {
-    const proj = filteredByProject ? projects.find(p => p.client === filteredByProject || p.title === filteredByProject) : null;
+    const proj = filteredByProject ? projects.find(p => p.name === filteredByProject || p.title === filteredByProject) : null;
     setTechForm({ 
       id: 0, 
       project_id: proj ? proj.id.toString() : '', 
@@ -105,10 +119,11 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
     if (!window.confirm("هل أنت متأكد من حذف هذا العمل؟")) return;
     const { error } = await supabase.from('technical_requests').delete().eq('id', id);
     if (!error) onRefresh();
+    else alert("حدث خطأ أثناء الحذف: " + error.message);
   };
 
   const handleSubmit = async () => {
-    if (!techForm.project_id || !techForm.service_type || !techForm.reviewing_entity) return alert("يرجى تعبئة الحقول الأساسية");
+    if (!techForm.project_id || !techForm.service_type) return alert("يرجى تعبئة الحقول الأساسية");
     
     setIsUploading(true); 
 
@@ -139,248 +154,290 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
     const selectedProj = projects.find(p => p.id.toString() === techForm.project_id);
 
     const payload = {
-      project_id: techForm.project_id,
+      project_id: parseInt(techForm.project_id),
       scope: scopeFilter || 'EXTERNAL',
       service_type: techForm.service_type, 
       reviewing_entity: techForm.reviewing_entity,
-      requesting_entity: techForm.requesting_entity, 
+      requesting_entity: techForm.requesting_entity || currentUser?.name, 
       details: techForm.details,
       status: techForm.status, 
       progress: techForm.progress,
-      project_name: selectedProj ? (selectedProj.client || selectedProj.title) : '',
-      attachment_url: finalAttachmentUrl 
+      project_name: selectedProj ? (selectedProj.name || selectedProj.title) : '',
+      attachment_url: finalAttachmentUrl,
+      submitted_by: currentUser?.name
     };
 
+    let error;
     if (techForm.id === 0) {
-      const { error } = await supabase.from('technical_requests').insert([payload]);
-      if (error) alert(error.message);
+      const res = await supabase.from('technical_requests').insert([payload]);
+      error = res.error;
     } else {
-      const { error } = await supabase.from('technical_requests').update(payload).eq('id', techForm.id);
-      if (error) alert(error.message);
+      const res = await supabase.from('technical_requests').update(payload).eq('id', techForm.id);
+      error = res.error;
+    }
+
+    if (error) {
+        alert("حدث خطأ: " + error.message);
+    } else {
+        setIsAddModalOpen(false);
+        onRefresh();
     }
     
     setIsUploading(false); 
-    setIsAddModalOpen(false);
-    onRefresh();
+  };
+
+  const handleExcelImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async (evt) => {
+      try {
+        const wb = XLSX.read(evt.target?.result, { type: 'binary' });
+        const sheetName = wb.SheetNames[0];
+        const data: any[] = XLSX.utils.sheet_to_json(wb.Sheets[sheetName]);
+        
+        const formatted = data.map(row => {
+          const pName = row['اسم المشروع'] || row['Project Name'];
+          const proj = projects.find(p => p.name === pName || p.title === pName);
+          
+          return {
+            project_id: proj ? proj.id : null,
+            project_name: pName,
+            service_type: row['نوع العمل'] || row['Work Type'] || row['Service Type'],
+            reviewing_entity: row['جهة المراجعة'] || row['Reviewer'],
+            details: row['التفاصيل'] || row['Details'] || '',
+            status: row['الحالة'] || row['Status'] || 'new',
+            scope: scopeFilter || 'EXTERNAL',
+            submitted_by: currentUser?.name
+          };
+        }).filter(r => r.project_name && r.service_type);
+
+        if (formatted.length === 0) throw new Error("لم يتم العثور على بيانات صالحة في الملف");
+
+        const { error } = await supabase.from('technical_requests').insert(formatted);
+        if (error) throw error;
+
+        alert(`تم استيراد ${formatted.length} عمل بنجاح ✅`);
+        setIsBulkModalOpen(false);
+        onRefresh();
+      } catch (err: any) {
+        alert("خطأ في الاستيراد: " + err.message);
+      }
+    };
+    reader.readAsBinaryString(file);
   };
 
   const updateStatus = async (newStatus: string) => {
     if (!activeRequest) return;
     const updateData: any = { status: newStatus };
-    if (newStatus === 'completed') updateData.progress = 100;
+    if (newStatus === 'completed' || newStatus === 'منجز') updateData.progress = 100;
     
     const { error } = await supabase.from('technical_requests').update(updateData).eq('id', activeRequest.id);
     if (!error) {
       setActiveRequest({ ...activeRequest, ...updateData });
       onRefresh();
+    } else {
+        alert("فشل تحديث الحالة");
     }
   };
 
-  const updateDelegation = async (assignedTo: string) => {
-    if (!activeRequest) return;
-    const { error } = await supabase.from('technical_requests').update({ assigned_to: assignedTo }).eq('id', activeRequest.id);
-    if (!error) {
-       setActiveRequest({ ...activeRequest, assigned_to: assignedTo });
-       onRefresh();
-    }
-  };
+  const filteredRequests = requests.filter(r => 
+    (r.project_name?.toLowerCase().includes(searchTerm.toLowerCase()) || '') ||
+    (r.service_type?.toLowerCase().includes(searchTerm.toLowerCase()) || '') ||
+    (r.reviewing_entity?.toLowerCase().includes(searchTerm.toLowerCase()) || '')
+  );
 
-  const canEdit = currentUser?.role === 'ADMIN' || currentUser?.role === 'PR_MANAGER' || currentUser?.role === 'TECHNICAL';
+  const canEdit = currentUser?.role === 'ADMIN' || currentUser?.role === 'PR_MANAGER' || currentUser?.role === 'TECHNICAL' || currentUser?.role === 'PR_OFFICER';
   const canDelete = currentUser?.role === 'ADMIN';
 
   return (
-    <div className="space-y-6 animate-in fade-in">
-      <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-black text-[#1B2B48]">
-          {scopeFilter === 'INTERNAL_WORK' ? 'أعمال المشروع الداخلية' : 'المراجعات والطلبات الفنية'}
-        </h2>
-        {canEdit && (
-          <button onClick={openAddModal} className="bg-[#1B2B48] text-white px-6 py-3 rounded-[20px] font-bold shadow-lg flex items-center gap-2 transition-all hover:scale-105 active:scale-95">
-            <Plus size={20} /> إضافة عمل
-          </button>
-        )}
+    <div className="space-y-8 animate-in fade-in font-cairo" dir="rtl">
+      
+      {/* Header & Controls */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+          <h2 className="text-3xl font-black text-[#1B2B48]">
+            {scopeFilter === 'INTERNAL_WORK' ? 'أعمال المشروع الداخلية' : 'المراجعات والطلبات الفنية'}
+          </h2>
+          <p className="text-gray-400 text-sm mt-1">إدارة ومتابعة المهام والأعمال الهندسية والفنية</p>
+        </div>
+        
+        <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+          {canEdit && (
+            <>
+              <button 
+                onClick={() => setIsBulkModalOpen(true)}
+                className="flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 text-gray-600 rounded-xl font-bold text-sm hover:bg-gray-50 transition-all shadow-sm"
+              >
+                <Sheet size={18} className="text-green-600" />
+                استيراد Excel
+              </button>
+              <button 
+                onClick={openAddModal} 
+                className="flex items-center gap-2 px-6 py-2.5 bg-[#1B2B48] text-white rounded-xl font-black text-sm hover:brightness-110 shadow-lg shadow-blue-100 transition-all active:scale-95"
+              >
+                <Plus size={20} /> إضافة عمل يدوي
+              </button>
+            </>
+          )}
+        </div>
       </div>
 
+      {/* Filter Bar */}
+      <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex flex-col md:flex-row gap-4 items-center">
+        <div className="relative flex-1 w-full">
+          <Search className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-300" size={18} />
+          <input 
+            type="text"
+            placeholder="البحث بالمشروع، نوع العمل، أو جهة المراجعة..."
+            className="w-full pr-12 pl-4 py-3 bg-gray-50 rounded-xl border border-transparent focus:border-[#1B2B48] focus:bg-white transition-all outline-none font-bold text-sm"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+        </div>
+        <button className="flex items-center gap-2 px-5 py-3 bg-gray-100 text-gray-500 rounded-xl font-bold text-sm hover:bg-gray-200 transition-all w-full md:w-auto">
+          <Filter size={18} /> تصفية
+        </button>
+      </div>
+
+      {/* Main Table */}
       <div className="bg-white rounded-[30px] border border-gray-100 shadow-sm overflow-hidden">
-        <table className="w-full text-right">
-          <thead className="bg-gray-50 text-gray-500 font-bold text-sm">
-            <tr>
-              {!filteredByProject && <th className="p-5">المشروع</th>}
-              <th className="p-5">بيان العمل</th>
-              <th className="p-5">جهة المراجعة</th>
-              <th className="p-5">الإنجاز</th>
-              <th className="p-5">المرفقات</th> 
-              <th className="p-5">الحالة</th>
-              <th className="p-5">خيارات</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
-            {requests.map(req => (
-              <tr key={req.id} className="hover:bg-blue-50/50 transition cursor-pointer" onClick={() => {setActiveRequest(req); setIsManageModalOpen(true);}}>
-                  {!filteredByProject && <td className="p-5 font-bold text-[#1B2B48]">{req.project_name}</td>}
-                  <td className="p-5 text-gray-600 font-bold">{req.service_type}</td>
-                  <td className="p-5 text-gray-400 text-xs font-bold">{req.reviewing_entity || '-'}</td>
-                  <td className="p-5 w-48">
-                    <div className="flex items-center gap-2">
-                      <span className="text-[10px] font-black w-8 text-gray-400">{req.progress}%</span>
-                      <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
-                        <div className={`h-full rounded-full transition-all duration-500 ${req.progress === 100 ? 'bg-green-500' : req.progress > 50 ? 'bg-amber-500' : 'bg-[#E95D22]'}`} style={{width:`${req.progress}%`}}/>
+        <div className="overflow-x-auto">
+          <table className="w-full text-right">
+            <thead className="bg-gray-50/50 border-b border-gray-100">
+              <tr>
+                {!filteredByProject && <th className="p-6 text-xs font-black text-gray-400 uppercase tracking-widest">المشروع</th>}
+                <th className="p-6 text-xs font-black text-gray-400 uppercase tracking-widest">بيان العمل</th>
+                <th className="p-6 text-xs font-black text-gray-400 uppercase tracking-widest">جهة المراجعة</th>
+                <th className="p-6 text-xs font-black text-gray-400 uppercase tracking-widest">الإنجاز</th>
+                <th className="p-6 text-xs font-black text-gray-400 uppercase tracking-widest">الحالة</th>
+                <th className="p-6"></th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {filteredRequests.map(req => (
+                <tr 
+                  key={req.id} 
+                  className="hover:bg-gray-50 transition-colors cursor-pointer group" 
+                  onClick={() => {setActiveRequest(req); setIsManageModalOpen(true);}}
+                >
+                    {!filteredByProject && (
+                      <td className="p-6">
+                        <p className="font-black text-[#1B2B48] text-sm">{req.project_name}</p>
+                      </td>
+                    )}
+                    <td className="p-6">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-orange-50 text-[#E95D22] rounded-lg">
+                          <Zap size={16} />
+                        </div>
+                        <p className="font-bold text-gray-700 text-sm">{req.service_type}</p>
                       </div>
+                    </td>
+                    <td className="p-6 text-sm text-gray-400 font-bold">{req.reviewing_entity || '-'}</td>
+                    <td className="p-6 w-48">
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                          <div 
+                            className={`h-full rounded-full transition-all duration-1000 ${req.progress === 100 ? 'bg-green-500' : 'bg-[#E95D22]'}`} 
+                            style={{width:`${req.progress || 0}%`}}
+                          />
+                        </div>
+                        <span className="text-[10px] font-black text-gray-400">{req.progress || 0}%</span>
+                      </div>
+                    </td>
+                    <td className="p-6">
+                      <span className={`px-3 py-1 rounded-full text-[10px] font-black shadow-sm ${
+                        req.status === 'completed' || req.status === 'منجز' 
+                        ? 'bg-green-50 text-green-700 border border-green-100' 
+                        : 'bg-amber-50 text-amber-700 border border-amber-100'
+                      }`}>
+                        {STATUS_OPTIONS.find(o => o.value === req.status)?.label || req.status}
+                      </span>
+                    </td>
+                    <td className="p-6 text-left">
+                      <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); openEditModal(req); }} 
+                          className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
+                        >
+                          <Edit size={16} />
+                        </button>
+                        {canDelete && (
+                          <button 
+                            onClick={(e) => { e.stopPropagation(); handleDelete(req.id); }} 
+                            className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        )}
+                        <MoreHorizontal size={18} className="text-gray-300 mr-2" />
+                      </div>
+                    </td>
+                </tr>
+              ))}
+              {filteredRequests.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="p-20 text-center">
+                    <div className="flex flex-col items-center justify-center text-gray-300 gap-4">
+                      <FileText size={64} strokeWidth={1} />
+                      <p className="text-xl font-bold">لا توجد أعمال مسجلة حالياً</p>
                     </div>
                   </td>
-                  
-                  <td className="p-5">
-                    {req['attachment_url'] ? (
-                      <a 
-                        href={req['attachment_url']} 
-                        target="_blank" 
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center justify-center w-8 h-8 bg-gray-100 text-blue-600 rounded-full hover:bg-blue-100 transition-colors"
-                        onClick={(e) => e.stopPropagation()} 
-                        title="عرض المرفق"
-                      >
-                        <Paperclip size={16} />
-                      </a>
-                    ) : (
-                      <span className="text-gray-300">-</span>
-                    )}
-                  </td>
-
-                  <td className="p-5">
-                    <span className={`px-3 py-1 rounded-full text-[10px] font-black shadow-sm ${req.status === 'completed' || req.status === 'منجز' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
-                      {req.status === 'completed' || req.status === 'منجز' ? 'منجز' : (STATUS_OPTIONS.find(o => o.value === req.status)?.label || req.status)}
-                    </span>
-                  </td>
-                  <td className="p-5 flex gap-2" onClick={e => e.stopPropagation()}>
-                    <button onClick={()=>{setActiveRequest(req); setIsManageModalOpen(true);}} className="p-2 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-100 transition-colors"><MoreHorizontal size={18}/></button>
-                    {canEdit && <button onClick={()=>openEditModal(req)} className="p-2 bg-gray-50 text-gray-600 rounded-xl hover:bg-gray-200 transition-colors"><Edit size={18}/></button>}
-                    {canDelete && <button onClick={()=>handleDelete(req.id)} className="p-2 bg-red-50 text-red-600 rounded-xl hover:bg-red-100 transition-colors"><Trash2 size={18}/></button>}
-                  </td>
-              </tr>
-            ))}
-             {requests.length === 0 && (
-              <tr><td colSpan={7} className="p-20 text-center text-gray-300 italic font-bold">لا توجد سجلات حالياً</td></tr>
-            )}
-          </tbody>
-        </table>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
-      <Modal 
-        isOpen={isAddModalOpen} 
-        onClose={()=>setIsAddModalOpen(false)} 
-        // === هنا العنوان يتغير بناءً على المكان ===
-        title={
-          techForm.id 
-            ? "تعديل بيانات العمل" 
-            : (scopeFilter === 'INTERNAL_WORK' ? "إضافة عمل جديد" : "إضافة طلب فني جديد")
-        }
-      >
-        <div className="space-y-4 text-right font-cairo overflow-visible">
-          
+      {/* Manual Add Modal */}
+      <Modal isOpen={isAddModalOpen} onClose={()=>setIsAddModalOpen(false)} title={techForm.id ? "تعديل العمل" : "إضافة عمل فني"}>
+        <div className="space-y-4 text-right">
           <div>
-            <label className="text-gray-400 text-xs font-bold block mb-1">المشروع</label>
-            <div className="relative">
-               <Building2 className="absolute right-3 top-4 text-gray-300 w-4 h-4" />
-               <select className="w-full p-4 pr-10 bg-gray-50 rounded-2xl border outline-none font-bold" value={techForm.project_id} onChange={e=>setTechForm({...techForm, project_id:e.target.value})} disabled={!!filteredByProject}>
-                 <option value="">اختر المشروع...</option>
-                 {projects.map(p=><option key={p.id} value={p.id}>{p.client || p.title}</option>)}
-               </select>
-            </div>
+            <label className="text-xs text-gray-400 font-bold block mb-1">المشروع</label>
+            <select className="w-full p-4 bg-gray-50 border rounded-2xl font-bold" value={techForm.project_id} onChange={e=>setTechForm({...techForm, project_id:e.target.value})} disabled={!!filteredByProject}>
+              <option value="">اختر المشروع...</option>
+              {projects.map(p=><option key={p.id} value={p.id}>{p.name || p.title}</option>)}
+            </select>
           </div>
-
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="text-gray-400 text-xs font-bold block mb-1">بيان الأعمال</label>
-              <div className="relative">
-                 <FileText className="absolute right-3 top-4 text-gray-300 w-4 h-4" />
-                 <select className="w-full p-4 pr-10 bg-gray-50 rounded-2xl border outline-none font-bold appearance-none" value={techForm.service_type} onChange={e=>setTechForm({...techForm, service_type:e.target.value})}>
-                   <option value="">اختر نوع العمل...</option>
-                   {WORK_STATEMENTS.map(s=><option key={s} value={s}>{s}</option>)}
-                 </select>
-              </div>
+              <label className="text-xs text-gray-400 font-bold block mb-1">نوع العمل</label>
+              <select className="w-full p-4 bg-gray-50 border rounded-2xl font-bold" value={techForm.service_type} onChange={e=>setTechForm({...techForm, service_type:e.target.value})}>
+                <option value="">اختر...</option>
+                {WORK_STATEMENTS.map(s=><option key={s} value={s}>{s}</option>)}
+              </select>
             </div>
-
             <div>
-              <label className="text-gray-400 text-xs font-bold block mb-1">جهة المراجعة</label>
-              <div className="relative">
-                 <CheckCircle2 className="absolute right-3 top-4 text-gray-300 w-4 h-4" />
-                 <select className="w-full p-4 pr-10 bg-gray-50 rounded-2xl border outline-none font-bold appearance-none" value={techForm.reviewing_entity} onChange={e=>setTechForm({...techForm, reviewing_entity:e.target.value})}>
-                   <option value="">اختر الجهة...</option>
-                   {REVIEW_ENTITIES.map(e=><option key={e} value={e}>{e}</option>)}
-                 </select>
-              </div>
+              <label className="text-xs text-gray-400 font-bold block mb-1">جهة المراجعة</label>
+              <select className="w-full p-4 bg-gray-50 border rounded-2xl font-bold" value={techForm.reviewing_entity} onChange={e=>setTechForm({...techForm, reviewing_entity:e.target.value})}>
+                <option value="">اختر...</option>
+                {REVIEW_ENTITIES.map(e=><option key={e} value={e}>{e}</option>)}
+              </select>
             </div>
           </div>
-
           <div>
-            <label className="text-gray-400 text-xs font-bold block mb-1">الوصف / التفاصيل</label>
-            <div className="relative">
-               <AlignLeft className="absolute right-3 top-4 text-gray-300 w-4 h-4" />
-               <textarea 
-                 rows={3} 
-                 className="w-full p-4 pr-10 bg-gray-50 rounded-2xl border outline-none font-bold resize-none" 
-                 value={techForm.details} 
-                 onChange={e=>setTechForm({...techForm, details:e.target.value})} 
-                 placeholder="اكتب تفاصيل إضافية عن العمل..."
-               />
-            </div>
+            <label className="text-xs text-gray-400 font-bold block mb-1">التفاصيل</label>
+            <textarea className="w-full p-4 bg-gray-50 border rounded-2xl font-bold min-h-[100px]" value={techForm.details} onChange={e=>setTechForm({...techForm, details:e.target.value})} placeholder="وصف العمل المطلوب..."></textarea>
           </div>
-
-          <div>
-            <label className="text-gray-400 text-xs font-bold block mb-1">المرفقات (اختياري)</label>
-            
-            <div style={{
-              border: '2px dashed #d1d5db',
-              borderRadius: '1rem',
-              padding: '1.5rem',
-              textAlign: 'center',
-              cursor: 'pointer',
-              position: 'relative',
-              backgroundColor: '#f9fafb',
-              transition: 'all 0.2s'
-            }}>
-              
-              <input
-                type="file"
-                accept=".pdf, image/*"
-                onChange={handleFileChange}
-                style={{
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  width: '100%',
-                  height: '100%',
-                  opacity: 0,
-                  cursor: 'pointer'
-                }}
-              />
-
-              <div className="flex flex-col items-center justify-center pointer-events-none">
-                <svg className="w-8 h-8 text-gray-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                </svg>
-
-                <p className="text-sm font-bold text-gray-500">
-                  {attachment ? (
-                    <span className="text-green-600">تم اختيار: {attachment.name}</span>
-                  ) : techForm.attachment_url ? (
-                    <span className="text-blue-600">يوجد مرفق سابق (اضغط للتغيير)</span>
-                  ) : (
-                    "اضغط هنا لإرفاق صورة المشكلة أو ملف PDF"
-                  )}
-                </p>
-              </div>
-
-            </div>
-          </div>
-
-          <button 
-            onClick={handleSubmit} 
-            disabled={isUploading}
-            className={`w-full text-white py-5 rounded-[25px] font-black shadow-xl transition-all active:scale-95 ${isUploading ? 'bg-gray-400 cursor-not-allowed' : 'bg-[#1B2B48] hover:brightness-110 hover:-translate-y-1'}`}
-          >
-            {isUploading ? 'جاري الرفع والحفظ...' : 'حفظ البيانات'}
+          <button onClick={handleSubmit} disabled={isUploading} className="w-full bg-[#1B2B48] text-white py-5 rounded-[25px] font-black shadow-xl hover:brightness-110 active:scale-95 transition-all">
+            {isUploading ? 'جاري الحفظ...' : 'حفظ البيانات'}
           </button>
+        </div>
+      </Modal>
+
+      {/* Bulk Upload Modal */}
+      <Modal isOpen={isBulkModalOpen} onClose={()=>setIsBulkModalOpen(false)} title="استيراد أعمال من Excel">
+        <div className="space-y-6 text-center py-10">
+          <div className="border-2 border-dashed border-gray-200 rounded-[30px] p-12 bg-gray-50 hover:border-[#E95D22] transition-all group cursor-pointer relative">
+            <input type="file" accept=".xlsx,.xls" onChange={handleExcelImport} className="absolute inset-0 opacity-0 cursor-pointer" />
+            <div className="flex flex-col items-center">
+              <FileUp className="w-16 h-16 text-[#E95D22] mb-4 group-hover:scale-110 transition-transform" />
+              <p className="text-xl font-black text-[#1B2B48]">اختر ملف Excel للأعمال</p>
+              <p className="text-xs text-gray-400 mt-2 font-bold">يجب أن يحتوي الملف على أعمدة: اسم المشروع، نوع العمل، التفاصيل، جهة المراجعة</p>
+            </div>
+          </div>
         </div>
       </Modal>
 
@@ -392,7 +449,7 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
           currentUser={currentUser} 
           usersList={usersList}
           onUpdateStatus={updateStatus}
-          onUpdateDelegation={updateDelegation}
+          onUpdateDelegation={() => {}}
         />
       )}
     </div>
