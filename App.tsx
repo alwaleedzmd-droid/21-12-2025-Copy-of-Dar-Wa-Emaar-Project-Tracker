@@ -5,12 +5,14 @@ import {
   LayoutDashboard, Users, FileText, LogOut, 
   ArrowLeft, Loader2, Zap, Plus,
   Building2, AlertTriangle, Menu, 
-  MapPin, MessageSquare, Send, X, Bot, HardHat, AlignLeft, Sparkles, ArrowUpLeft
+  MapPin, MessageSquare, Send, X, Bot, HardHat, AlignLeft, Sparkles, ArrowUpLeft, ClipboardList,
+  FileStack
 } from 'lucide-react';
 import { supabase } from './supabaseClient';
 import { ProjectSummary, User, TechnicalRequest, ClearanceRequest, ProjectWork, WorkComment } from './types';
 import { DAR_LOGO } from './constants';
 import Modal from './components/Modal';
+import ManageRequestModal from './components/ManageRequestModal';
 import { useData } from './contexts/DataContext';
 
 // --- Components ---
@@ -90,7 +92,7 @@ const AIAssistantInternal = ({ currentUser, onNavigate, projects = [], technical
     
     if (project) {
          const relatedWorks = projectWorks.filter((w: any) => w.projectId === project.id) || [];
-         const relatedTech = technicalRequests.filter((t: any) => t.projectId === project.id) || [];
+         const relatedTech = technicalRequests.filter((t: any) => t.projectId === project.id || t.project_id === project.id) || [];
          const allTasks = [...relatedWorks, ...relatedTech];
 
          const completedList = allTasks.filter((w: any) => w.status === 'completed' || w.status === 'منجز');
@@ -99,13 +101,13 @@ const AIAssistantInternal = ({ currentUser, onNavigate, projects = [], technical
          let detailsText = "";
          if (completedList.length > 0) {
              detailsText += `\n✅ **أبرز الأعمال المنجزة:**\n`;
-             completedList.slice(0, 3).forEach((w: any) => { detailsText += `- ${w.task_name || w.type}\n`; });
+             completedList.slice(0, 3).forEach((w: any) => { detailsText += `- ${w.task_name || w.service_type || w.type}\n`; });
              if (completedList.length > 3) detailsText += `...و ${completedList.length - 3} أعمال أخرى.\n`;
          }
 
          if (pendingList.length > 0) {
              detailsText += `\n⏳ **أعمال قيد المتابعة:**\n`;
-             pendingList.slice(0, 3).forEach((w: any) => { detailsText += `- ${w.task_name || w.type}\n`; });
+             pendingList.slice(0, 3).forEach((w: any) => { detailsText += `- ${w.task_name || w.service_type || w.type}\n`; });
              if (pendingList.length > 3) detailsText += `...و ${pendingList.length - 3} أعمال أخرى.\n`;
          }
          
@@ -244,10 +246,10 @@ const AppContent: React.FC = () => {
            <img src={DAR_LOGO} className={isSidebarCollapsed ? "h-10" : "h-20"} alt="Logo" />
         </div>
         <nav className="flex-1 p-4 space-y-2 overflow-y-auto custom-scrollbar">
-           <SidebarItem icon={<LayoutDashboard />} label="لوحة المعلومات" active={location.pathname === '/'} onClick={() => navigate('/')} collapsed={isSidebarCollapsed} />
+           <SidebarItem icon={<LayoutDashboard />} label="لوحة التحكم" active={location.pathname === '/'} onClick={() => navigate('/')} collapsed={isSidebarCollapsed} />
            <SidebarItem icon={<Building2 />} label="المشاريع" active={location.pathname.startsWith('/projects')} onClick={() => navigate('/projects')} collapsed={isSidebarCollapsed} />
            <SidebarItem icon={<Zap />} label="الطلبات الفنية" active={location.pathname === '/technical'} onClick={() => navigate('/technical')} collapsed={isSidebarCollapsed} />
-           <SidebarItem icon={<FileText />} label="الإفراغات" active={location.pathname === '/deeds'} onClick={() => navigate('/deeds')} collapsed={isSidebarCollapsed} />
+           <SidebarItem icon={<FileStack size={20} />} label="سجل الإفراغات" active={location.pathname === '/deeds'} onClick={() => navigate('/deeds')} collapsed={isSidebarCollapsed} />
         </nav>
         <div className="p-4 bg-[#16233a]">
            <button onClick={logout} className="w-full flex items-center gap-3 p-3 text-red-400 hover:bg-white/5 rounded-xl transition-all">
@@ -303,15 +305,24 @@ const AppContent: React.FC = () => {
 const ProjectDetailWrapper = ({ projects = [], onRefresh, currentUser }: any) => {
    const { id } = useParams();
    const navigate = useNavigate();
+   const { technicalRequests = [], refreshData, logActivity } = useData();
    
    const [selectedWork, setSelectedWork] = useState<ProjectWork | null>(null);
+   const [selectedTechRequest, setSelectedTechRequest] = useState<TechnicalRequest | null>(null);
    const [isAddWorkOpen, setIsAddWorkOpen] = useState(false);
    const [projectWorks, setProjectWorks] = useState<ProjectWork[]>([]);
    const [workComments, setWorkComments] = useState<WorkComment[]>([]);
    const [newComment, setNewComment] = useState('');
    const [newWorkForm, setNewWorkForm] = useState({ task_name: '', authority: '', department: '', notes: '' });
+   const [isTechModalOpen, setIsTechModalOpen] = useState(false);
+   const [isTechLoading, setIsTechLoading] = useState(false);
 
    const project = useMemo(() => projects.find((p: any) => p.id === Number(id)), [projects, id]);
+
+   // التصفية الجراحية للطلبات الفنية المرتبطة بهذا المشروع
+   const thisProjectTech = useMemo(() => {
+     return (technicalRequests || []).filter((t: any) => (Number(t.project_id) === Number(id) || Number(t.projectId) === Number(id))) || [];
+   }, [technicalRequests, id]);
 
    const fetchWorks = async () => {
        if (!id) return;
@@ -339,7 +350,7 @@ const ProjectDetailWrapper = ({ projects = [], onRefresh, currentUser }: any) =>
    };
 
    const fetchComments = async (workId: number) => {
-       const { data } = await supabase.from('work_comments').select('*').eq('work_id', workId).order('created_at');
+       const { data } = await supabase.from('work_comments').select('*').eq('work_id', Number(workId)).order('created_at');
        if (data) setWorkComments(data);
    };
 
@@ -347,7 +358,7 @@ const ProjectDetailWrapper = ({ projects = [], onRefresh, currentUser }: any) =>
        if (!newComment || !selectedWork) return;
        const { error } = await supabase.from('work_comments').insert({
            content: newComment,
-           work_id: selectedWork.id,
+           work_id: Number(selectedWork.id),
            user_name: currentUser?.name
        });
        if (!error) {
@@ -358,12 +369,59 @@ const ProjectDetailWrapper = ({ projects = [], onRefresh, currentUser }: any) =>
 
    const handleStatusChange = async (newStatus: string) => {
        if (!selectedWork) return;
-       const { error } = await supabase.from('project_works').update({ status: newStatus }).eq('id', selectedWork.id);
+       const { error } = await supabase.from('project_works').update({ status: newStatus }).eq('id', Number(selectedWork.id));
        if (!error) {
            setSelectedWork({ ...selectedWork, status: newStatus });
            fetchWorks();
            onRefresh();
        }
+   };
+
+   // وظيفة جراحية ومستقرة لتحديث حالة الطلب الفني ومعالجة الأخطاء بشكل دقيق
+   const handleTechStatusUpdate = async (newStatus: string) => {
+     if (!selectedTechRequest) return;
+     setIsTechLoading(true);
+     try {
+       const updatePayload: any = { 
+         status: newStatus, 
+         updated_at: new Date().toISOString()
+       };
+
+       // تحديث التقدم تلقائياً إذا كانت الحالة منجز
+       if (newStatus === 'completed' || newStatus === 'منجز') {
+         updatePayload.progress = 100;
+       }
+
+       const { error } = await supabase
+         .from('technical_requests')
+         .update(updatePayload)
+         .eq('id', Number(selectedTechRequest.id));
+       
+       if (error) {
+         console.error("Supabase technical_requests update error:", error);
+         throw new Error(error.message || "فشل التحديث في قاعدة البيانات");
+       }
+       
+       // تحديث الحالة محلياً للطلب المختار لضمان رؤية التغيير فوراً في المودال
+       setSelectedTechRequest(prev => prev ? ({ ...prev, ...updatePayload }) : null);
+
+       // تسجيل النشاط
+       if (logActivity) {
+         logActivity('تحديث حالة الطلب', `${selectedTechRequest.service_type || 'طلب فني'}: ${newStatus}`, 'text-blue-500');
+       }
+       
+       // تحديث البيانات على مستوى التطبيق والمكون
+       await refreshData();
+       if (onRefresh) onRefresh();
+       
+       alert("تم تحديث حالة الطلب بنجاح ✅");
+       
+     } catch (err: any) {
+       console.error("Full Technical Request Update Error Object:", err);
+       alert("فشل تحديث الحالة: " + (err?.message || "حدث خطأ غير متوقع في الاتصال بقاعدة البيانات"));
+     } finally {
+       setIsTechLoading(false);
+     }
    };
 
    if (!project) return (
@@ -377,6 +435,7 @@ const ProjectDetailWrapper = ({ projects = [], onRefresh, currentUser }: any) =>
      <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4">
         <ProjectDetailView project={project} isAdmin={currentUser?.role === 'ADMIN'} onBack={() => navigate('/projects')} onRefresh={onRefresh} />
         
+        {/* قسم أعمال المشروع (سجل المهام المضافة يدوياً) */}
         <div className="bg-white p-8 rounded-[40px] shadow-sm border border-gray-100">
             <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-3">
@@ -387,11 +446,11 @@ const ProjectDetailWrapper = ({ projects = [], onRefresh, currentUser }: any) =>
                    <Plus size={20}/> إضافة عمل
                 </button>
             </div>
-            {projectWorks.length === 0 ? (
-                <div className="text-center p-12 text-gray-400 bg-gray-50 rounded-[30px] border-dashed border-2">لا توجد أعمال مسجلة لهذا المشروع حالياً</div>
+            {(projectWorks || []).length === 0 ? (
+                <div className="text-center p-12 text-gray-400 bg-gray-50 rounded-[30px] border-dashed border-2 font-bold">لا توجد أعمال مسجلة لهذا المشروع حالياً</div>
             ) : (
                 <div className="grid gap-4">
-                    {projectWorks.map((work) => (
+                    {(projectWorks || []).map((work) => (
                         <div key={work.id} onClick={() => { setSelectedWork(work); fetchComments(work.id); }} className="flex items-center justify-between p-5 bg-gray-50 rounded-2xl hover:bg-white hover:shadow-md transition-all border border-gray-100 cursor-pointer group">
                             <div className="flex items-center gap-4">
                                 <div className={`w-3 h-12 rounded-full ${work.status === 'completed' || work.status === 'منجز' ? 'bg-green-500' : 'bg-orange-500'}`}></div>
@@ -408,6 +467,53 @@ const ProjectDetailWrapper = ({ projects = [], onRefresh, currentUser }: any) =>
                 </div>
             )}
         </div>
+
+        {/* قسم الطلبات الفنية المرتبطة بالمشروع (من جدول technical_requests) */}
+        <div className="bg-white p-8 rounded-[40px] shadow-sm border border-gray-100">
+            <div className="flex items-center gap-3 mb-6">
+                <div className="p-3 bg-blue-600 text-white rounded-xl"><ClipboardList size={24}/></div>
+                <h2 className="text-2xl font-black text-[#1B2B48]">الطلبات الفنية والمراجعات</h2>
+            </div>
+            {(thisProjectTech || []).length === 0 ? (
+                <div className="text-center p-12 text-gray-400 bg-gray-50 rounded-[30px] border-dashed border-2 font-bold">لا توجد طلبات فنية مرتبطة بهذا المشروع</div>
+            ) : (
+                <div className="grid gap-4">
+                    {(thisProjectTech || []).map((req: any) => (
+                        <div 
+                          key={req.id} 
+                          onClick={() => { setSelectedTechRequest(req); setIsTechModalOpen(true); }}
+                          className="flex items-center justify-between p-5 bg-gray-50 rounded-2xl border border-gray-100 hover:bg-white hover:shadow-md transition-all cursor-pointer group"
+                        >
+                            <div className="flex items-center gap-4">
+                                <div className={`w-3 h-12 rounded-full ${req.status === 'completed' || req.status === 'منجز' ? 'bg-green-500' : 'bg-blue-500'}`}></div>
+                                <div>
+                                    <h3 className="font-bold text-[#1B2B48] text-lg group-hover:text-blue-600 transition-colors">{req.service_type || req.type}</h3>
+                                    <p className="text-xs text-gray-400 font-bold mt-1">{req.reviewing_entity || 'جهة المراجعة'}</p>
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-4">
+                                <span className={`px-4 py-2 rounded-xl font-bold text-sm ${req.status === 'completed' || req.status === 'منجز' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>
+                                    {req.status === 'completed' || req.status === 'منجز' ? 'منجز ✅' : 'قيد المتابعة ⏳'}
+                                </span>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            )}
+        </div>
+
+        {/* نافذة المتابعة للطلب الفني */}
+        {selectedTechRequest && (
+          <ManageRequestModal 
+            isOpen={isTechModalOpen}
+            onClose={() => { setIsTechModalOpen(false); setSelectedTechRequest(null); }}
+            request={selectedTechRequest}
+            currentUser={currentUser}
+            usersList={[]} 
+            onUpdateStatus={handleTechStatusUpdate}
+            onUpdateDelegation={() => {}}
+          />
+        )}
 
         <Modal isOpen={isAddWorkOpen} onClose={() => setIsAddWorkOpen(false)} title="إضافة عمل جديد للمشروع">
             <div className="space-y-4 font-cairo text-right">
@@ -442,7 +548,7 @@ const ProjectDetailWrapper = ({ projects = [], onRefresh, currentUser }: any) =>
                     <div className="border-t pt-4">
                         <h4 className="font-bold text-[#1B2B48] mb-4 flex items-center gap-2"><MessageSquare size={18}/> التحديثات والملاحظات</h4>
                         <div className="bg-gray-50 rounded-2xl p-4 h-48 overflow-y-auto mb-4 space-y-3 custom-scrollbar border border-gray-100">
-                            {workComments.length === 0 ? <p className="text-gray-400 text-center text-sm py-10 font-bold">لا توجد ملاحظات بعد</p> : workComments.map(c => (
+                            {(workComments || []).length === 0 ? <p className="text-gray-400 text-center text-sm py-10 font-bold">لا توجد ملاحظات بعد</p> : (workComments || []).map(c => (
                                 <div key={c.id} className="bg-white p-3 rounded-xl shadow-sm border border-gray-100">
                                     <div className="flex justify-between text-xs text-gray-400 mb-1 font-bold">
                                         <span className="text-[#E95D22]">{c.user_name}</span>
