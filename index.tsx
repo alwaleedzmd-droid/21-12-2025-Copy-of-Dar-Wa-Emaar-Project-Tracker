@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { createRoot } from 'react-dom/client';
-import { BrowserRouter } from 'react-router-dom';
+import { HashRouter } from 'react-router-dom';
 import App from './App';
 import { DataProvider } from './contexts/DataContext';
 
@@ -10,13 +10,14 @@ if (!rootElement) throw new Error("Failed to find root element");
 
 const root = createRoot(rootElement);
 
-// تم التغيير إلى BrowserRouter ليتناسب مع بيئة الاستضافة وحل مشاكل التوجيه
+// تم استخدام HashRouter بدلاً من BrowserRouter لضمان التوافق مع بيئات الاستضافة المختلفة
+// وتجنب خطأ 404 عند تحديث الصفحات الفرعية.
 root.render(
   <React.StrictMode>
-    <BrowserRouter>
+    <HashRouter>
       <DataProvider>
         <App />
       </DataProvider>
-    </BrowserRouter>
+    </HashRouter>
   </React.StrictMode>
 );
