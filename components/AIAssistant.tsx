@@ -1,271 +1,165 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { X, Send, Sparkles, Bot, BarChart3, ArrowUpLeft, Search, Zap, CheckCircle2, AlertCircle, Clock } from 'lucide-react';
+import { X, Bot, Sparkles, ArrowUpLeft, Send } from 'lucide-react';
 
-interface AIAssistantProps {
-  projects: any[];
-  technicalRequests: any[];
-  deedsRequests: any[];
-  clearanceRequests: any[];
-  onNavigate: (type: 'PROJECT' | 'DEED', data: any) => void;
-}
-
-interface ActionButton {
-    label: string;
-    type: 'PROJECT' | 'DEED';
-    data: any;
-}
-
-interface Message {
-  id: number;
-  text: string;
-  sender: 'user' | 'bot';
-  time: string;
-  actions?: ActionButton[];
-}
-
-const AIAssistant: React.FC<AIAssistantProps> = ({ projects, technicalRequests, deedsRequests, clearanceRequests, onNavigate }) => {
+// --- المساعد الذكي (النسخة المطورة لعرض التفاصيل) ---
+const AIAssistant = ({ currentUser, onNavigate, projects, technicalRequests, deedsRequests, projectWorks }: any) => {
+  // Fix: Added missing useState hook for state management
   const [isOpen, setIsOpen] = useState(false);
   const [input, setInput] = useState('');
-  const [isTyping, setIsTyping] = useState(false);
-  
-  const getGreeting = () => {
-      const hour = new Date().getHours();
-      const greeting = hour < 12 ? 'صباح الخير ☀️' : 'مساء الخير 🌙';
-      return `${greeting}، أنا مساعدك الذكي.\nيمكنك سؤالي عن مشروع محدد، أو طلب "ملخص النظام" أو "الأعمال المتابعة".`;
-  };
-
-  const [messages, setMessages] = useState<Message[]>([
-    { 
-      id: 1, 
-      text: getGreeting(), 
-      sender: 'bot', 
-      time: new Date().toLocaleTimeString('ar-SA', {hour: '2-digit', minute:'2-digit'}) 
-    }
+  const [messages, setMessages] = useState<any[]>([
+      { id: 1, text: `مرحباً ${currentUser?.name || ''} 👋\nأنا مساعدك الذكي لمتابعة المشاريع.\nاسألني عن أي مشروع (مثال: "سرايا البدر") وسأعطيك تقريراً مفصلاً.`, sender: 'bot', time: new Date().toLocaleTimeString('ar-SA', {hour: '2-digit', minute:'2-digit'}) }
   ]);
+  const [isTyping, setIsTyping] = useState(false);
+  // Fix: Added missing useRef hook for scrolling
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  // Fix: Added missing useEffect hook for auto-scrolling to the latest message
   useEffect(() => { 
-    if (isOpen) {
-      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); 
-    }
-  }, [messages, isTyping, isOpen]);
+    if (isOpen) messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); 
+  }, [messages, isOpen]);
 
-  // --- دالة استخراج اسم العمل الحقيقي (حل مشكلة Untitled Work) ---
-  const getWorkTitle = (work: any) => {
-      if (work.service_type) return work.service_type;
-      if (work.title) return work.title;
-      if (work.type) return work.type;
-      
-      // الترجمة اليدوية للحقول البرمجية الشائعة
-      const typeMap: Record<string, string> = {
-          'electricity': '⚡ أعمال الكهرباء',
-          'water': '💧 أعمال المياه',
-          'paint': '🎨 أعمال الدهانات',
-          'internal': '🏠 أعمال داخلية',
-          'external': '🏗️ أعمال خارجية'
-      };
-      
-      if (work.request_type && typeMap[work.request_type]) return typeMap[work.request_type];
-      if (work.request_type) return work.request_type;
-      
-      return work.description ? (work.description.substring(0, 30) + '...') : `مهمة رقم ${work.id}`;
-  };
+  if (!currentUser || !['ADMIN', 'PR_MANAGER'].includes(currentUser.role)) return null;
 
-  // --- المحرك الذكي المطور ---
   const processQuery = (rawQuery: string) => {
     const query = rawQuery.toLowerCase().trim();
     let responseText = "";
-    let actions: ActionButton[] = [];
+    let actions: any[] = [];
 
-    // كلمات الفلترة
-    const isCompletedQuery = query.includes('منجز') || query.includes('تم') || query.includes('خالص');
-    const isPendingQuery = query.includes('متابعة') || query.includes('جاري') || query.includes('باقي') || query.includes('تحت');
-
-    // 1️⃣ البحث عن مشروع محدد
-    const project = projects.find(p => query.includes(p.name.toLowerCase()) || query.includes((p.title || '').toLowerCase()));
+    // البحث عن مشاريع
+    const project = (projects || []).find((p: any) => query.includes((p.name || '').toLowerCase()));
     
-    if (project && !query.includes('ملخص عام')) {
-        const works = [...technicalRequests, ...clearanceRequests].filter(r => r.project_name === project.name || r.projectName === project.name);
-        
-        let displayedWorks = works;
-        let statusTitle = "جميع الأعمال";
+    if (project) {
+         // 1. جمع كل الأعمال والطلبات المرتبطة بالمشروع
+         const relatedWorks = (projectWorks || []).filter((w: any) => w.projectId === project.id);
+         const relatedTech = (technicalRequests || []).filter((t: any) => t.projectId === project.id);
+         const allTasks = [...relatedWorks, ...relatedTech];
 
-        if (isCompletedQuery) {
-            displayedWorks = works.filter(w => w.status === 'completed' || w.status === 'منجز');
-            statusTitle = "✅ الأعمال المنجزة";
-        } else if (isPendingQuery) {
-            displayedWorks = works.filter(w => w.status !== 'completed' && w.status !== 'منجز');
-            statusTitle = "⏳ الأعمال قيد المتابعة";
-        }
+         // 2. فصل المنجز عن غير المنجز
+         const completedList = allTasks.filter((w: any) => w.status === 'completed' || w.status === 'منجز');
+         const pendingList = allTasks.filter((w: any) => w.status !== 'completed' && w.status !== 'منجز');
 
-        const completionRate = works.length > 0 ? Math.round((works.filter(w => w.status === 'completed' || w.status === 'منجز').length / works.length) * 100) : 0;
+         // 3. بناء نص الرد (سرد الأسماء)
+         let detailsText = "";
 
-        const listText = displayedWorks.slice(0, 8).map((w, i) => {
-            const title = getWorkTitle(w);
-            const statusIcon = (w.status === 'completed' || w.status === 'منجز') ? '✅' : '⏳';
-            return `${i+1}. ${title} ${statusIcon}`;
-        }).join('\n');
+         if (completedList.length > 0) {
+             detailsText += `\n✅ **أبرز الأعمال المنجزة:**\n`;
+             // نعرض أول 3 أعمال فقط لتجنب طول الرسالة
+             completedList.slice(0, 3).forEach((w: any) => {
+                 detailsText += `- ${w.task_name || w.type}\n`;
+             });
+             if (completedList.length > 3) detailsText += `...و ${completedList.length - 3} أعمال أخرى.\n`;
+         } else {
+             detailsText += `\n⚠️ لا توجد أعمال منجزة مسجلة.\n`;
+         }
 
-        responseText = `🏗️ **تقرير مشروع: ${project.name}**\n` +
-                       `📍 الموقع: ${project.location || 'غير محدد'}\n` +
-                       `📊 نسبة الإنجاز: ${completionRate}%\n` +
-                       `ــــــــــــــــــــــــــــــــــــــــــــــــ\n` +
-                       `🔍 **${statusTitle} (${displayedWorks.length}):**\n` +
-                       (listText || "لا توجد سجلات في هذا التصنيف.") + 
-                       (displayedWorks.length > 8 ? `\n...و ${displayedWorks.length - 8} أخرى` : '');
-
-        actions.push({ label: `فتح ملف ${project.name}`, type: 'PROJECT', data: project });
+         if (pendingList.length > 0) {
+             detailsText += `\n⏳ **أعمال قيد المتابعة:**\n`;
+             pendingList.slice(0, 3).forEach((w: any) => {
+                 detailsText += `- ${w.task_name || w.type}\n`;
+             });
+             if (pendingList.length > 3) detailsText += `...و ${pendingList.length - 3} أعمال أخرى.\n`;
+         } else {
+             detailsText += `\n✨ ممتاز! لا توجد أعمال معلقة.\n`;
+         }
+         
+         responseText = `🏗️ **تقرير مشروع: ${project.name}**\n` +
+                        `📊 إجمالي المهام: ${allTasks.length}` +
+                        detailsText + 
+                        `\nهل تريد فتح ملف المشروع للتفاصيل الكاملة؟`;
+         
+         // زر فتح المشروع
+         actions.push({ label: `فتح ملف ${project.name}`, type: 'PROJECT', data: project });
     } 
-
-    // 2️⃣ ملخص حالة النظام (Dashboard Summary)
-    else if (query.includes('ملخص') || query.includes('حالة') || query.includes('تقرير')) {
-        const completedDeeds = deedsRequests.filter(d => d.status === 'منجز').length;
-        const pendingDeeds = deedsRequests.length - completedDeeds;
-        const completedTech = technicalRequests.filter(t => t.status === 'completed' || t.status === 'منجز').length;
-        const pendingTech = technicalRequests.length - completedTech;
-
-        responseText = `📊 **تقرير حالة النظام الحالية:**\n\n` +
-                       `📝 **سجل الإفراغات:**\n` +
-                       `- ✅ المنجز: ${completedDeeds}\n` +
-                       `- ⏳ المتابعة: ${pendingDeeds}\n\n` +
-                       `🔧 **الطلبات الفنية والأعمال:**\n` +
-                       `- ✅ المنجز: ${completedTech}\n` +
-                       `- ⏳ المتابعة: ${pendingTech}\n\n` +
-                       `هل تريد تفاصيل مشروع معين؟`;
+    else if (query.includes('افراغ') || query.includes('إفراغ')) {
+         responseText = "يمكنك إدارة الإفراغات من قسم 'سجل الإفراغات'. هل تريد الذهاب هناك؟";
+         actions.push({ label: 'سجل الإفراغات', type: 'DEED', data: null });
     }
-
-    // 3️⃣ البحث عن إفراغ عميل
-    else if (query.includes('افراغ') || query.includes('إفراغ') || query.includes('عميل')) {
-        const deed = deedsRequests.find(d => 
-            query.includes(d.client_name?.toLowerCase()) || 
-            query.includes(String(d.id_number))
-        );
-
-        if (deed) {
-            responseText = `📄 **بيانات الإفراغ:**\n` +
-                           `👤 العميل: ${deed.client_name}\n` +
-                           `🏠 المشروع: ${deed.project_name}\n` +
-                           `📊 الحالة: ${deed.status}\n` +
-                           `📅 التاريخ: ${new Date(deed.created_at).toLocaleDateString('ar-SA')}`;
-            
-            actions.push({ label: 'عرض في سجل الإفراغات', type: 'DEED', data: deed });
-        } else {
-            responseText = "عذراً، لم أجد إفراغاً بهذا الاسم أو الهوية. يرجى التأكد من البيانات.";
-        }
-    }
-
-    // 4️⃣ الرد الافتراضي
-    if (!responseText) {
-        responseText = "لم أفهم طلبك تماماً. جرب سؤالي عن:\n- ملخص عام للنظام\n- حالة مشروع معين (مثال: 'مشروع سرايا')\n- إفراغ عميل محدد بالاسم";
+    else {
+        responseText = "عذراً، لم أجد مشروعاً بهذا الاسم. الرجاء كتابة اسم المشروع بدقة (مثال: تالا الشرق، سرايا الجوان).";
     }
 
     return { text: responseText, actions };
   };
 
-  const handleSend = (textInput: string = input) => {
-    if (!textInput.trim()) return;
-
-    const userMsg: Message = { id: Date.now(), text: textInput, sender: 'user', time: new Date().toLocaleTimeString('ar-SA', {hour: '2-digit', minute:'2-digit'}) };
-    setMessages(prev => [...prev, userMsg]);
+  const handleSend = () => {
+    if (!input.trim()) return;
+    
+    const userText = input;
+    setMessages(prev => [...prev, { id: Date.now(), text: userText, sender: 'user', time: new Date().toLocaleTimeString('ar-SA', {hour: '2-digit', minute:'2-digit'}) }]);
     setInput('');
     setIsTyping(true);
 
     setTimeout(() => {
-        const { text, actions } = processQuery(textInput);
-        const botMsg: Message = { 
+        const { text, actions } = processQuery(userText);
+        setMessages(prev => [...prev, { 
             id: Date.now() + 1, 
             text: text, 
             sender: 'bot', 
             time: new Date().toLocaleTimeString('ar-SA', {hour: '2-digit', minute:'2-digit'}),
-            actions: actions 
-        };
-        setMessages(prev => [...prev, botMsg]);
+            actions 
+        }]);
         setIsTyping(false);
     }, 600);
   };
 
   return (
     <>
-      <button 
-        onClick={() => setIsOpen(true)} 
-        className={`fixed bottom-6 left-6 z-50 bg-[#E95D22] text-white p-4 rounded-full shadow-2xl hover:scale-110 transition-transform duration-300 ${isOpen ? 'hidden' : 'flex'}`}
-      >
-        <Sparkles size={28} className="animate-pulse" />
-      </button>
+    <button onClick={() => setIsOpen(!isOpen)} className="fixed bottom-8 left-8 z-50 bg-[#1B2B48] hover:bg-[#E95D22] text-white p-4 rounded-full shadow-xl transition-all duration-300 hover:scale-110 flex items-center gap-2 group">
+        <span className={`${isOpen ? 'hidden' : 'block'} max-w-0 overflow-hidden group-hover:max-w-xs transition-all duration-500 whitespace-nowrap font-bold text-sm`}>المساعد الذكي</span>
+        {/* Fix: Used imported X and Bot icons */}
+        {isOpen ? <X size={28} /> : <Bot size={28} />}
+    </button>
 
-      {isOpen && (
-        <div className="fixed bottom-6 left-6 z-50 w-full max-w-sm bg-white rounded-[30px] shadow-2xl border border-gray-100 overflow-hidden flex flex-col animate-in slide-in-from-bottom-10 duration-300 h-[600px] max-h-[80vh] font-cairo" dir="rtl">
-          
-          <div className="bg-[#1B2B48] p-5 flex justify-between items-center text-white shadow-md">
-            <div className="flex items-center gap-3">
-                <div className="bg-white/10 p-2 rounded-xl backdrop-blur-md">
-                    <Bot size={24} className="text-[#E95D22]" />
-                </div>
-                <div>
-                    <h3 className="font-bold text-lg">مساعد دار وإعمار</h3>
-                    <p className="text-[10px] text-green-400 font-bold">متصل الآن</p>
-                </div>
-            </div>
-            <button onClick={() => setIsOpen(false)} className="text-white/60 hover:text-white hover:bg-white/10 p-2 rounded-full transition-all"><X size={20} /></button>
+    {isOpen && (
+        <div className="fixed bottom-24 left-8 z-50 w-80 bg-white rounded-[30px] shadow-2xl border border-gray-100 overflow-hidden flex flex-col animate-in slide-in-from-bottom-10 duration-300 h-[500px] font-cairo" dir="rtl">
+          <div className="bg-[#1B2B48] p-4 flex items-center gap-2 text-white shadow-md">
+             {/* Fix: Used imported Sparkles icon */}
+             <Sparkles size={18} className="text-[#E95D22]" />
+             <span className="font-bold">مساعد دار وإعمار</span>
           </div>
 
           <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-[#f8f9fa] custom-scrollbar">
             {messages.map((msg) => (
                 <div key={msg.id} className={`flex flex-col ${msg.sender === 'user' ? 'items-end' : 'items-start'}`}>
-                    <div className={`max-w-[85%] rounded-2xl p-4 text-sm font-bold leading-relaxed whitespace-pre-line shadow-sm ${msg.sender === 'user' ? 'bg-[#E95D22] text-white rounded-bl-none' : 'bg-white text-[#1B2B48] border border-gray-100 rounded-br-none'}`}>
+                    <div className={`max-w-[90%] rounded-2xl p-3 text-sm font-bold leading-relaxed shadow-sm whitespace-pre-wrap ${msg.sender === 'user' ? 'bg-[#E95D22] text-white rounded-bl-none' : 'bg-white text-[#1B2B48] border border-gray-100 rounded-br-none'}`}>
                         {msg.text}
                     </div>
-                    {msg.actions && msg.actions.length > 0 && (
+                    {msg.actions && (
                         <div className="mt-2 flex flex-wrap gap-2">
-                            {msg.actions.map((action, idx) => (
-                                <button 
-                                    key={idx}
-                                    onClick={() => { onNavigate(action.type, action.data); setIsOpen(false); }}
-                                    className="flex items-center gap-1.5 bg-[#1B2B48] text-white text-xs font-black px-4 py-2.5 rounded-xl hover:bg-blue-900 transition-all shadow-md"
-                                >
-                                    {action.label} <ArrowUpLeft size={14} />
+                            {msg.actions.map((action: any, idx: number) => (
+                                <button key={idx} onClick={() => { 
+                                    if(action.type === 'PROJECT') onNavigate('PROJECT', action.data);
+                                    if(action.type === 'DEED') onNavigate('DEED', null);
+                                    setIsOpen(false);
+                                }} className="flex items-center gap-1 bg-[#1B2B48] text-white text-xs px-3 py-2 rounded-lg hover:bg-blue-900 transition-colors w-full justify-center">
+                                    {/* Fix: Used imported ArrowUpLeft icon */}
+                                    {action.label} <ArrowUpLeft size={14}/>
                                 </button>
                             ))}
                         </div>
                     )}
-                    <span className="text-[9px] text-gray-400 mt-1 px-1">{msg.time}</span>
                 </div>
             ))}
-            
-            {isTyping && (
-                <div className="flex items-start">
-                    <div className="bg-white border border-gray-100 p-3 rounded-2xl flex gap-1">
-                        <span className="w-1.5 h-1.5 bg-gray-300 rounded-full animate-bounce"></span>
-                        <span className="w-1.5 h-1.5 bg-gray-300 rounded-full animate-bounce delay-75"></span>
-                        <span className="w-1.5 h-1.5 bg-gray-300 rounded-full animate-bounce delay-150"></span>
-                    </div>
-                </div>
-            )}
+            {isTyping && <div className="text-xs text-gray-400 px-2">جاري الكتابة...</div>}
             <div ref={messagesEndRef} />
           </div>
 
-          <div className="p-4 bg-white border-t border-gray-100">
-            <div className="relative flex items-center gap-2">
-                <input 
-                    type="text" 
-                    placeholder="اكتب استفسارك هنا..." 
-                    className="w-full pl-4 pr-12 py-3.5 bg-gray-50 border border-gray-200 rounded-[20px] focus:outline-none focus:border-[#E95D22] text-sm font-bold text-[#1B2B48] transition-all" 
-                    value={input} 
-                    onChange={(e) => setInput(e.target.value)} 
-                    onKeyPress={(e) => e.key === 'Enter' && handleSend()} 
-                />
-                <button 
-                    onClick={() => handleSend()} 
-                    className={`absolute left-2 p-2 rounded-xl transition-all ${input.trim() ? 'bg-[#1B2B48] text-white shadow-lg' : 'bg-gray-100 text-gray-300'}`}
-                    disabled={!input.trim()}
-                >
-                    <Send size={18} />
-                </button>
-            </div>
+          <div className="p-3 bg-white border-t flex gap-2">
+            <input 
+                className="flex-1 bg-gray-50 rounded-xl px-4 text-sm font-bold outline-none focus:ring-1 ring-[#E95D22]" 
+                placeholder="أكتب اسم المشروع..." 
+                value={input}
+                onChange={e => setInput(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleSend()}
+            />
+            <button onClick={handleSend} className="p-3 bg-[#1B2B48] text-white rounded-xl hover:bg-[#E95D22] transition-colors">
+                {/* Fix: Used imported Send icon */}
+                <Send size={18} />
+            </button>
           </div>
         </div>
-      )}
+    )}
     </>
   );
 };

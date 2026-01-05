@@ -87,7 +87,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         supabase.from('projects').select('*').order('id', { ascending: true }),
         supabase.from('technical_requests').select('*').order('created_at', { ascending: false }),
         supabase.from('profiles').select('*'),
-        supabase.from('deeds_requests').select('*').order('created_at', { ascending: false })
+        supabase.from('clearance_requests').select('*').order('created_at', { ascending: false })
       ]);
 
       if (pRes.data && pRes.data.length > 0) {

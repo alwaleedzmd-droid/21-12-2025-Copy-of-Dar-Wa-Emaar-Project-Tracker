@@ -46,6 +46,26 @@ export interface ProjectSummary {
   electricity_contractor_mobile?: string;
 }
 
+export interface ProjectWork {
+  id: number;
+  task_name: string;
+  status: string;
+  project_name: string;
+  projectId: number;
+  authority?: string;
+  department?: string;
+  notes?: string; 
+  created_at: string;
+}
+
+export interface WorkComment {
+  id: number;
+  content: string;
+  user_name: string;
+  created_at: string;
+  work_id: number;
+}
+
 export interface Task {
   id: number;
   description: string;
@@ -63,6 +83,7 @@ export interface TechnicalRequest {
   updated_at?: string;
   project_id: number;
   project_name?: string;
+  projectId?: number; // Added to match some usages
   scope: string;       
   service_type: string; 
   details: string;
@@ -82,6 +103,7 @@ export interface ClearanceRequest {
   project_id: number;
   project_name?: string;
   client_name: string;
+  beneficiary_name?: string; // Added to match usage in Dashboard
   status: string; 
   progress: number;
   notes?: string;
@@ -91,7 +113,6 @@ export interface ClearanceRequest {
   deal_value?: string;
   bank_name?: string;
   deed_number?: string;
-  // Added contract_type to match usage in App.tsx and DeedsDashboard.tsx
   contract_type?: string;
   submitted_by?: string;
   assigned_to?: string;
