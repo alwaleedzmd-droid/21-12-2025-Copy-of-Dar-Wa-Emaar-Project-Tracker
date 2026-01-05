@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
@@ -51,14 +52,15 @@ const DashboardModule: React.FC<DashboardProps> = ({
     const allWorks = [...projectWorks, ...techRequests].map(item => ({
         ...item,
         category: 'WORK',
-        label: item.task_name || item.type, // توحيد الاسم
+        // Fix: prioritize service_type so the dashboard shows the actual work description (e.g., فرز صكوك)
+        label: item.service_type || item.type || item.task_name || 'عمل فني',
         date: item.created_at
     }));
 
     const allDeeds = clearanceRequests.map(item => ({
         ...item,
         category: 'DEED',
-        label: `إفراغ: ${item.beneficiary_name} (${item.deed_number || ''})`,
+        label: `إفراغ: ${item.beneficiary_name || item.client_name} (${item.deed_number || ''})`,
         date: item.created_at,
         status: item.status || 'new'
     }));

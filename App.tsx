@@ -321,7 +321,7 @@ const ProjectDetailWrapper = ({ projects = [], onRefresh, currentUser }: any) =>
 
    // التصفية الجراحية للطلبات الفنية المرتبطة بهذا المشروع
    const thisProjectTech = useMemo(() => {
-     return (technicalRequests || []).filter((t: any) => (Number(t.project_id) === Number(id) || Number(t.projectId) === Number(id))) || [];
+     return (technicalRequests || []).filter((t: any) => (Number(t?.project_id) === Number(id) || Number(t?.projectId) === Number(id))) || [];
    }, [technicalRequests, id]);
 
    const fetchWorks = async () => {
@@ -336,8 +336,8 @@ const ProjectDetailWrapper = ({ projects = [], onRefresh, currentUser }: any) =>
        if (!newWorkForm.task_name || !project) return alert("الرجاء كتابة اسم العمل");
        const { error } = await supabase.from('project_works').insert({
            ...newWorkForm,
-           project_name: project.name || project.title,
-           projectId: project.id,
+           project_name: project?.name || project?.title,
+           projectId: project?.id,
            status: 'in_progress'
        });
        if (error) alert("خطأ: " + error.message);
@@ -358,18 +358,18 @@ const ProjectDetailWrapper = ({ projects = [], onRefresh, currentUser }: any) =>
        if (!newComment || !selectedWork) return;
        const { error } = await supabase.from('work_comments').insert({
            content: newComment,
-           work_id: Number(selectedWork.id),
+           work_id: Number(selectedWork?.id),
            user_name: currentUser?.name
        });
        if (!error) {
            setNewComment('');
-           fetchComments(selectedWork.id);
+           fetchComments(selectedWork?.id);
        }
    };
 
    const handleStatusChange = async (newStatus: string) => {
        if (!selectedWork) return;
-       const { error } = await supabase.from('project_works').update({ status: newStatus }).eq('id', Number(selectedWork.id));
+       const { error } = await supabase.from('project_works').update({ status: newStatus }).eq('id', Number(selectedWork?.id));
        if (!error) {
            setSelectedWork({ ...selectedWork, status: newStatus });
            fetchWorks();
@@ -379,12 +379,12 @@ const ProjectDetailWrapper = ({ projects = [], onRefresh, currentUser }: any) =>
 
    // وظيفة جراحية ومستقرة لتحديث حالة الطلب الفني ومعالجة الأخطاء بشكل دقيق
    const handleTechStatusUpdate = async (newStatus: string) => {
-     if (!selectedTechRequest) return;
+     if (!selectedTechRequest?.id) return;
      setIsTechLoading(true);
      try {
+       // إعداد حمولة التحديث بدون updated_at يدوياً لترك التحكم لقاعدة البيانات
        const updatePayload: any = { 
-         status: newStatus, 
-         updated_at: new Date().toISOString()
+         status: newStatus
        };
 
        // تحديث التقدم تلقائياً إذا كانت الحالة منجز
@@ -395,11 +395,13 @@ const ProjectDetailWrapper = ({ projects = [], onRefresh, currentUser }: any) =>
        const { error } = await supabase
          .from('technical_requests')
          .update(updatePayload)
-         .eq('id', Number(selectedTechRequest.id));
+         .eq('id', Number(selectedTechRequest?.id));
        
        if (error) {
          console.error("Supabase technical_requests update error:", error);
-         throw new Error(error.message || "فشل التحديث في قاعدة البيانات");
+         // استخراج رسالة الخطأ لتجنب ظهور [object Object]
+         const errorMsg = error?.message || (typeof error === 'object' ? JSON.stringify(error) : String(error));
+         throw new Error(errorMsg);
        }
        
        // تحديث الحالة محلياً للطلب المختار لضمان رؤية التغيير فوراً في المودال
@@ -407,18 +409,21 @@ const ProjectDetailWrapper = ({ projects = [], onRefresh, currentUser }: any) =>
 
        // تسجيل النشاط
        if (logActivity) {
-         logActivity('تحديث حالة الطلب', `${selectedTechRequest.service_type || 'طلب فني'}: ${newStatus}`, 'text-blue-500');
+         logActivity('تحديث حالة الطلب', `${selectedTechRequest?.service_type || 'طلب فني'}: ${newStatus}`, 'text-blue-500');
        }
        
-       // تحديث البيانات على مستوى التطبيق والمكون
+       // تحديث البيانات على مستوى التطبيق والمكون (onRefresh استدعاء في حال النجاح فقط)
        await refreshData();
        if (onRefresh) onRefresh();
        
+       // Success Alert ONLY if no error
        alert("تم تحديث حالة الطلب بنجاح ✅");
        
      } catch (err: any) {
-       console.error("Full Technical Request Update Error Object:", err);
+       console.error("Detailed Technical Request Update Error:", err);
        alert("فشل تحديث الحالة: " + (err?.message || "حدث خطأ غير متوقع في الاتصال بقاعدة البيانات"));
+       // إعادة رمي الخطأ لتمكين المكون الابن من التراجع عن الحالة المحلية
+       throw err;
      } finally {
        setIsTechLoading(false);
      }
@@ -446,21 +451,21 @@ const ProjectDetailWrapper = ({ projects = [], onRefresh, currentUser }: any) =>
                    <Plus size={20}/> إضافة عمل
                 </button>
             </div>
-            {(projectWorks || []).length === 0 ? (
+            {(projectWorks || [])?.length === 0 ? (
                 <div className="text-center p-12 text-gray-400 bg-gray-50 rounded-[30px] border-dashed border-2 font-bold">لا توجد أعمال مسجلة لهذا المشروع حالياً</div>
             ) : (
                 <div className="grid gap-4">
-                    {(projectWorks || []).map((work) => (
-                        <div key={work.id} onClick={() => { setSelectedWork(work); fetchComments(work.id); }} className="flex items-center justify-between p-5 bg-gray-50 rounded-2xl hover:bg-white hover:shadow-md transition-all border border-gray-100 cursor-pointer group">
+                    {(projectWorks || [])?.map((work) => (
+                        <div key={work?.id} onClick={() => { setSelectedWork(work); fetchComments(work?.id); }} className="flex items-center justify-between p-5 bg-gray-50 rounded-2xl hover:bg-white hover:shadow-md transition-all border border-gray-100 cursor-pointer group">
                             <div className="flex items-center gap-4">
-                                <div className={`w-3 h-12 rounded-full ${work.status === 'completed' || work.status === 'منجز' ? 'bg-green-500' : 'bg-orange-500'}`}></div>
+                                <div className={`w-3 h-12 rounded-full ${work?.status === 'completed' || work?.status === 'منجز' ? 'bg-green-500' : 'bg-orange-500'}`}></div>
                                 <div>
-                                    <h3 className="font-bold text-[#1B2B48] text-lg group-hover:text-[#E95D22] transition-colors">{work.task_name}</h3>
-                                    <p className="text-xs text-gray-500 font-bold mt-1">{work.authority || 'جهة غير محددة'}</p>
+                                    <h3 className="font-bold text-[#1B2B48] text-lg group-hover:text-[#E95D22] transition-colors">{work?.task_name}</h3>
+                                    <p className="text-xs text-gray-500 font-bold mt-1">{work?.authority || 'جهة غير محددة'}</p>
                                 </div>
                             </div>
-                            <span className={`px-4 py-2 rounded-xl font-bold text-sm ${work.status === 'completed' || work.status === 'منجز' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>
-                                {work.status === 'completed' || work.status === 'منجز' ? 'منجز ✅' : 'قيد المتابعة ⏳'}
+                            <span className={`px-4 py-2 rounded-xl font-bold text-sm ${work?.status === 'completed' || work?.status === 'منجز' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>
+                                {work?.status === 'completed' || work?.status === 'منجز' ? 'منجز ✅' : 'قيد المتابعة ⏳'}
                             </span>
                         </div>
                     ))}
@@ -474,26 +479,26 @@ const ProjectDetailWrapper = ({ projects = [], onRefresh, currentUser }: any) =>
                 <div className="p-3 bg-blue-600 text-white rounded-xl"><ClipboardList size={24}/></div>
                 <h2 className="text-2xl font-black text-[#1B2B48]">الطلبات الفنية والمراجعات</h2>
             </div>
-            {(thisProjectTech || []).length === 0 ? (
+            {(thisProjectTech || [])?.length === 0 ? (
                 <div className="text-center p-12 text-gray-400 bg-gray-50 rounded-[30px] border-dashed border-2 font-bold">لا توجد طلبات فنية مرتبطة بهذا المشروع</div>
             ) : (
                 <div className="grid gap-4">
-                    {(thisProjectTech || []).map((req: any) => (
+                    {(thisProjectTech || [])?.map((req: any) => (
                         <div 
-                          key={req.id} 
+                          key={req?.id} 
                           onClick={() => { setSelectedTechRequest(req); setIsTechModalOpen(true); }}
                           className="flex items-center justify-between p-5 bg-gray-50 rounded-2xl border border-gray-100 hover:bg-white hover:shadow-md transition-all cursor-pointer group"
                         >
                             <div className="flex items-center gap-4">
-                                <div className={`w-3 h-12 rounded-full ${req.status === 'completed' || req.status === 'منجز' ? 'bg-green-500' : 'bg-blue-500'}`}></div>
+                                <div className={`w-3 h-12 rounded-full ${req?.status === 'completed' || req?.status === 'منجز' ? 'bg-green-500' : 'bg-blue-500'}`}></div>
                                 <div>
-                                    <h3 className="font-bold text-[#1B2B48] text-lg group-hover:text-blue-600 transition-colors">{req.service_type || req.type}</h3>
-                                    <p className="text-xs text-gray-400 font-bold mt-1">{req.reviewing_entity || 'جهة المراجعة'}</p>
+                                    <h3 className="font-bold text-[#1B2B48] text-lg group-hover:text-blue-600 transition-colors">{req?.service_type || req?.type}</h3>
+                                    <p className="text-xs text-gray-400 font-bold mt-1">{req?.reviewing_entity || 'جهة المراجعة'}</p>
                                 </div>
                             </div>
                             <div className="flex items-center gap-4">
-                                <span className={`px-4 py-2 rounded-xl font-bold text-sm ${req.status === 'completed' || req.status === 'منجز' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>
-                                    {req.status === 'completed' || req.status === 'منجز' ? 'منجز ✅' : 'قيد المتابعة ⏳'}
+                                <span className={`px-4 py-2 rounded-xl font-bold text-sm ${req?.status === 'completed' || req?.status === 'منجز' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>
+                                    {req?.status === 'completed' || req?.status === 'منجز' ? 'منجز ✅' : 'قيد المتابعة ⏳'}
                                 </span>
                             </div>
                         </div>
@@ -528,33 +533,33 @@ const ProjectDetailWrapper = ({ projects = [], onRefresh, currentUser }: any) =>
         </Modal>
 
         {selectedWork && (
-            <Modal isOpen={!!selectedWork} onClose={() => setSelectedWork(null)} title={selectedWork.task_name}>
+            <Modal isOpen={!!selectedWork} onClose={() => setSelectedWork(null)} title={selectedWork?.task_name}>
                 <div className="font-cairo text-right space-y-6">
-                    {selectedWork.notes && (
+                    {(selectedWork as any)?.notes && (
                         <div className="bg-blue-50 p-4 rounded-2xl border border-blue-100">
                             <h5 className="font-bold text-blue-800 mb-2 flex items-center gap-2"><AlignLeft size={16}/> وصف العمل:</h5>
-                            <p className="text-gray-700 text-sm leading-relaxed">{selectedWork.notes}</p>
+                            <p className="text-gray-700 text-sm leading-relaxed">{(selectedWork as any)?.notes}</p>
                         </div>
                     )}
                     <div className="flex justify-between items-center bg-gray-50 p-4 rounded-2xl">
                         <span className="font-bold text-gray-500">الحالة:</span>
                         <button 
-                            onClick={() => handleStatusChange(selectedWork.status === 'completed' || selectedWork.status === 'منجز' ? 'in_progress' : 'completed')}
-                            className={`px-6 py-2 rounded-xl font-bold transition-all shadow-sm ${selectedWork.status === 'completed' || selectedWork.status === 'منجز' ? 'bg-green-500 text-white' : 'bg-orange-500 text-white hover:bg-green-500'}`}
+                            onClick={() => handleStatusChange(selectedWork?.status === 'completed' || selectedWork?.status === 'منجز' ? 'in_progress' : 'completed')}
+                            className={`px-6 py-2 rounded-xl font-bold transition-all shadow-sm ${selectedWork?.status === 'completed' || selectedWork?.status === 'منجز' ? 'bg-green-500 text-white' : 'bg-orange-500 text-white hover:bg-green-500'}`}
                         >
-                            {selectedWork.status === 'completed' || selectedWork.status === 'منجز' ? 'مكتمل ✅' : 'قيد المتابعة ⏳ (اضغط للإكمال)'}
+                            {selectedWork?.status === 'completed' || selectedWork?.status === 'منجز' ? 'مكتمل ✅' : 'قيد المتابعة ⏳ (اضغط للإكمال)'}
                         </button>
                     </div>
                     <div className="border-t pt-4">
                         <h4 className="font-bold text-[#1B2B48] mb-4 flex items-center gap-2"><MessageSquare size={18}/> التحديثات والملاحظات</h4>
                         <div className="bg-gray-50 rounded-2xl p-4 h-48 overflow-y-auto mb-4 space-y-3 custom-scrollbar border border-gray-100">
-                            {(workComments || []).length === 0 ? <p className="text-gray-400 text-center text-sm py-10 font-bold">لا توجد ملاحظات بعد</p> : (workComments || []).map(c => (
-                                <div key={c.id} className="bg-white p-3 rounded-xl shadow-sm border border-gray-100">
+                            {(workComments || [])?.length === 0 ? <p className="text-gray-400 text-center text-sm py-10 font-bold">لا توجد ملاحظات بعد</p> : (workComments || [])?.map(c => (
+                                <div key={c?.id} className="bg-white p-3 rounded-xl shadow-sm border border-gray-100">
                                     <div className="flex justify-between text-xs text-gray-400 mb-1 font-bold">
-                                        <span className="text-[#E95D22]">{c.user_name}</span>
-                                        <span>{new Date(c.created_at).toLocaleTimeString('ar-SA', {hour: '2-digit', minute:'2-digit'})}</span>
+                                        <span className="text-[#E95D22]">{c?.user_name}</span>
+                                        <span>{c?.created_at ? new Date(c?.created_at).toLocaleTimeString('ar-SA', {hour: '2-digit', minute:'2-digit'}) : ''}</span>
                                     </div>
-                                    <p className="text-sm text-gray-700 font-bold">{c.content}</p>
+                                    <p className="text-sm text-gray-700 font-bold">{c?.content}</p>
                                 </div>
                             ))}
                         </div>

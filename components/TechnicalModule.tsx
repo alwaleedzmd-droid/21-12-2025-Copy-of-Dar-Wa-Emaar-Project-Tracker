@@ -1,3 +1,4 @@
+
 import React, { useState, useRef } from 'react';
 import { 
   Plus, MoreHorizontal, Trash2, Edit, FileText, 
@@ -88,7 +89,7 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
     const proj = filteredByProject ? projects.find(p => p.name === filteredByProject || p.title === filteredByProject) : null;
     setTechForm({ 
       id: 0, 
-      project_id: proj ? proj.id.toString() : '', 
+      project_id: proj ? proj?.id?.toString() : '', 
       service_type: '', 
       reviewing_entity: '', 
       requesting_entity: '', 
@@ -103,15 +104,15 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
 
   const openEditModal = (req: TechnicalRequest) => {
     setTechForm({
-      id: req.id, 
-      project_id: req.project_id.toString(), 
-      service_type: req.service_type,
-      reviewing_entity: req.reviewing_entity || '', 
-      requesting_entity: req.requesting_entity || '',
-      details: req.details, 
-      status: req.status, 
-      progress: req.progress || 0,
-      attachment_url: req['attachment_url'] || '' 
+      id: req?.id, 
+      project_id: req?.project_id?.toString() || '', 
+      service_type: req?.service_type || '',
+      reviewing_entity: req?.reviewing_entity || '', 
+      requesting_entity: req?.requesting_entity || '',
+      details: req?.details || '', 
+      status: req?.status || 'new', 
+      progress: req?.progress || 0,
+      attachment_url: req?.attachment_url || '' 
     });
     setAttachment(null);
     setIsAddModalOpen(true);
@@ -121,13 +122,13 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
     if (!window.confirm("هل أنت متأكد من حذف هذا العمل؟")) return;
     // Fix: Find the request before deleting to use its info for logging
     const reqToDelete = requests.find(r => r.id === id);
-    const { error } = await supabase.from('technical_requests').delete().eq('id', id);
+    const { error } = await supabase.from('technical_requests').delete().eq('id', Number(id));
     if (!error) {
       // Fix: Log the deletion activity
-      if (reqToDelete) logActivity?.('حذف عملاً فنياً', reqToDelete.service_type, 'text-orange-500');
+      if (reqToDelete) logActivity?.('حذف عملاً فنياً', reqToDelete?.service_type || 'طلب', 'text-orange-500');
       onRefresh();
     }
-    else alert("حدث خطأ أثناء الحذف: " + error.message);
+    else alert("حدث خطأ أثناء الحذف: " + error?.message);
   };
 
   const handleSubmit = async () => {
@@ -138,28 +139,32 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
     let finalAttachmentUrl = techForm.attachment_url;
 
     if (attachment) {
-      const fileExt = attachment.name.split('.').pop();
-      const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
-      const filePath = `${fileName}`;
+      try {
+        const fileExt = attachment.name.split('.').pop();
+        const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+        const filePath = `${fileName}`;
 
-      const { error: uploadError } = await supabase.storage
-        .from('attachments')
-        .upload(filePath, attachment);
+        const { error: uploadError } = await supabase.storage
+          .from('attachments')
+          .upload(filePath, attachment);
 
-      if (uploadError) {
-        alert('حدث خطأ أثناء رفع الملف: ' + uploadError.message);
+        if (uploadError) {
+          throw uploadError;
+        }
+
+        const { data: { publicUrl } } = supabase.storage
+          .from('attachments')
+          .getPublicUrl(filePath);
+
+        finalAttachmentUrl = publicUrl;
+      } catch (err: any) {
+        alert('حدث خطأ أثناء رفع الملف: ' + (err?.message || "خطأ مجهول"));
         setIsUploading(false);
         return;
       }
-
-      const { data: { publicUrl } } = supabase.storage
-        .from('attachments')
-        .getPublicUrl(filePath);
-
-      finalAttachmentUrl = publicUrl;
     }
 
-    const selectedProj = projects.find(p => p.id.toString() === techForm.project_id);
+    const selectedProj = projects.find(p => p?.id?.toString() === techForm.project_id);
 
     const payload = {
       project_id: parseInt(techForm.project_id),
@@ -170,30 +175,34 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
       details: techForm.details,
       status: techForm.status, 
       progress: techForm.progress,
-      project_name: selectedProj ? (selectedProj.name || selectedProj.title) : '',
+      project_name: selectedProj ? (selectedProj?.name || selectedProj?.title) : '',
       attachment_url: finalAttachmentUrl,
       submitted_by: currentUser?.name
     };
 
-    let error;
-    if (techForm.id === 0) {
-      const res = await supabase.from('technical_requests').insert([payload]);
-      error = res.error;
-    } else {
-      const res = await supabase.from('technical_requests').update(payload).eq('id', techForm.id);
-      error = res.error;
-    }
+    try {
+      let error;
+      if (techForm.id === 0) {
+        const res = await supabase.from('technical_requests').insert([payload]);
+        error = res.error;
+      } else {
+        const res = await supabase.from('technical_requests').update(payload).eq('id', Number(techForm.id));
+        error = res.error;
+      }
 
-    if (error) {
-        alert("حدث خطأ: " + error.message);
-    } else {
+      if (error) {
+        throw error;
+      } else {
         // Fix: Log the creation/update activity
         logActivity?.(techForm.id === 0 ? 'أضاف عملاً فنياً جديداً' : 'حدث بيانات عمل فني', techForm.service_type, 'text-blue-500');
         setIsAddModalOpen(false);
         onRefresh();
+      }
+    } catch (err: any) {
+        alert("حدث خطأ: " + (err?.message || "خطأ في قاعدة البيانات"));
+    } finally {
+      setIsUploading(false); 
     }
-    
-    setIsUploading(false); 
   };
 
   const handleExcelImport = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -208,10 +217,10 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
         
         const formatted = data.map(row => {
           const pName = row['اسم المشروع'] || row['Project Name'];
-          const proj = projects.find(p => p.name === pName || p.title === pName);
+          const proj = projects.find(p => p?.name === pName || p?.title === pName);
           
           return {
-            project_id: proj ? proj.id : null,
+            project_id: proj ? proj?.id : null,
             project_name: pName,
             service_type: row['نوع العمل'] || row['Work Type'] || row['Service Type'],
             reviewing_entity: row['جهة المراجعة'] || row['Reviewer'],
@@ -234,32 +243,45 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
         setIsBulkModalOpen(false);
         onRefresh();
       } catch (err: any) {
-        alert("خطأ في الاستيراد: " + err.message);
+        alert("خطأ في الاستيراد: " + (err?.message || "تأكد من تنسيق الملف"));
       }
     };
     reader.readAsBinaryString(file);
   };
 
   const updateStatus = async (newStatus: string) => {
-    if (!activeRequest) return;
-    const updateData: any = { status: newStatus };
-    if (newStatus === 'completed' || newStatus === 'منجز') updateData.progress = 100;
+    if (!activeRequest?.id) return;
     
-    const { error } = await supabase.from('technical_requests').update(updateData).eq('id', activeRequest.id);
-    if (!error) {
-      // Fix: Log status change activity
-      logActivity?.('حدث حالة العمل الفني', activeRequest.service_type, newStatus === 'completed' || newStatus === 'منجز' ? 'text-green-500' : 'text-blue-500');
-      setActiveRequest({ ...activeRequest, ...updateData });
-      onRefresh();
-    } else {
-        alert("فشل تحديث الحالة");
+    try {
+      // إعداد حمولة التحديث بدون updated_at يدوياً للسماح للقاعدة بالتحكم
+      const updateData: any = { status: newStatus };
+      if (newStatus === 'completed' || newStatus === 'منجز') updateData.progress = 100;
+      
+      const { error } = await supabase.from('technical_requests').update(updateData).eq('id', Number(activeRequest?.id));
+      
+      if (!error) {
+        // تحديث الحالة محلياً فوراً
+        const updatedRequest = { ...activeRequest, ...updateData };
+        setActiveRequest(updatedRequest);
+        
+        // تسجيل النشاط
+        logActivity?.('حدث حالة العمل الفني', activeRequest?.service_type || 'طلب', newStatus === 'completed' || newStatus === 'منجز' ? 'text-green-500' : 'text-blue-500');
+        
+        // تحديث الواجهة والبيانات العامة
+        onRefresh();
+      } else {
+        throw error;
+      }
+    } catch (err: any) {
+      console.error("Status update error:", err);
+      alert("فشل تحديث الحالة: " + (err?.message || "خطأ مجهول"));
     }
   };
 
   const filteredRequests = requests.filter(r => 
-    (r.project_name?.toLowerCase().includes(searchTerm.toLowerCase()) || '') ||
-    (r.service_type?.toLowerCase().includes(searchTerm.toLowerCase()) || '') ||
-    (r.reviewing_entity?.toLowerCase().includes(searchTerm.toLowerCase()) || '')
+    (r?.project_name?.toLowerCase()?.includes(searchTerm.toLowerCase()) || '') ||
+    (r?.service_type?.toLowerCase()?.includes(searchTerm.toLowerCase()) || '') ||
+    (r?.reviewing_entity?.toLowerCase()?.includes(searchTerm.toLowerCase()) || '')
   );
 
   const canEdit = currentUser?.role === 'ADMIN' || currentUser?.role === 'PR_MANAGER' || currentUser?.role === 'TECHNICAL' || currentUser?.role === 'PR_OFFICER';
@@ -330,15 +352,15 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {filteredRequests.map(req => (
+              {filteredRequests?.map(req => (
                 <tr 
-                  key={req.id} 
+                  key={req?.id} 
                   className="hover:bg-gray-50 transition-colors cursor-pointer group" 
                   onClick={() => {setActiveRequest(req); setIsManageModalOpen(true);}}
                 >
                     {!filteredByProject && (
                       <td className="p-6">
-                        <p className="font-black text-[#1B2B48] text-sm">{req.project_name}</p>
+                        <p className="font-black text-[#1B2B48] text-sm">{req?.project_name}</p>
                       </td>
                     )}
                     <td className="p-6">
@@ -346,28 +368,28 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
                         <div className="p-2 bg-orange-50 text-[#E95D22] rounded-lg">
                           <Zap size={16} />
                         </div>
-                        <p className="font-bold text-gray-700 text-sm">{req.service_type}</p>
+                        <p className="font-bold text-gray-700 text-sm">{req?.service_type}</p>
                       </div>
                     </td>
-                    <td className="p-6 text-sm text-gray-400 font-bold">{req.reviewing_entity || '-'}</td>
+                    <td className="p-6 text-sm text-gray-400 font-bold">{req?.reviewing_entity || '-'}</td>
                     <td className="p-6 w-48">
                       <div className="flex items-center gap-2">
                         <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
                           <div 
-                            className={`h-full rounded-full transition-all duration-1000 ${req.progress === 100 ? 'bg-green-500' : 'bg-[#E95D22]'}`} 
-                            style={{width:`${req.progress || 0}%`}}
+                            className={`h-full rounded-full transition-all duration-1000 ${req?.progress === 100 ? 'bg-green-500' : 'bg-[#E95D22]'}`} 
+                            style={{width:`${req?.progress || 0}%`}}
                           />
                         </div>
-                        <span className="text-[10px] font-black text-gray-400">{req.progress || 0}%</span>
+                        <span className="text-[10px] font-black text-gray-400">{req?.progress || 0}%</span>
                       </div>
                     </td>
                     <td className="p-6">
                       <span className={`px-3 py-1 rounded-full text-[10px] font-black shadow-sm ${
-                        req.status === 'completed' || req.status === 'منجز' 
+                        req?.status === 'completed' || req?.status === 'منجز' 
                         ? 'bg-green-50 text-green-700 border border-green-100' 
                         : 'bg-amber-50 text-amber-700 border border-amber-100'
                       }`}>
-                        {STATUS_OPTIONS.find(o => o.value === req.status)?.label || req.status}
+                        {STATUS_OPTIONS.find(o => o.value === req?.status)?.label || req?.status}
                       </span>
                     </td>
                     <td className="p-6 text-left">
@@ -380,7 +402,7 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
                         </button>
                         {canDelete && (
                           <button 
-                            onClick={(e) => { e.stopPropagation(); handleDelete(req.id); }} 
+                            onClick={(e) => { e.stopPropagation(); handleDelete(req?.id); }} 
                             className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
                           >
                             <Trash2 size={16} />
@@ -391,7 +413,7 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
                     </td>
                 </tr>
               ))}
-              {filteredRequests.length === 0 && (
+              {filteredRequests?.length === 0 && (
                 <tr>
                   <td colSpan={6} className="p-20 text-center">
                     <div className="flex flex-col items-center justify-center text-gray-300 gap-4">
@@ -413,7 +435,7 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
             <label className="text-xs text-gray-400 font-bold block mb-1">المشروع</label>
             <select className="w-full p-4 bg-gray-50 border rounded-2xl font-bold" value={techForm.project_id} onChange={e=>setTechForm({...techForm, project_id:e.target.value})} disabled={!!filteredByProject}>
               <option value="">اختر المشروع...</option>
-              {projects.map(p=><option key={p.id} value={p.id}>{p.name || p.title}</option>)}
+              {projects?.map(p=><option key={p?.id} value={p?.id}>{p?.name || p?.title}</option>)}
             </select>
           </div>
           <div className="grid grid-cols-2 gap-4">

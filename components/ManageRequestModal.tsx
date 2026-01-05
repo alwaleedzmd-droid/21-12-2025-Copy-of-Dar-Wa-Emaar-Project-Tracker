@@ -11,7 +11,7 @@ interface ManageRequestModalProps {
   request: TechnicalRequest | ClearanceRequest | null;
   currentUser: User | null;
   usersList: any[];
-  onUpdateStatus: (newStatus: string) => void;
+  onUpdateStatus: (newStatus: string) => Promise<void>; // Corrected to Promise<void>
   onUpdateDelegation: (userId: string) => void;
 }
 
@@ -22,6 +22,7 @@ const ManageRequestModal: React.FC<ManageRequestModalProps> = ({
   currentUser, 
   onUpdateStatus
 }) => {
+  // تهيئة التعليقات كمصفوفة فارغة لضمان عدم حدوث خطأ عند استخدام map
   const [comments, setComments] = useState<Comment[]>([]);
   const [newComment, setNewComment] = useState('');
   const [loading, setLoading] = useState(false);
@@ -34,83 +35,86 @@ const ManageRequestModal: React.FC<ManageRequestModalProps> = ({
 
   useEffect(() => {
     if (isOpen && request) {
-      setCurrentStatus(request.status || '');
+      setCurrentStatus(request?.status || '');
       fetchComments();
     }
   }, [isOpen, request]);
 
   const fetchComments = async () => {
-    if (!request) return;
+    // التحقق من وجود المعرف قبل المحاولة لتجنب أخطاء null
+    if (!request?.id) return;
+    
     setFetchLoading(true);
     try {
-      // Ensuring we use the correct table name 'request_comments' and handling errors gracefully
+      // استخدام try/catch للتعامل مع أخطاء الجدول أو مشاكل الشبكة بشكل آمن
       const { data, error } = await supabase
         .from('request_comments')
         .select('*')
-        .eq('request_id', request.id)
+        .eq('request_id', request?.id)
         .eq('request_type', requestType)
         .order('created_at', { ascending: true });
       
       if (error) {
-        console.warn("Failed to fetch from request_comments table. Falling back to empty state.", error.message);
-        setComments([]);
+        console.warn("Table fetch error handled gracefully:", error.message);
+        setComments([]); // ضمان أن الحالة تبقى مصفوفة وليست undefined
       } else {
         setComments(data || []);
         scrollToBottom();
       }
     } catch (err) {
-      console.error("Critical error fetching comments:", err);
-      setComments([]);
+      console.error("Critical crash prevented during fetchComments:", err);
+      setComments([]); // Fallback to empty array on any failure
     } finally {
       setFetchLoading(false);
     }
   };
 
   const scrollToBottom = () => {
-    setTimeout(() => {
-      commentsEndRef.current?.scrollIntoView({ behavior: "smooth" });
-    }, 100);
+    if (commentsEndRef.current) {
+      setTimeout(() => {
+        commentsEndRef.current?.scrollIntoView({ behavior: "smooth" });
+      }, 100);
+    }
   };
 
   const handleSendComment = async () => {
-    if (!newComment.trim() || !currentUser || !request) return;
+    if (!newComment.trim() || !currentUser || !request?.id) return;
     setLoading(true);
 
     try {
       const { error } = await supabase.from('request_comments').insert([{
-        request_id: request.id,
+        request_id: request?.id,
         request_type: requestType,
-        user_name: currentUser.name || currentUser.email,
+        user_name: currentUser?.name || currentUser?.email,
         content: newComment.trim()
       }]);
       
       if (error) throw error;
 
-      // Silent notification update
-      try {
-        await supabase.from('notifications').insert([{
-          type: 'new_comment',
-          message: `تعليق جديد من ${currentUser.name} على الطلب`,
-          reference_id: request.id.toString(),
-          created_by: currentUser.name
-        }]);
-      } catch (notifErr) {
-        console.warn("Notification failed but comment succeeded", notifErr);
-      }
-
       setNewComment(''); 
       await fetchComments(); 
     } catch (err: any) {
-      alert("فشل إضافة التعليق: " + (err.message || "خطأ غير معروف"));
+      console.error("Failed to post comment:", err);
+      alert("فشل إضافة الملاحظة: " + (err?.message || "خطأ في قاعدة البيانات"));
     } finally {
       setLoading(false);
     }
   };
 
-  const changeStatus = (newStatus: string) => {
-    // Update local state first for immediate UI feedback
+  const changeStatus = async (newStatus: string) => {
+    if (!request?.id) return;
+    
+    // تحديث الحالة محلياً أولاً لضمان سرعة الاستجابة في واجهة المستخدم
+    const previousStatus = currentStatus;
     setCurrentStatus(newStatus);
-    onUpdateStatus(newStatus);
+    
+    try {
+      // تمرير الطلب للدالة الأب للتعامل مع التحديث في قاعدة البيانات
+      await onUpdateStatus(newStatus);
+    } catch (err) {
+      console.error("Failed to update status in modal:", err);
+      setCurrentStatus(previousStatus); // التراجع في حال الفشل
+    }
   };
 
   const getStatusInfo = (status: string) => {
@@ -134,7 +138,7 @@ const ManageRequestModal: React.FC<ManageRequestModalProps> = ({
 
   if (!request) return null;
 
-  const canAction = (roles: string[]) => currentUser && roles.includes(currentUser.role);
+  const canAction = (roles: string[]) => currentUser?.role && roles.includes(currentUser.role);
   const statusInfo = getStatusInfo(currentStatus);
 
   return (
@@ -146,12 +150,12 @@ const ManageRequestModal: React.FC<ManageRequestModalProps> = ({
             <div>
               <p className="text-[10px] opacity-70 font-bold uppercase tracking-wider mb-1">المشروع</p>
               <p className="font-black text-lg">
-                {(request as any).project_name || (request as any).client_name || 'غير محدد'}
+                {(request as any)?.project_name || (request as any)?.client_name || 'غير محدد'}
               </p>
             </div>
             <div className="text-center bg-white/60 px-4 py-2 rounded-xl backdrop-blur-md shadow-sm min-w-[120px]">
               <p className="text-[10px] opacity-70 font-bold uppercase mb-1">الحالة الحالية</p>
-              <span className="font-black text-sm">{statusInfo.label}</span>
+              <span className="font-black text-sm">{statusInfo?.label}</span>
             </div>
           </div>
         </div>
@@ -164,37 +168,37 @@ const ManageRequestModal: React.FC<ManageRequestModalProps> = ({
             <div className="grid grid-cols-2 gap-4 text-right">
                <div>
                  <label className="text-[10px] text-gray-400 font-bold block">اسم العميل</label>
-                 <p className="font-bold text-[#1B2B48] text-sm">{(request as ClearanceRequest).client_name || '-'}</p>
+                 <p className="font-bold text-[#1B2B48] text-sm">{(request as ClearanceRequest)?.client_name || '-'}</p>
                </div>
                <div>
                  <label className="text-[10px] text-gray-400 font-bold block">رقم الجوال</label>
                  <p className="font-bold text-[#1B2B48] text-sm flex items-center gap-1 justify-end" dir="ltr">
-                   {(request as ClearanceRequest).mobile || '-'} <Phone size={12} className="text-gray-400"/>
+                   {(request as ClearanceRequest)?.mobile || '-'} <Phone size={12} className="text-gray-400"/>
                  </p>
                </div>
                <div>
                  <label className="text-[10px] text-gray-400 font-bold block">تم الإنشاء بواسطة</label>
                  <p className="font-bold text-[#E95D22] text-sm flex items-center gap-1 justify-end">
-                   {(request as ClearanceRequest).submitted_by || '-'} <UserCheck size={12}/>
+                   {(request as ClearanceRequest)?.submitted_by || '-'} <UserCheck size={12}/>
                  </p>
                </div>
                <div>
                  <label className="text-[10px] text-gray-400 font-bold block">قيمة الصفقة</label>
                  <p className="font-bold text-green-600 text-sm flex items-center gap-1 justify-end">
-                   {(request as ClearanceRequest).deal_value ? parseFloat((request as ClearanceRequest).deal_value || '0').toLocaleString() : '-'} ر.س 
+                   {(request as ClearanceRequest)?.deal_value ? parseFloat((request as ClearanceRequest)?.deal_value || '0').toLocaleString() : '-'} ر.س 
                    <CreditCard size={12}/>
                  </p>
                </div>
                <div>
                  <label className="text-[10px] text-gray-400 font-bold block">البنك</label>
                  <p className="font-bold text-[#1B2B48] text-sm flex items-center gap-1 justify-end">
-                   {(request as ClearanceRequest).bank_name || '-'} <Landmark size={12} className="text-gray-400"/>
+                   {(request as ClearanceRequest)?.bank_name || '-'} <Landmark size={12} className="text-gray-400"/>
                  </p>
                </div>
                <div>
                  <label className="text-[10px] text-gray-400 font-bold block">رقم الصك</label>
                  <p className="font-bold text-[#1B2B48] text-xs font-mono bg-gray-50 p-1 rounded w-fit mr-auto">
-                   {(request as ClearanceRequest).deed_number || '-'}
+                   {(request as ClearanceRequest)?.deed_number || '-'}
                  </p>
                </div>
             </div>
@@ -208,16 +212,16 @@ const ManageRequestModal: React.FC<ManageRequestModalProps> = ({
                <div className="grid grid-cols-2 gap-4">
                  <div>
                    <label className="text-[10px] text-gray-400 font-bold block">بيان العمل</label>
-                   <p className="font-bold text-[#1B2B48] text-sm">{(request as TechnicalRequest).service_type}</p>
+                   <p className="font-bold text-[#1B2B48] text-sm">{(request as TechnicalRequest)?.service_type}</p>
                  </div>
                  <div>
                    <label className="text-[10px] text-gray-400 font-bold block">جهة المراجعة</label>
-                   <p className="font-bold text-[#1B2B48] text-sm">{(request as TechnicalRequest).reviewing_entity || '-'}</p>
+                   <p className="font-bold text-[#1B2B48] text-sm">{(request as TechnicalRequest)?.reviewing_entity || '-'}</p>
                  </div>
                </div>
                <div>
                  <label className="text-[10px] text-gray-400 font-bold block">التفاصيل</label>
-                 <p className="text-xs text-gray-600 font-bold leading-relaxed">{(request as TechnicalRequest).details || 'لا توجد تفاصيل إضافية'}</p>
+                 <p className="text-xs text-gray-600 font-bold leading-relaxed">{(request as TechnicalRequest)?.details || 'لا توجد تفاصيل إضافية'}</p>
                </div>
              </div>
            </div>
@@ -250,21 +254,21 @@ const ManageRequestModal: React.FC<ManageRequestModalProps> = ({
                   <div className="h-full flex items-center justify-center">
                     <Loader2 size={24} className="animate-spin text-blue-500" />
                   </div>
-                ) : (!comments || comments.length === 0) ? (
+                ) : (!comments || comments?.length === 0) ? (
                   <div className="h-full flex flex-col items-center justify-center opacity-40">
                     <MessageSquare size={40} className="mb-2 text-gray-400" />
                     <p className="text-xs font-bold text-gray-400">لا توجد ملاحظات</p>
                   </div>
                 ) : (
-                  comments.map(c => (
-                    <div key={c.id} className={`p-3 rounded-xl shadow-sm max-w-[85%] ${c.user_name === currentUser?.name ? 'bg-blue-50 mr-auto border border-blue-100' : 'bg-white ml-auto border border-gray-100'}`}>
+                  comments?.map((c: any) => (
+                    <div key={c?.id} className={`p-3 rounded-xl shadow-sm max-w-[85%] ${c?.user_name === currentUser?.name ? 'bg-blue-50 mr-auto border border-blue-100' : 'bg-white ml-auto border border-gray-100'}`}>
                         <div className="flex justify-between items-center mb-1 gap-4">
-                            <span className="font-black text-[10px] text-[#1B2B48]">{c.user_name}</span>
+                            <span className="font-black text-[10px] text-[#1B2B48]">{c?.user_name}</span>
                             <div className="flex items-center gap-1 text-[9px] text-gray-400 font-bold">
-                              <span dir="ltr">{new Date(c.created_at).toLocaleTimeString('ar-SA', { hour: '2-digit', minute:'2-digit' })}</span>
+                              <span dir="ltr">{c?.created_at ? new Date(c?.created_at).toLocaleTimeString('ar-SA', { hour: '2-digit', minute:'2-digit' }) : ''}</span>
                             </div>
                         </div>
-                        <p className="text-xs text-gray-700 font-bold leading-relaxed whitespace-pre-wrap">{c.content}</p>
+                        <p className="text-xs text-gray-700 font-bold leading-relaxed whitespace-pre-wrap">{c?.content}</p>
                     </div>
                   ))
                 )}

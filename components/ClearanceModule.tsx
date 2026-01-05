@@ -77,6 +77,33 @@ const ClearanceModule: React.FC<ClearanceModuleProps> = ({
     }
   };
 
+  // Add handleUpdateStatus to properly update clearance request status in Supabase
+  const handleUpdateStatus = async (newStatus: string) => {
+    if (!activeRequest?.id) return;
+    
+    try {
+      const updatePayload: any = { status: newStatus };
+      if (newStatus === 'completed' || newStatus === 'منجز') {
+        updatePayload.progress = 100;
+      }
+
+      const { error } = await supabase
+        .from('clearance_requests')
+        .update(updatePayload)
+        .eq('id', activeRequest.id);
+
+      if (error) throw error;
+      
+      onRefresh();
+      // Update local state to reflect changes in the UI immediately
+      setActiveRequest(prev => prev ? { ...prev, ...updatePayload } : null);
+    } catch (err: any) {
+      console.error("Error updating clearance status:", err);
+      alert("فشل تحديث الحالة: " + (err?.message || "خطأ في قاعدة البيانات"));
+      throw err;
+    }
+  };
+
   return (
     <div className="space-y-8 animate-in fade-in duration-500 font-cairo" dir="rtl">
       
@@ -238,7 +265,7 @@ const ClearanceModule: React.FC<ClearanceModuleProps> = ({
         request={activeRequest}
         currentUser={currentUser}
         usersList={usersList}
-        onUpdateStatus={(s) => {}} // Integration would happen here
+        onUpdateStatus={handleUpdateStatus} // Correctly typed as (newStatus: string) => Promise<void>
         onUpdateDelegation={(d) => {}}
       />
       
