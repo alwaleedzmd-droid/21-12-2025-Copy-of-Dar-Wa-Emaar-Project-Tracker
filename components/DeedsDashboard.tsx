@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import { supabase } from '../supabaseClient'; 
@@ -8,7 +9,7 @@ import {
   CheckCircle2, CreditCard, Calendar, Hash, Phone, MapPin,
   ShieldCheck, Landmark, FileText, Lock, Map as MapIcon,
   MessageSquare, Send, History, FileUp, Download, Loader2,
-  FileSpreadsheet
+  FileSpreadsheet, Trash2
 } from 'lucide-react';
 import { ActivityLog } from '../contexts/DataContext';
 
@@ -56,6 +57,7 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
     });
 
     const canManage = ['ADMIN', 'PR_MANAGER', 'DEEDS_OFFICER'].includes(currentUserRole || '');
+    const isAdmin = currentUserRole === 'ADMIN';
 
     const fetchDeeds = async () => {
         setIsLoading(true);
@@ -115,6 +117,21 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
             setNewDeedForm({ projectName: filteredProjectName || '', contractType: 'مرابحة', id_number: '' });
             fetchDeeds();
         } catch (error: any) { alert('خطأ: ' + error.message); } finally { setIsSaving(false); }
+    };
+
+    const handleDeleteDeed = async (e: React.MouseEvent, deedId: number, clientName: string) => {
+      e.stopPropagation();
+      if (!window.confirm(`هل أنت متأكد من حذف سجل العميل "${clientName}" نهائياً؟`)) return;
+      try {
+        const { error } = await supabase.from('deeds_requests').delete().eq('id', deedId);
+        if (error) throw error;
+        
+        logActivity?.('حذف سجل إفراغ', clientName, 'text-orange-500');
+        fetchDeeds();
+        alert("تم حذف السجل بنجاح ✅");
+      } catch (err: any) {
+        alert("فشل الحذف: " + err.message);
+      }
     };
 
     const handlePostComment = async (deedId: number) => {
@@ -211,11 +228,12 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
                                 <th className="p-6">رقم الصك</th>
                                 <th className="p-6">الحالة</th>
                                 <th className="p-6 w-10"></th>
+                                {isAdmin && <th className="p-6 w-10"></th>}
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-50">
                             {deeds.length === 0 ? (
-                                <tr><td colSpan={5} className="p-20 text-center text-gray-300 font-bold">لا توجد سجلات حالياً</td></tr>
+                                <tr><td colSpan={isAdmin ? 6 : 5} className="p-20 text-center text-gray-300 font-bold">لا توجد سجلات حالياً</td></tr>
                             ) : (
                                 deeds.filter(d => d.clientName?.includes(searchQuery) || d.idNumber?.includes(searchQuery)).map((deed) => (
                                     <React.Fragment key={deed.id}>
@@ -230,10 +248,20 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
                                             <td className="p-6 text-sm font-mono font-bold text-gray-400">{deed.details.old_deed_number || '-'}</td>
                                             <td className="p-6"><span className={`px-4 py-1.5 rounded-xl text-[10px] font-black border ${deed.status === 'مكتمل' ? 'bg-green-50 text-green-700 border-green-100' : 'bg-blue-50 text-blue-700 border-blue-100'}`}>{deed.status}</span></td>
                                             <td className="p-6 text-gray-300">{expandedRows.has(deed.id) ? <ChevronUp size={20}/> : <ChevronDown size={20}/>}</td>
+                                            {isAdmin && (
+                                              <td className="p-6 text-left">
+                                                <button 
+                                                  onClick={(e) => handleDeleteDeed(e, deed.id, deed.clientName)}
+                                                  className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                                                >
+                                                  <Trash2 size={18} />
+                                                </button>
+                                              </td>
+                                            )}
                                         </tr>
                                         {expandedRows.has(deed.id) && (
                                             <tr className="bg-gray-50/30">
-                                                <td colSpan={5} className="p-8">
+                                                <td colSpan={isAdmin ? 6 : 5} className="p-8">
                                                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                                                         <div className="bg-white rounded-[30px] border border-gray-100 p-8 shadow-sm flex flex-col h-[400px]">
                                                             <div className="flex justify-between items-center mb-6"><h4 className="font-black text-[#1B2B48] flex items-center gap-2"><MessageSquare size={20} className="text-[#E95D22]" /> ملاحظات وتحديثات الطلب</h4></div>

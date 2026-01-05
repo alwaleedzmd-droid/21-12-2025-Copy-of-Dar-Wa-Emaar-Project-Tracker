@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { 
   LayoutDashboard, LogOut, RefreshCw, Building2, 
-  Zap, FileStack, Menu, X, Clock, Bell
+  Zap, FileStack, Menu, X, Clock, Bell, Users
 } from 'lucide-react';
 import { useData } from '../contexts/DataContext';
 import { DAR_LOGO } from '../constants';
@@ -39,6 +39,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
     { label: 'المشاريع', icon: <Building2 size={20} />, path: '/projects', roles: ['ADMIN', 'PR_MANAGER', 'TECHNICAL', 'PR_OFFICER'] },
     { label: 'الطلبات الفنية', icon: <Zap size={20} />, path: '/technical', roles: ['ADMIN', 'PR_MANAGER', 'TECHNICAL', 'PR_OFFICER'] },
     { label: 'سجل الإفراغات', icon: <FileStack size={20} />, path: '/deeds', roles: ['ADMIN', 'PR_MANAGER', 'DEEDS_OFFICER', 'CONVEYANCE'] },
+    { label: 'إدارة المستخدمين', icon: <Users size={20} />, path: '/users', roles: ['ADMIN'] },
   ];
 
   const filteredNav = navItems.filter(item => canAccess(item.roles as any));

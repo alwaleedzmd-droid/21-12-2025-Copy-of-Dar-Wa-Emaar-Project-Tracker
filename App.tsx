@@ -6,7 +6,7 @@ import {
   ArrowLeft, Loader2, Zap, Plus,
   Building2, AlertTriangle, Menu, 
   MapPin, MessageSquare, Send, X, Bot, HardHat, AlignLeft, Sparkles, ArrowUpLeft, ClipboardList,
-  FileStack
+  FileStack, Trash2, Edit
 } from 'lucide-react';
 import { supabase } from './supabaseClient';
 import { ProjectSummary, User, TechnicalRequest, ClearanceRequest, ProjectWork, WorkComment } from './types';
@@ -14,6 +14,7 @@ import { DAR_LOGO } from './constants';
 import Modal from './components/Modal';
 import ManageRequestModal from './components/ManageRequestModal';
 import { useData } from './contexts/DataContext';
+import MainLayout from './layouts/MainLayout';
 
 // --- Components ---
 import DashboardModule from './components/DashboardModule';
@@ -21,6 +22,7 @@ import TechnicalModule from './components/TechnicalModule';
 import ProjectsModule from './components/ProjectsModule';
 import DeedsDashboard from './components/DeedsDashboard';
 import ProjectDetailView from './components/ProjectDetailView';
+import UsersModule from './components/UsersModule';
 
 // --- Storage & Helpers ---
 const STORAGE_KEYS = {
@@ -50,257 +52,6 @@ class ErrorBoundary extends React.Component<{ children: ReactNode }, { hasError:
   }
 }
 
-// --- Sidebar Item ---
-const SidebarItem = ({ icon, label, active, onClick, collapsed }: any) => (
-  <button onClick={onClick} className={`w-full flex items-center gap-4 p-4 rounded-2xl transition-all mb-1 ${active ? 'bg-[#E95D22] shadow-lg shadow-orange-500/20 text-white' : 'hover:bg-white/10 text-gray-300 hover:text-white'}`}>
-     <div className={`${active ? 'text-white' : 'text-gray-400'}`}>{icon}</div>
-     {!collapsed && <span className="font-bold text-sm">{label}</span>}
-  </button>
-);
-
-// --- AI Assistant ---
-const AIAssistantInternal = ({ currentUser, onNavigate, projects = [], technicalRequests = [], deedsRequests = [], projectWorks = [] }: any) => {
-  const [isOpen, setIsOpen] = useState(false);
-  const [input, setInput] = useState('');
-  const [messages, setMessages] = useState<any[]>([]);
-  const [isTyping, setIsTyping] = useState(false);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-      if (currentUser) {
-          setMessages([{ 
-              id: 1, 
-              text: `مرحباً ${currentUser?.name || ''} 👋\nأنا مساعدك الذكي لمتابعة المشاريع.\nاسألني عن أي مشروع (مثال: "سرايا البدر") وسأعطيك تقريراً مفصلاً.`, 
-              sender: 'bot', 
-              time: new Date().toLocaleTimeString('ar-SA', {hour: '2-digit', minute:'2-digit'}) 
-          }]);
-      }
-  }, [currentUser]);
-
-  useEffect(() => { 
-    if (isOpen) messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); 
-  }, [messages, isOpen]);
-
-  if (!currentUser || !['ADMIN', 'PR_MANAGER'].includes(currentUser.role)) return null;
-
-  const processQuery = (rawQuery: string) => {
-    const query = rawQuery.toLowerCase().trim();
-    let responseText = "";
-    let actions: any[] = [];
-
-    const project = projects.find((p: any) => query.includes(p.name?.toLowerCase()));
-    
-    if (project) {
-         const relatedWorks = projectWorks.filter((w: any) => w.projectId === project.id) || [];
-         const relatedTech = technicalRequests.filter((t: any) => t.projectId === project.id || t.project_id === project.id) || [];
-         const allTasks = [...relatedWorks, ...relatedTech];
-
-         const completedList = allTasks.filter((w: any) => w.status === 'completed' || w.status === 'منجز');
-         const pendingList = allTasks.filter((w: any) => w.status !== 'completed' && w.status !== 'منجز');
-
-         let detailsText = "";
-         if (completedList.length > 0) {
-             detailsText += `\n✅ **أبرز الأعمال المنجزة:**\n`;
-             completedList.slice(0, 3).forEach((w: any) => { detailsText += `- ${w.task_name || w.service_type || w.type}\n`; });
-             if (completedList.length > 3) detailsText += `...و ${completedList.length - 3} أعمال أخرى.\n`;
-         }
-
-         if (pendingList.length > 0) {
-             detailsText += `\n⏳ **أعمال قيد المتابعة:**\n`;
-             pendingList.slice(0, 3).forEach((w: any) => { detailsText += `- ${w.task_name || w.service_type || w.type}\n`; });
-             if (pendingList.length > 3) detailsText += `...و ${pendingList.length - 3} أعمال أخرى.\n`;
-         }
-         
-         responseText = `🏗️ **تقرير مشروع: ${project.name}**\n` + `📊 إجمالي المهام: ${allTasks.length}` + detailsText;
-         actions.push({ label: `فتح ملف ${project.name}`, type: 'PROJECT', data: project });
-    } 
-    else if (query.includes('افراغ') || query.includes('إفراغ')) {
-         responseText = "يمكنك إدارة الإفراغات من قسم 'سجل الإفراغات'.";
-         actions.push({ label: 'سجل الإفراغات', type: 'DEED', data: null });
-    }
-    else {
-        responseText = "عذراً، لم أجد مشروعاً بهذا الاسم. الرجاء كتابة اسم المشروع بدقة.";
-    }
-
-    return { text: responseText, actions };
-  };
-
-  const handleSend = () => {
-    if (!input.trim()) return;
-    const userText = input;
-    setMessages(prev => [...prev, { id: Date.now(), text: userText, sender: 'user', time: new Date().toLocaleTimeString('ar-SA', {hour: '2-digit', minute:'2-digit'}) }]);
-    setInput('');
-    setIsTyping(true);
-
-    setTimeout(() => {
-        const { text, actions } = processQuery(userText);
-        setMessages(prev => [...prev, { 
-            id: Date.now() + 1, 
-            text: text, 
-            sender: 'bot', 
-            time: new Date().toLocaleTimeString('ar-SA', {hour: '2-digit', minute:'2-digit'}),
-            actions 
-        }]);
-        setIsTyping(false);
-    }, 600);
-  };
-
-  return (
-    <>
-    <button onClick={() => setIsOpen(!isOpen)} className="fixed bottom-8 left-8 z-50 bg-[#1B2B48] hover:bg-[#E95D22] text-white p-4 rounded-full shadow-xl transition-all duration-300 hover:scale-110 flex items-center gap-2 group">
-        <span className={`${isOpen ? 'hidden' : 'block'} max-w-0 overflow-hidden group-hover:max-w-xs transition-all duration-500 whitespace-nowrap font-bold text-sm`}>المساعد الذكي</span>
-        {isOpen ? <X size={28} /> : <Bot size={28} />}
-    </button>
-
-    {isOpen && (
-        <div className="fixed bottom-24 left-8 z-50 w-80 bg-white rounded-[30px] shadow-2xl border border-gray-100 overflow-hidden flex flex-col animate-in slide-in-from-bottom-10 duration-300 h-[500px] font-cairo" dir="rtl">
-          <div className="bg-[#1B2B48] p-4 flex items-center gap-2 text-white shadow-md">
-             <Sparkles size={18} className="text-[#E95D22]" />
-             <span className="font-bold">مساعد دار وإعمار</span>
-          </div>
-          <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-[#f8f9fa] custom-scrollbar">
-            {messages.map((msg) => (
-                <div key={msg.id} className={`flex flex-col ${msg.sender === 'user' ? 'items-end' : 'items-start'}`}>
-                    <div className={`max-w-[90%] rounded-2xl p-3 text-sm font-bold leading-relaxed shadow-sm whitespace-pre-wrap ${msg.sender === 'user' ? 'bg-[#E95D22] text-white rounded-bl-none' : 'bg-white text-[#1B2B48] border border-gray-100 rounded-br-none'}`}>
-                        {msg.text}
-                    </div>
-                    {msg.actions && (
-                        <div className="mt-2 flex flex-wrap gap-2">
-                            {msg.actions.map((action: any, idx: number) => (
-                                <button key={idx} onClick={() => { 
-                                    if(action.type === 'PROJECT') onNavigate('PROJECT', action.data);
-                                    if(action.type === 'DEED') onNavigate('DEED', null);
-                                    setIsOpen(false);
-                                }} className="flex items-center gap-1 bg-[#1B2B48] text-white text-xs px-3 py-2 rounded-lg hover:bg-blue-900 transition-colors w-full justify-center">
-                                    {action.label} <ArrowUpLeft size={14}/>
-                                </button>
-                            ))}
-                        </div>
-                    )}
-                </div>
-            ))}
-            {isTyping && <div className="text-xs text-gray-400 px-2">جاري الكتابة...</div>}
-            <div ref={messagesEndRef} />
-          </div>
-          <div className="p-3 bg-white border-t flex gap-2">
-            <input 
-                className="flex-1 bg-gray-50 rounded-xl px-4 text-sm font-bold outline-none focus:ring-1 ring-[#E95D22]" 
-                placeholder="أكتب اسم المشروع..." 
-                value={input}
-                onChange={e => setInput(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && handleSend()}
-            />
-            <button onClick={handleSend} className="p-3 bg-[#1B2B48] text-white rounded-xl hover:bg-[#E95D22] transition-colors">
-                <Send size={18} />
-            </button>
-          </div>
-        </div>
-    )}
-    </>
-  );
-};
-
-// ==========================================
-// Main App Component
-// ==========================================
-const AppContent: React.FC = () => {
-  const navigate = useNavigate();
-  const location = useLocation();
-  const { 
-    currentUser, isAuthLoading, login, logout,
-    projects, technicalRequests, clearanceRequests, appUsers, activities, refreshData, logActivity 
-  } = useData();
-
-  const [projectWorks, setProjectWorks] = useState<ProjectWork[]>([]);
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => safeStorage.getItem(STORAGE_KEYS.SIDEBAR_COLLAPSED) === 'true');
-  const [loginData, setLoginData] = useState({ email: 'adaldawsari@darwaemaar.com', password: '' });
-
-  const fetchGlobalWorks = async () => {
-      const { data } = await supabase.from('project_works').select('*').order('created_at', { ascending: false });
-      if (data) setProjectWorks(data);
-  };
-
-  useEffect(() => {
-      if (currentUser) fetchGlobalWorks();
-  }, [currentUser]);
-
-  if (isAuthLoading) return <div className="min-h-screen flex items-center justify-center bg-gray-50"><Loader2 className="animate-spin text-[#E95D22] w-12 h-12" /></div>;
-
-  if (!currentUser) return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6 font-cairo" dir="rtl">
-      <div className="bg-[#1B2B48] w-full max-w-md rounded-[50px] shadow-2xl overflow-hidden border border-gray-100">
-        <div className="p-12 text-center"><img src={DAR_LOGO} className="h-40 mx-auto mb-6" alt="Logo" /><h1 className="text-white text-3xl font-bold">بوابة المتابعة</h1></div>
-        <form onSubmit={(e) => { e.preventDefault(); login(loginData.email, loginData.password); }} className="p-10 bg-white space-y-6 rounded-t-[50px]">
-          <input type="email" required placeholder="البريد الإلكتروني" className="w-full p-4 bg-gray-50 rounded-2xl border outline-none font-bold" value={loginData.email} onChange={e => setLoginData({...loginData, email: e.target.value})} />
-          <input type="password" required placeholder="كلمة السر" className="w-full p-4 bg-gray-50 rounded-2xl border outline-none font-bold" value={loginData.password} onChange={e => setLoginData({...loginData, password: e.target.value})} />
-          <button type="submit" className="w-full bg-[#E95D22] text-white py-5 rounded-[30px] font-bold text-xl hover:brightness-110 shadow-lg">دخول النظام</button>
-        </form>
-      </div>
-    </div>
-  );
-
-  return (
-    <div className="flex h-screen bg-[#f8f9fa] font-cairo overflow-hidden" dir="rtl">
-      <aside className={`bg-[#1B2B48] text-white flex flex-col transition-all duration-300 ${isSidebarCollapsed ? 'w-20' : 'w-72'} shadow-2xl z-30`}>
-        <div className="p-6 flex justify-center border-b border-white/10">
-           <img src={DAR_LOGO} className={isSidebarCollapsed ? "h-10" : "h-20"} alt="Logo" />
-        </div>
-        <nav className="flex-1 p-4 space-y-2 overflow-y-auto custom-scrollbar">
-           <SidebarItem icon={<LayoutDashboard />} label="لوحة التحكم" active={location.pathname === '/'} onClick={() => navigate('/')} collapsed={isSidebarCollapsed} />
-           <SidebarItem icon={<Building2 />} label="المشاريع" active={location.pathname.startsWith('/projects')} onClick={() => navigate('/projects')} collapsed={isSidebarCollapsed} />
-           <SidebarItem icon={<Zap />} label="الطلبات الفنية" active={location.pathname === '/technical'} onClick={() => navigate('/technical')} collapsed={isSidebarCollapsed} />
-           <SidebarItem icon={<FileStack size={20} />} label="سجل الإفراغات" active={location.pathname === '/deeds'} onClick={() => navigate('/deeds')} collapsed={isSidebarCollapsed} />
-        </nav>
-        <div className="p-4 bg-[#16233a]">
-           <button onClick={logout} className="w-full flex items-center gap-3 p-3 text-red-400 hover:bg-white/5 rounded-xl transition-all">
-             <LogOut size={20} /> {!isSidebarCollapsed && "خروج"}
-           </button>
-        </div>
-      </aside>
-
-      <main className="flex-1 flex flex-col overflow-hidden relative">
-        <header className="bg-white h-20 border-b flex items-center justify-between px-8 shadow-sm z-20">
-           <div className="flex items-center gap-4">
-             <button onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)} className="p-2 hover:bg-gray-100 rounded-lg text-gray-500"><Menu size={24}/></button>
-             <h1 className="text-2xl font-black text-[#1B2B48]">
-               {location.pathname === '/' ? 'لوحة المعلومات المركزية' : location.pathname.startsWith('/projects') ? 'إدارة المشاريع' : 'بوابة المتابعة'}
-             </h1>
-           </div>
-           <div className="flex items-center gap-4">
-              <div className="text-left hidden md:block">
-                 <p className="font-bold text-[#1B2B48]">{currentUser.name}</p>
-                 <p className="text-xs text-[#E95D22] font-bold uppercase">{currentUser.role}</p>
-              </div>
-              <div className="w-12 h-12 bg-[#1B2B48] text-white rounded-xl flex items-center justify-center font-bold text-xl">{currentUser.name[0]}</div>
-           </div>
-        </header>
-
-        <div className="flex-1 overflow-y-auto p-6 md:p-10 bg-[#f8f9fa]">
-           <Routes>
-              <Route path="/" element={<DashboardModule projects={projects} techRequests={technicalRequests} projectWorks={projectWorks} clearanceRequests={clearanceRequests} activities={activities} currentUser={currentUser} users={appUsers} onQuickAction={() => {}} onUpdateStatus={() => {}} />} />
-              <Route path="/projects" element={<ProjectsModule projects={projects} stats={{ projects: projects.length, techRequests: technicalRequests.length, clearRequests: clearanceRequests.length }} currentUser={currentUser} onProjectClick={(p) => navigate(`/projects/${p?.id}`)} onRefresh={refreshData} />} />
-              <Route path="/projects/:id" element={<ProjectDetailWrapper projects={projects} onRefresh={() => { refreshData(); fetchGlobalWorks(); }} currentUser={currentUser} />} />
-              <Route path="/technical" element={<TechnicalModule requests={technicalRequests} projects={projects} currentUser={currentUser} usersList={appUsers} onRefresh={refreshData} logActivity={logActivity} />} />
-              <Route path="/deeds" element={<DeedsDashboard currentUserRole={currentUser.role} currentUserName={currentUser.name} logActivity={logActivity} />} />
-              <Route path="*" element={<Navigate to="/" replace />} />
-           </Routes>
-        </div>
-
-        <AIAssistantInternal 
-            currentUser={currentUser} 
-            projects={projects}
-            technicalRequests={technicalRequests}
-            projectWorks={projectWorks}
-            onNavigate={(type: any, data: any) => {
-                 if (type === 'PROJECT') navigate(`/projects/${data?.id}`);
-                 if (type === 'DEED') navigate('/deeds');
-            }} 
-        />
-      </main>
-    </div>
-  );
-};
-
 // --- Component: Project Detail Wrapper ---
 const ProjectDetailWrapper = ({ projects = [], onRefresh, currentUser }: any) => {
    const { id } = useParams();
@@ -310,16 +61,17 @@ const ProjectDetailWrapper = ({ projects = [], onRefresh, currentUser }: any) =>
    const [selectedWork, setSelectedWork] = useState<ProjectWork | null>(null);
    const [selectedTechRequest, setSelectedTechRequest] = useState<TechnicalRequest | null>(null);
    const [isAddWorkOpen, setIsAddWorkOpen] = useState(false);
+   const [isEditWorkOpen, setIsEditWorkOpen] = useState(false);
    const [projectWorks, setProjectWorks] = useState<ProjectWork[]>([]);
    const [workComments, setWorkComments] = useState<WorkComment[]>([]);
    const [newComment, setNewComment] = useState('');
    const [newWorkForm, setNewWorkForm] = useState({ task_name: '', authority: '', department: '', notes: '' });
+   const [editingWork, setEditingWork] = useState<ProjectWork | null>(null);
    const [isTechModalOpen, setIsTechModalOpen] = useState(false);
    const [isTechLoading, setIsTechLoading] = useState(false);
 
    const project = useMemo(() => projects.find((p: any) => p.id === Number(id)), [projects, id]);
 
-   // التصفية الجراحية للطلبات الفنية المرتبطة بهذا المشروع
    const thisProjectTech = useMemo(() => {
      return (technicalRequests || []).filter((t: any) => (Number(t?.project_id) === Number(id) || Number(t?.projectId) === Number(id))) || [];
    }, [technicalRequests, id]);
@@ -347,6 +99,53 @@ const ProjectDetailWrapper = ({ projects = [], onRefresh, currentUser }: any) =>
            fetchWorks();
            onRefresh();
        }
+   };
+
+   const handleEditWork = (work: ProjectWork) => {
+     setEditingWork(work);
+     setNewWorkForm({
+       task_name: work.task_name,
+       authority: work.authority || '',
+       department: work.department || '',
+       notes: work.notes || ''
+     });
+     setIsEditWorkOpen(true);
+   };
+
+   const handleUpdateWork = async () => {
+     if (!editingWork) return;
+     try {
+       const { error } = await supabase.from('project_works').update({
+         task_name: newWorkForm.task_name,
+         authority: newWorkForm.authority,
+         department: newWorkForm.department,
+         notes: newWorkForm.notes
+       }).eq('id', editingWork.id);
+
+       if (error) throw error;
+       
+       setIsEditWorkOpen(false);
+       setEditingWork(null);
+       fetchWorks();
+       onRefresh();
+       alert("تم تحديث العمل بنجاح ✅");
+     } catch (err: any) {
+       alert("فشل التحديث: " + err.message);
+     }
+   };
+
+   const handleDeleteWork = async (workId: number) => {
+     if (!window.confirm("هل أنت متأكد من حذف هذا العمل نهائياً؟")) return;
+     try {
+       const { error } = await supabase.from('project_works').delete().eq('id', workId);
+       if (error) throw error;
+       
+       fetchWorks();
+       onRefresh();
+       alert("تم حذف العمل بنجاح ✅");
+     } catch (err: any) {
+       alert("فشل الحذف: " + err.message);
+     }
    };
 
    const fetchComments = async (workId: number) => {
@@ -377,70 +176,35 @@ const ProjectDetailWrapper = ({ projects = [], onRefresh, currentUser }: any) =>
        }
    };
 
-   // وظيفة جراحية ومستقرة لتحديث حالة الطلب الفني ومعالجة الأخطاء بشكل دقيق
    const handleTechStatusUpdate = async (newStatus: string) => {
      if (!selectedTechRequest?.id) return;
      setIsTechLoading(true);
      try {
-       // إعداد حمولة التحديث بدون updated_at يدوياً لترك التحكم لقاعدة البيانات
-       const updatePayload: any = { 
-         status: newStatus
-       };
-
-       // تحديث التقدم تلقائياً إذا كانت الحالة منجز
+       const updatePayload: any = { status: newStatus };
        if (newStatus === 'completed' || newStatus === 'منجز') {
          updatePayload.progress = 100;
        }
-
-       const { error } = await supabase
-         .from('technical_requests')
-         .update(updatePayload)
-         .eq('id', Number(selectedTechRequest?.id));
-       
-       if (error) {
-         console.error("Supabase technical_requests update error:", error);
-         // استخراج رسالة الخطأ لتجنب ظهور [object Object]
-         const errorMsg = error?.message || (typeof error === 'object' ? JSON.stringify(error) : String(error));
-         throw new Error(errorMsg);
-       }
-       
-       // تحديث الحالة محلياً للطلب المختار لضمان رؤية التغيير فوراً في المودال
+       const { error } = await supabase.from('technical_requests').update(updatePayload).eq('id', Number(selectedTechRequest?.id));
+       if (error) throw error;
        setSelectedTechRequest(prev => prev ? ({ ...prev, ...updatePayload }) : null);
-
-       // تسجيل النشاط
-       if (logActivity) {
-         logActivity('تحديث حالة الطلب', `${selectedTechRequest?.service_type || 'طلب فني'}: ${newStatus}`, 'text-blue-500');
-       }
-       
-       // تحديث البيانات على مستوى التطبيق والمكون (onRefresh استدعاء في حال النجاح فقط)
+       if (logActivity) logActivity('تحديث حالة الطلب', `${selectedTechRequest?.service_type || 'طلب فني'}: ${newStatus}`, 'text-blue-500');
        await refreshData();
        if (onRefresh) onRefresh();
-       
-       // Success Alert ONLY if no error
        alert("تم تحديث حالة الطلب بنجاح ✅");
-       
      } catch (err: any) {
-       console.error("Detailed Technical Request Update Error:", err);
-       alert("فشل تحديث الحالة: " + (err?.message || "حدث خطأ غير متوقع في الاتصال بقاعدة البيانات"));
-       // إعادة رمي الخطأ لتمكين المكون الابن من التراجع عن الحالة المحلية
+       alert("فشل تحديث الحالة: " + err.message);
        throw err;
      } finally {
        setIsTechLoading(false);
      }
    };
 
-   if (!project) return (
-       <div className="flex flex-col items-center justify-center h-full text-center">
-           <Building2 size={64} className="text-gray-300 mb-4" />
-           <h2 className="text-xl font-bold text-gray-600">جاري تحميل بيانات المشروع...</h2>
-       </div>
-   );
+   if (!project) return <div className="flex flex-col items-center justify-center py-20 text-center"><Loader2 className="animate-spin text-[#E95D22] mb-4" /> <p className="font-bold text-gray-500">جاري تحميل المشروع...</p></div>;
 
    return (
      <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4">
         <ProjectDetailView project={project} isAdmin={currentUser?.role === 'ADMIN'} onBack={() => navigate('/projects')} onRefresh={onRefresh} />
         
-        {/* قسم أعمال المشروع (سجل المهام المضافة يدوياً) */}
         <div className="bg-white p-8 rounded-[40px] shadow-sm border border-gray-100">
             <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-3">
@@ -464,16 +228,33 @@ const ProjectDetailWrapper = ({ projects = [], onRefresh, currentUser }: any) =>
                                     <p className="text-xs text-gray-500 font-bold mt-1">{work?.authority || 'جهة غير محددة'}</p>
                                 </div>
                             </div>
-                            <span className={`px-4 py-2 rounded-xl font-bold text-sm ${work?.status === 'completed' || work?.status === 'منجز' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>
-                                {work?.status === 'completed' || work?.status === 'منجز' ? 'منجز ✅' : 'قيد المتابعة ⏳'}
-                            </span>
+                            <div className="flex items-center gap-3">
+                                <span className={`px-4 py-2 rounded-xl font-bold text-sm ${work?.status === 'completed' || work?.status === 'منجز' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>
+                                    {work?.status === 'completed' || work?.status === 'منجز' ? 'منجز ✅' : 'قيد المتابعة ⏳'}
+                                </span>
+                                {currentUser?.role === 'ADMIN' && (
+                                  <div className="flex items-center gap-2">
+                                    <button 
+                                      onClick={(e) => { e.stopPropagation(); handleEditWork(work); }}
+                                      className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
+                                    >
+                                      <Edit size={16} />
+                                    </button>
+                                    <button 
+                                      onClick={(e) => { e.stopPropagation(); handleDeleteWork(work.id); }}
+                                      className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                                    >
+                                      <Trash2 size={16} />
+                                    </button>
+                                  </div>
+                                )}
+                            </div>
                         </div>
                     ))}
                 </div>
             )}
         </div>
 
-        {/* قسم الطلبات الفنية المرتبطة بالمشروع (من جدول technical_requests) */}
         <div className="bg-white p-8 rounded-[40px] shadow-sm border border-gray-100">
             <div className="flex items-center gap-3 mb-6">
                 <div className="p-3 bg-blue-600 text-white rounded-xl"><ClipboardList size={24}/></div>
@@ -507,7 +288,6 @@ const ProjectDetailWrapper = ({ projects = [], onRefresh, currentUser }: any) =>
             )}
         </div>
 
-        {/* نافذة المتابعة للطلب الفني */}
         {selectedTechRequest && (
           <ManageRequestModal 
             isOpen={isTechModalOpen}
@@ -520,7 +300,7 @@ const ProjectDetailWrapper = ({ projects = [], onRefresh, currentUser }: any) =>
           />
         )}
 
-        <Modal isOpen={isAddWorkOpen} onClose={() => setIsAddWorkOpen(false)} title="إضافة عمل جديد للمشروع">
+        <Modal isOpen={isAddWorkOpen || isEditWorkOpen} onClose={() => { setIsAddWorkOpen(false); setIsEditWorkOpen(false); setEditingWork(null); }} title={isEditWorkOpen ? "تعديل العمل" : "إضافة عمل جديد للمشروع"}>
             <div className="space-y-4 font-cairo text-right">
                 <input className="w-full p-4 bg-gray-50 rounded-2xl border outline-none font-bold" placeholder="اسم العمل / المهمة" value={newWorkForm.task_name} onChange={e => setNewWorkForm({...newWorkForm, task_name: e.target.value})} />
                 <div className="grid grid-cols-2 gap-4">
@@ -528,7 +308,9 @@ const ProjectDetailWrapper = ({ projects = [], onRefresh, currentUser }: any) =>
                     <input className="w-full p-4 bg-gray-50 rounded-2xl border outline-none font-bold" placeholder="القسم" value={newWorkForm.department} onChange={e => setNewWorkForm({...newWorkForm, department: e.target.value})} />
                 </div>
                 <textarea className="w-full p-4 bg-gray-50 rounded-2xl border outline-none h-32 resize-none font-bold" placeholder="ملاحظات إضافية..." value={newWorkForm.notes} onChange={e => setNewWorkForm({...newWorkForm, notes: e.target.value})} />
-                <button onClick={handleAddWork} className="w-full bg-[#1B2B48] text-white py-4 rounded-2xl font-black text-lg hover:brightness-110 shadow-lg transition-all active:scale-95">حفظ العمل</button>
+                <button onClick={isEditWorkOpen ? handleUpdateWork : handleAddWork} className="w-full bg-[#1B2B48] text-white py-4 rounded-2xl font-black text-lg hover:brightness-110 shadow-lg transition-all active:scale-95">
+                  {isEditWorkOpen ? 'تحديث العمل' : 'حفظ العمل'}
+                </button>
             </div>
         </Modal>
 
@@ -579,6 +361,49 @@ const ProjectDetailWrapper = ({ projects = [], onRefresh, currentUser }: any) =>
         )}
      </div>
    );
+};
+
+// ==========================================
+// Main App Component
+// ==========================================
+const AppContent: React.FC = () => {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { 
+    currentUser, isAuthLoading, login, logout,
+    projects, technicalRequests, clearanceRequests, appUsers, activities, refreshData, logActivity 
+  } = useData();
+
+  const [loginData, setLoginData] = useState({ email: 'adaldawsari@darwaemaar.com', password: '' });
+
+  if (isAuthLoading) return <div className="min-h-screen flex items-center justify-center bg-gray-50"><Loader2 className="animate-spin text-[#E95D22] w-12 h-12" /></div>;
+
+  if (!currentUser) return (
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6 font-cairo" dir="rtl">
+      <div className="bg-[#1B2B48] w-full max-w-md rounded-[50px] shadow-2xl overflow-hidden border border-gray-100">
+        <div className="p-12 text-center"><img src={DAR_LOGO} className="h-40 mx-auto mb-6" alt="Logo" /><h1 className="text-white text-3xl font-bold">بوابة المتابعة</h1></div>
+        <form onSubmit={(e) => { e.preventDefault(); login(loginData.email, loginData.password); }} className="p-10 bg-white space-y-6 rounded-t-[50px]">
+          <input type="email" required placeholder="البريد الإلكتروني" className="w-full p-4 bg-gray-50 rounded-2xl border outline-none font-bold" value={loginData.email} onChange={e => setLoginData({...loginData, email: e.target.value})} />
+          <input type="password" required placeholder="كلمة السر" className="w-full p-4 bg-gray-50 rounded-2xl border outline-none font-bold" value={loginData.password} onChange={e => setLoginData({...loginData, password: e.target.value})} />
+          <button type="submit" className="w-full bg-[#E95D22] text-white py-5 rounded-[30px] font-bold text-xl hover:brightness-110 shadow-lg">دخول النظام</button>
+        </form>
+      </div>
+    </div>
+  );
+
+  return (
+    <MainLayout>
+      <Routes>
+        <Route path="/" element={<DashboardModule projects={projects} techRequests={technicalRequests} projectWorks={[]} clearanceRequests={clearanceRequests} activities={activities} currentUser={currentUser} users={appUsers} onQuickAction={() => {}} onUpdateStatus={() => {}} />} />
+        <Route path="/projects" element={<ProjectsModule projects={projects} stats={{ projects: projects.length, techRequests: technicalRequests.length, clearRequests: clearanceRequests.length }} currentUser={currentUser} onProjectClick={(p) => navigate(`/projects/${p?.id}`)} onRefresh={refreshData} />} />
+        <Route path="/projects/:id" element={<ProjectDetailWrapper projects={projects} onRefresh={refreshData} currentUser={currentUser} />} />
+        <Route path="/technical" element={<TechnicalModule requests={technicalRequests} projects={projects} currentUser={currentUser} usersList={appUsers} onRefresh={refreshData} logActivity={logActivity} />} />
+        <Route path="/deeds" element={<DeedsDashboard currentUserRole={currentUser.role} currentUserName={currentUser.name} logActivity={logActivity} />} />
+        <Route path="/users" element={<UsersModule />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </MainLayout>
+  );
 };
 
 const App: React.FC = () => (

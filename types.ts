@@ -6,6 +6,8 @@ export interface User {
   email: string;
   role: UserRole;
   name: string;
+  department?: string;
+  created_at?: string;
 }
 
 export interface UnitDetail {
