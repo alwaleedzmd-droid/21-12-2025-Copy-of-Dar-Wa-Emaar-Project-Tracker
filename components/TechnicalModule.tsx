@@ -44,10 +44,12 @@ interface TechnicalModuleProps {
   onRefresh: () => void;
   filteredByProject?: string;
   scopeFilter?: 'INTERNAL_WORK' | 'EXTERNAL';
+  // Fix: Added missing logActivity prop to TechnicalModuleProps
+  logActivity?: (action: string, target: string, color?: 'text-blue-500' | 'text-orange-500' | 'text-green-500') => void;
 }
 
 const TechnicalModule: React.FC<TechnicalModuleProps> = ({ 
-  requests, projects, currentUser, usersList, onRefresh, filteredByProject, scopeFilter 
+  requests, projects, currentUser, usersList, onRefresh, filteredByProject, scopeFilter, logActivity 
 }) => {
   // --- State ---
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -117,8 +119,14 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
 
   const handleDelete = async (id: number) => {
     if (!window.confirm("هل أنت متأكد من حذف هذا العمل؟")) return;
+    // Fix: Find the request before deleting to use its info for logging
+    const reqToDelete = requests.find(r => r.id === id);
     const { error } = await supabase.from('technical_requests').delete().eq('id', id);
-    if (!error) onRefresh();
+    if (!error) {
+      // Fix: Log the deletion activity
+      if (reqToDelete) logActivity?.('حذف عملاً فنياً', reqToDelete.service_type, 'text-orange-500');
+      onRefresh();
+    }
     else alert("حدث خطأ أثناء الحذف: " + error.message);
   };
 
@@ -179,6 +187,8 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
     if (error) {
         alert("حدث خطأ: " + error.message);
     } else {
+        // Fix: Log the creation/update activity
+        logActivity?.(techForm.id === 0 ? 'أضاف عملاً فنياً جديداً' : 'حدث بيانات عمل فني', techForm.service_type, 'text-blue-500');
         setIsAddModalOpen(false);
         onRefresh();
     }
@@ -217,6 +227,9 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
         const { error } = await supabase.from('technical_requests').insert(formatted);
         if (error) throw error;
 
+        // Fix: Log the bulk import activity
+        logActivity?.('استورد أعمال فنية عبر Excel', `${formatted.length} سجل`, 'text-orange-500');
+
         alert(`تم استيراد ${formatted.length} عمل بنجاح ✅`);
         setIsBulkModalOpen(false);
         onRefresh();
@@ -234,6 +247,8 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
     
     const { error } = await supabase.from('technical_requests').update(updateData).eq('id', activeRequest.id);
     if (!error) {
+      // Fix: Log status change activity
+      logActivity?.('حدث حالة العمل الفني', activeRequest.service_type, newStatus === 'completed' || newStatus === 'منجز' ? 'text-green-500' : 'text-blue-500');
       setActiveRequest({ ...activeRequest, ...updateData });
       onRefresh();
     } else {

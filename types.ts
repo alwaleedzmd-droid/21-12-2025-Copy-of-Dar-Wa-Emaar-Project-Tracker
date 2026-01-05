@@ -120,4 +120,5 @@ export type ViewState =
   | 'USERS' 
   | 'TECHNICAL_SERVICES' 
   | 'CONVEYANCE_SERVICES' 
-  | 'STATISTICS';
+  | 'STATISTICS'
+  | 'APP_MAP';
