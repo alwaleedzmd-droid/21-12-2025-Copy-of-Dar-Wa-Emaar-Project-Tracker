@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import { supabase } from '../supabaseClient'; 
@@ -11,7 +10,7 @@ import {
   MessageSquare, Send, History, FileUp, Download, Loader2,
   FileSpreadsheet
 } from 'lucide-react';
-import { ActivityLog } from '../App';
+import { ActivityLog } from '../contexts/DataContext';
 
 const CITIES_LIST = ['الرياض', 'الدمام', 'الخبر', 'المدينة المنورة', 'جدة', 'مكة المكرمة'];
 const REGIONS_LIST = ['المنطقة الوسطى', 'المنطقة الشرقية', 'المنطقة الغربية', 'المنطقة الشمالية', 'المنطقة الجنوبية'];
@@ -43,7 +42,7 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
         deedNumber: '',
         deedDate: '',
         clientName: '',
-        idNumber: '',
+        id_number: '',
         mobile: '',
         dobHijri: '',
         unitValue: '',
@@ -87,7 +86,7 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
     useEffect(() => { fetchDeeds(); }, [filteredProjectName]);
 
     const handleSaveNewDeed = async () => {
-        if (!newDeedForm.clientName || !newDeedForm.idNumber) return alert("يرجى إكمال البيانات الأساسية");
+        if (!newDeedForm.clientName || !newDeedForm.id_number) return alert("يرجى إكمال البيانات الأساسية");
         setIsSaving(true);
         try {
             const dbData = {
@@ -98,7 +97,7 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
                 unit_number: newDeedForm.unitNumber,
                 old_deed_number: newDeedForm.deedNumber,
                 client_name: newDeedForm.clientName,
-                id_number: newDeedForm.idNumber,
+                id_number: newDeedForm.id_number,
                 mobile: newDeedForm.mobile,
                 unit_value: newDeedForm.unitValue ? parseFloat(String(newDeedForm.unitValue)) : 0,
                 bank_name: newDeedForm.bankName,
@@ -113,7 +112,7 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
             
             alert(`تم تسجيل الطلب بنجاح ✅`);
             setIsRegModalOpen(false);
-            setNewDeedForm({ projectName: filteredProjectName || '', contractType: 'مرابحة' });
+            setNewDeedForm({ projectName: filteredProjectName || '', contractType: 'مرابحة', id_number: '' });
             fetchDeeds();
         } catch (error: any) { alert('خطأ: ' + error.message); } finally { setIsSaving(false); }
     };
@@ -292,7 +291,7 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
                                 <FormField label="رقم الصك" icon={<Hash size={16}/>} value={newDeedForm.deedNumber} onChange={v => setNewDeedForm({...newDeedForm, deedNumber: v})} />
                                 <FormField label="تاريخ الصك" icon={<Calendar size={16}/>} value={newDeedForm.deedDate} onChange={v => setNewDeedForm({...newDeedForm, deedDate: v})} type="date" />
                                 <FormField label="اسم المستفيد" icon={<UserIcon size={16}/>} value={newDeedForm.clientName} onChange={v => setNewDeedForm({...newDeedForm, clientName: v})} />
-                                <FormField label="هوية المستفيد" icon={<Hash size={16}/>} value={newDeedForm.idNumber} onChange={v => setNewDeedForm({...newDeedForm, idNumber: v})} type="number" />
+                                <FormField label="هوية المستفيد" icon={<Hash size={16}/>} value={newDeedForm.id_number} onChange={v => setNewDeedForm({...newDeedForm, id_number: v})} type="number" />
                                 <FormField label="رقم جوال المستفيد" icon={<Phone size={16}/>} value={newDeedForm.mobile} onChange={v => setNewDeedForm({...newDeedForm, mobile: v})} />
                                 <FormField label="تاريخ الميلاد (هجري)" icon={<Calendar size={16}/>} value={newDeedForm.dobHijri} onChange={v => setNewDeedForm({...newDeedForm, dobHijri: v})} placeholder="14XX/XX/XX" />
                                 <FormField label="قيمة الوحدة" icon={<CreditCard size={16}/>} value={newDeedForm.unitValue} onChange={v => setNewDeedForm({...newDeedForm, unitValue: v})} type="number" />

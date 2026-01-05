@@ -16,9 +16,6 @@ export interface UnitDetail {
   status: string;
 }
 
-/**
- * Added missing fields used in ProjectsModule and other components to resolve dot-notation access errors.
- */
 export interface ProjectSummary {
   id: number;
   client: string;
@@ -49,9 +46,6 @@ export interface ProjectSummary {
   electricity_contractor_mobile?: string;
 }
 
-/**
- * Task interface for TaskCard component.
- */
 export interface Task {
   id: number;
   description: string;
@@ -97,10 +91,12 @@ export interface ClearanceRequest {
   deal_value?: string;
   bank_name?: string;
   deed_number?: string;
+  // Added contract_type to match usage in App.tsx and DeedsDashboard.tsx
+  contract_type?: string;
   submitted_by?: string;
   assigned_to?: string;
   attachment_url?: string;
-  units?: UnitDetail[]; // One-to-Many relationship
+  units?: UnitDetail[];
 }
 
 export interface Comment {
@@ -119,6 +115,4 @@ export type ViewState =
   | 'PROJECT_DETAIL' 
   | 'USERS' 
   | 'TECHNICAL_SERVICES' 
-  | 'CONVEYANCE_SERVICES' 
-  | 'STATISTICS'
-  | 'APP_MAP';
+  | 'CONVEYANCE_SERVICES';
