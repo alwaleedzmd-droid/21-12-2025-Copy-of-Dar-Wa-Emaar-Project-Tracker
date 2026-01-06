@@ -185,7 +185,8 @@ const ManageRequestModal: React.FC<ManageRequestModalProps> = ({
                <div>
                  <label className="text-[10px] text-gray-400 font-bold block">قيمة الصفقة</label>
                  <p className="font-bold text-green-600 text-sm flex items-center gap-1 justify-end">
-                   {(request as ClearanceRequest)?.deal_value ? parseFloat((request as ClearanceRequest)?.deal_value || '0').toLocaleString() : '-'} ر.س 
+                   {/* Fix: Property 'deal_value' does not exist on type 'ClearanceRequest'. Use 'sale_price' as defined in types.ts */}
+                   {(request as ClearanceRequest)?.sale_price ? parseFloat((request as ClearanceRequest)?.sale_price || '0').toLocaleString() : '-'} ر.س 
                    <CreditCard size={12}/>
                  </p>
                </div>

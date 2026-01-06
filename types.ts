@@ -85,7 +85,7 @@ export interface TechnicalRequest {
   updated_at?: string;
   project_id: number;
   project_name?: string;
-  projectId?: number; // Added to match some usages
+  projectId?: number;
   scope: string;       
   service_type: string; 
   details: string;
@@ -102,24 +102,24 @@ export interface ClearanceRequest {
   id: number;
   created_at: string;
   updated_at?: string;
-  project_id: number;
-  project_name?: string;
+  project_name: string;
   client_name: string;
-  beneficiary_name?: string; // Added to match usage in Dashboard
-  status: string; 
-  progress: number;
-  notes?: string;
-  mobile?: string;
-  id_number?: string;
-  plot_number?: string;
-  deal_value?: string;
-  bank_name?: string;
-  deed_number?: string;
-  contract_type?: string;
-  submitted_by?: string;
-  assigned_to?: string;
+  id_number: string;
+  mobile: string;
+  unit_number: string;
+  block_number: string;
+  plot_number: string;
+  total_area: string;
+  sale_price: string;
+  payment_method: string;
+  bank_name: string;
+  financing_status: string;
+  contract_date: string;
+  deed_number: string;
   attachment_url?: string;
-  units?: UnitDetail[];
+  notes?: string;
+  status: string;
+  submitted_by: string;
 }
 
 export interface Comment {
