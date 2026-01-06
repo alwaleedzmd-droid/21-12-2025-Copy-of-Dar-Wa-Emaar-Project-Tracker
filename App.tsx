@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, ReactNode, useMemo } from 'react';
-// استخدام react-router بدلاً من react-router-dom لضمان توفر المكونات والخطافات
+// Fix: Use 'react-router' instead of 'react-router-dom' to avoid export errors (e.g., missing Routes, Route, etc.) in this environment.
 import { Routes, Route, useNavigate, useLocation, useParams, Navigate } from 'react-router';
 import { 
   AlertTriangle, Loader2, Zap, Plus,
@@ -31,7 +31,8 @@ class ErrorBoundary extends React.Component<{ children: ReactNode }, { hasError:
       <div className="min-h-screen flex items-center justify-center text-red-500 font-bold bg-[#f8f9fa] p-10 text-center flex-col gap-4" dir="rtl">
         <AlertTriangle size={48} />
         <h2 className="text-2xl font-black text-[#1B2B48]">حدث خطأ في عرض الصفحة</h2>
-        <button onClick={() => window.location.hash = '/'} className="bg-[#1B2B48] text-white px-8 py-3 rounded-2xl font-bold">العودة للرئيسية</button>
+        <p className="text-gray-400">تم رصد الخطأ وتأمينه برمجياً</p>
+        <button onClick={() => window.location.reload()} className="bg-[#1B2B48] text-white px-8 py-3 rounded-2xl font-bold shadow-lg">تحديث الواجهة</button>
       </div>
     );
     return this.props.children;
@@ -45,10 +46,8 @@ const ProjectDetailWrapper = ({ projects = [], currentUser }: any) => {
    const { technicalRequests = [], refreshData, logActivity } = useData();
    
    const [isAddWorkOpen, setIsAddWorkOpen] = useState(false);
-   const [isEditWorkOpen, setIsEditWorkOpen] = useState(false);
    const [projectWorks, setProjectWorks] = useState<ProjectWork[]>([]);
    const [newWorkForm, setNewWorkForm] = useState({ task_name: '', authority: '', department: '', notes: '' });
-   const [editingWork, setEditingWork] = useState<ProjectWork | null>(null);
 
    const project = useMemo(() => projects.find((p: any) => p.id === Number(id)), [projects, id]);
    const isAdmin = currentUser?.role === 'ADMIN';
@@ -56,8 +55,12 @@ const ProjectDetailWrapper = ({ projects = [], currentUser }: any) => {
    useEffect(() => {
      const fetchWorks = async () => {
        if (!id) return;
-       const { data } = await supabase.from('project_works').select('*').eq('projectId', Number(id)).order('created_at', { ascending: false });
-       setProjectWorks(data || []);
+       try {
+         const { data } = await supabase.from('project_works').select('*').eq('projectId', Number(id)).order('created_at', { ascending: false });
+         setProjectWorks(data || []);
+       } catch (err) {
+         console.error("Fetch works error:", err);
+       }
      };
      fetchWorks();
    }, [id]);
@@ -65,10 +68,14 @@ const ProjectDetailWrapper = ({ projects = [], currentUser }: any) => {
    const handleAddWork = async () => {
        if (!newWorkForm.task_name || !project) return;
        const { error } = await supabase.from('project_works').insert({ ...newWorkForm, project_name: project.name, projectId: project.id, status: 'in_progress' });
-       if (!error) { setIsAddWorkOpen(false); refreshData(); }
+       if (!error) { 
+         setIsAddWorkOpen(false); 
+         setNewWorkForm({ task_name: '', authority: '', department: '', notes: '' });
+         refreshData(); 
+       }
    };
 
-   if (!project) return <div className="p-20 text-center font-bold text-gray-400">جاري التحميل...</div>;
+   if (!project) return <div className="p-20 text-center font-bold text-gray-400">جاري تحميل بيانات المشروع...</div>;
 
    return (
      <div className="space-y-8 animate-in fade-in">
@@ -76,27 +83,31 @@ const ProjectDetailWrapper = ({ projects = [], currentUser }: any) => {
         <div className="bg-white p-8 rounded-[40px] shadow-sm border border-gray-100">
             <div className="flex items-center justify-between mb-6">
                 <h2 className="text-2xl font-black text-[#1B2B48]">سجل أعمال المشروع</h2>
-                <button onClick={() => setIsAddWorkOpen(true)} className="bg-[#E95D22] text-white px-6 py-3 rounded-2xl font-bold flex items-center gap-2"><Plus size={20}/> إضافة عمل</button>
+                <button onClick={() => setIsAddWorkOpen(true)} className="bg-[#E95D22] text-white px-6 py-3 rounded-2xl font-bold flex items-center gap-2 shadow-lg"><Plus size={20}/> إضافة عمل</button>
             </div>
             <div className="grid gap-4">
-                {projectWorks.map(work => (
-                    <div key={work.id} className="flex items-center justify-between p-5 bg-gray-50 rounded-2xl border border-gray-100">
-                        <div className="flex items-center gap-4">
-                            <div className={`w-3 h-12 rounded-full ${work.status === 'completed' ? 'bg-green-500' : 'bg-orange-500'}`}></div>
-                            <div>
-                                <h3 className="font-bold text-[#1B2B48]">{work.task_name}</h3>
-                                <p className="text-xs text-gray-500">{work.authority}</p>
-                            </div>
-                        </div>
-                        <span className="px-4 py-2 rounded-xl font-bold text-sm bg-white border">{work.status === 'completed' ? 'منجز ✅' : 'قيد المتابعة ⏳'}</span>
-                    </div>
-                ))}
+                {projectWorks.length === 0 ? (
+                  <div className="p-10 text-center text-gray-400 border border-dashed rounded-2xl font-bold">لا توجد أعمال مسجلة</div>
+                ) : (
+                  projectWorks.map(work => (
+                      <div key={work.id} className="flex items-center justify-between p-5 bg-gray-50 rounded-2xl border border-gray-100">
+                          <div className="flex items-center gap-4">
+                              <div className={`w-3 h-12 rounded-full ${work.status === 'completed' ? 'bg-green-500' : 'bg-orange-500'}`}></div>
+                              <div>
+                                  <h3 className="font-bold text-[#1B2B48]">{work.task_name}</h3>
+                                  <p className="text-xs text-gray-500">{work.authority}</p>
+                              </div>
+                          </div>
+                          <span className="px-4 py-2 rounded-xl font-bold text-sm bg-white border">{work.status === 'completed' ? 'منجز ✅' : 'قيد المتابعة ⏳'}</span>
+                      </div>
+                  ))
+                )}
             </div>
         </div>
         <Modal isOpen={isAddWorkOpen} onClose={() => setIsAddWorkOpen(false)} title="إضافة عمل للمشروع">
             <div className="space-y-4 text-right">
                 <input className="w-full p-4 bg-gray-50 rounded-2xl border outline-none font-bold" placeholder="اسم العمل" onChange={e => setNewWorkForm({...newWorkForm, task_name: e.target.value})} />
-                <button onClick={handleAddWork} className="w-full bg-[#1B2B48] text-white py-4 rounded-2xl font-black">حفظ</button>
+                <button onClick={handleAddWork} className="w-full bg-[#1B2B48] text-white py-4 rounded-2xl font-black shadow-lg">حفظ البيانات</button>
             </div>
         </Modal>
      </div>
@@ -139,7 +150,7 @@ const AppContent: React.FC = () => {
         <form onSubmit={(e) => { e.preventDefault(); login(loginData.email, loginData.password); }} className="p-10 bg-white space-y-6 rounded-t-[50px]">
           <input type="email" required placeholder="البريد الإلكتروني" className="w-full p-4 bg-gray-50 rounded-2xl border outline-none font-bold" value={loginData.email} onChange={e => setLoginData({...loginData, email: e.target.value})} />
           <input type="password" required placeholder="كلمة السر" className="w-full p-4 bg-gray-50 rounded-2xl border outline-none font-bold" value={loginData.password} onChange={e => setLoginData({...loginData, password: e.target.value})} />
-          <button type="submit" className="w-full bg-[#E95D22] text-white py-5 rounded-[30px] font-bold text-xl">دخول النظام</button>
+          <button type="submit" className="w-full bg-[#E95D22] text-white py-5 rounded-[30px] font-bold text-xl hover:brightness-110 shadow-lg">دخول النظام</button>
         </form>
       </div>
     </div>

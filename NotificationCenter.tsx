@@ -1,6 +1,8 @@
+
 import React, { useState, useEffect } from 'react';
 import { Bell, Check, Trash2, X } from 'lucide-react';
-import { supabase } from '../supabaseClient';
+// إصلاح المسار: تم تغيير من '../supabaseClient' إلى './supabaseClient' لأن الملف في نفس المجلد
+import { supabase } from './supabaseClient';
 
 const NotificationCenter = () => {
   const [notifications, setNotifications] = useState<any[]>([]);
@@ -9,29 +11,39 @@ const NotificationCenter = () => {
 
   // جلب الإشعارات
   const fetchNotifications = async () => {
-    const { data } = await supabase
-      .from('notifications')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .limit(20); // جلب آخر 20 إشعار
+    try {
+      const { data, error } = await supabase
+        .from('notifications')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(20);
 
-    if (data) {
-      setNotifications(data);
-      setUnreadCount(data.filter(n => !n.is_read).length);
+      if (error) throw error;
+
+      if (data) {
+        setNotifications(data);
+        setUnreadCount(data.filter(n => !n.is_read).length);
+      }
+    } catch (err) {
+      console.error("Error fetching notifications:", err);
     }
   };
 
   useEffect(() => {
     fetchNotifications();
-    // تفعيل التحديث التلقائي كل 10 ثواني (اختياري)
+    // تفعيل التحديث التلقائي كل 10 ثواني
     const interval = setInterval(fetchNotifications, 10000);
     return () => clearInterval(interval);
   }, []);
 
   // تحديد الكل كمقروء
   const markAllRead = async () => {
-    await supabase.from('notifications').update({ is_read: true }).eq('is_read', false);
-    fetchNotifications();
+    try {
+      await supabase.from('notifications').update({ is_read: true }).eq('is_read', false);
+      fetchNotifications();
+    } catch (err) {
+      console.error("Error marking as read:", err);
+    }
   };
 
   return (
