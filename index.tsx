@@ -1,7 +1,8 @@
 
 import React from 'react';
 import { createRoot } from 'react-dom/client';
-import { HashRouter } from 'react-router-dom';
+// استخدام HashRouter من react-router بدلاً من react-router-dom لضمان التوافق مع البيئة
+import { HashRouter } from 'react-router';
 import App from './App';
 import { DataProvider } from './contexts/DataContext';
 
@@ -10,8 +11,6 @@ if (!rootElement) throw new Error("Failed to find root element");
 
 const root = createRoot(rootElement);
 
-// تم استخدام HashRouter بدلاً من BrowserRouter لضمان التوافق مع بيئات الاستضافة المختلفة
-// وتجنب خطأ 404 عند تحديث الصفحات الفرعية.
 root.render(
   <React.StrictMode>
     <HashRouter>

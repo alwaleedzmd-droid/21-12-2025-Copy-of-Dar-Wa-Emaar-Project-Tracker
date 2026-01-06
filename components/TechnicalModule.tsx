@@ -45,7 +45,6 @@ interface TechnicalModuleProps {
   onRefresh: () => void;
   filteredByProject?: string;
   scopeFilter?: 'INTERNAL_WORK' | 'EXTERNAL';
-  // Fix: Added missing logActivity prop to TechnicalModuleProps
   logActivity?: (action: string, target: string, color?: 'text-blue-500' | 'text-orange-500' | 'text-green-500') => void;
 }
 
@@ -61,7 +60,6 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
   
   const [isUploading, setIsUploading] = useState(false);
   const [attachment, setAttachment] = useState<File | null>(null);
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [techForm, setTechForm] = useState({
@@ -78,7 +76,6 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
 
   // --- Handlers ---
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       setAttachment(e.target.files[0]);
@@ -86,7 +83,7 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
   };
 
   const openAddModal = () => {
-    const proj = filteredByProject ? projects.find(p => p.name === filteredByProject || p.title === filteredByProject) : null;
+    const proj = filteredByProject ? (projects || []).find(p => p.name === filteredByProject || p.title === filteredByProject) : null;
     setTechForm({ 
       id: 0, 
       project_id: proj ? proj?.id?.toString() : '', 
@@ -120,15 +117,17 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
 
   const handleDelete = async (id: number) => {
     if (!window.confirm("هل أنت متأكد من حذف هذا العمل؟")) return;
-    // Fix: Find the request before deleting to use its info for logging
-    const reqToDelete = requests.find(r => r.id === id);
-    const { error } = await supabase.from('technical_requests').delete().eq('id', Number(id));
-    if (!error) {
-      // Fix: Log the deletion activity
+    try {
+      const reqToDelete = (requests || []).find(r => r.id === id);
+      const { error } = await supabase.from('technical_requests').delete().eq('id', Number(id));
+      if (error) throw error;
+      
       if (reqToDelete) logActivity?.('حذف عملاً فنياً', reqToDelete?.service_type || 'طلب', 'text-orange-500');
-      onRefresh();
+      await onRefresh();
+      alert("تم حذف العمل بنجاح ✅");
+    } catch (err: any) {
+      alert("حدث خطأ أثناء الحذف: " + err?.message);
     }
-    else alert("حدث خطأ أثناء الحذف: " + error?.message);
   };
 
   const handleSubmit = async () => {
@@ -148,9 +147,7 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
           .from('attachments')
           .upload(filePath, attachment);
 
-        if (uploadError) {
-          throw uploadError;
-        }
+        if (uploadError) throw uploadError;
 
         const { data: { publicUrl } } = supabase.storage
           .from('attachments')
@@ -164,7 +161,7 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
       }
     }
 
-    const selectedProj = projects.find(p => p?.id?.toString() === techForm.project_id);
+    const selectedProj = (projects || []).find(p => p?.id?.toString() === techForm.project_id);
 
     const payload = {
       project_id: parseInt(techForm.project_id),
@@ -181,23 +178,19 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
     };
 
     try {
-      let error;
       if (techForm.id === 0) {
-        const res = await supabase.from('technical_requests').insert([payload]);
-        error = res.error;
+        const { error } = await supabase.from('technical_requests').insert([payload]);
+        if (error) throw error;
+        logActivity?.('أضاف عملاً فنياً جديداً', techForm.service_type, 'text-blue-500');
       } else {
-        const res = await supabase.from('technical_requests').update(payload).eq('id', Number(techForm.id));
-        error = res.error;
+        const { error } = await supabase.from('technical_requests').update(payload).eq('id', Number(techForm.id));
+        if (error) throw error;
+        logActivity?.('حدث بيانات عمل فني', techForm.service_type, 'text-blue-500');
       }
 
-      if (error) {
-        throw error;
-      } else {
-        // Fix: Log the creation/update activity
-        logActivity?.(techForm.id === 0 ? 'أضاف عملاً فنياً جديداً' : 'حدث بيانات عمل فني', techForm.service_type, 'text-blue-500');
-        setIsAddModalOpen(false);
-        onRefresh();
-      }
+      setIsAddModalOpen(false);
+      await onRefresh();
+      alert("تم حفظ البيانات بنجاح ✅");
     } catch (err: any) {
         alert("حدث خطأ: " + (err?.message || "خطأ في قاعدة البيانات"));
     } finally {
@@ -217,7 +210,7 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
         
         const formatted = data.map(row => {
           const pName = row['اسم المشروع'] || row['Project Name'];
-          const proj = projects.find(p => p?.name === pName || p?.title === pName);
+          const proj = (projects || []).find(p => p?.name === pName || p?.title === pName);
           
           return {
             project_id: proj ? proj?.id : null,
@@ -236,12 +229,11 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
         const { error } = await supabase.from('technical_requests').insert(formatted);
         if (error) throw error;
 
-        // Fix: Log the bulk import activity
         logActivity?.('استورد أعمال فنية عبر Excel', `${formatted.length} سجل`, 'text-orange-500');
 
         alert(`تم استيراد ${formatted.length} عمل بنجاح ✅`);
         setIsBulkModalOpen(false);
-        onRefresh();
+        await onRefresh();
       } catch (err: any) {
         alert("خطأ في الاستيراد: " + (err?.message || "تأكد من تنسيق الملف"));
       }
@@ -253,44 +245,35 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
     if (!activeRequest?.id) return;
     
     try {
-      // إعداد حمولة التحديث بدون updated_at يدوياً للسماح للقاعدة بالتحكم
       const updateData: any = { status: newStatus };
       if (newStatus === 'completed' || newStatus === 'منجز') updateData.progress = 100;
       
       const { error } = await supabase.from('technical_requests').update(updateData).eq('id', Number(activeRequest?.id));
       
-      if (!error) {
-        // تحديث الحالة محلياً فوراً
-        const updatedRequest = { ...activeRequest, ...updateData };
-        setActiveRequest(updatedRequest);
-        
-        // تسجيل النشاط
-        logActivity?.('حدث حالة العمل الفني', activeRequest?.service_type || 'طلب', newStatus === 'completed' || newStatus === 'منجز' ? 'text-green-500' : 'text-blue-500');
-        
-        // تحديث الواجهة والبيانات العامة
-        onRefresh();
-      } else {
-        throw error;
-      }
+      if (error) throw error;
+      
+      const updatedRequest = { ...activeRequest, ...updateData };
+      setActiveRequest(updatedRequest);
+      logActivity?.('حدث حالة العمل الفني', activeRequest?.service_type || 'طلب', newStatus === 'completed' || newStatus === 'منجز' ? 'text-green-500' : 'text-blue-500');
+      await onRefresh();
     } catch (err: any) {
       console.error("Status update error:", err);
       alert("فشل تحديث الحالة: " + (err?.message || "خطأ مجهول"));
     }
   };
 
-  const filteredRequests = requests.filter(r => 
+  const filteredRequests = (requests || []).filter(r => 
     (r?.project_name?.toLowerCase()?.includes(searchTerm.toLowerCase()) || '') ||
     (r?.service_type?.toLowerCase()?.includes(searchTerm.toLowerCase()) || '') ||
     (r?.reviewing_entity?.toLowerCase()?.includes(searchTerm.toLowerCase()) || '')
   );
 
   const canEdit = currentUser?.role === 'ADMIN' || currentUser?.role === 'PR_MANAGER' || currentUser?.role === 'TECHNICAL' || currentUser?.role === 'PR_OFFICER';
-  const canDelete = currentUser?.role === 'ADMIN';
+  const isAdmin = currentUser?.role === 'ADMIN';
 
   return (
     <div className="space-y-8 animate-in fade-in font-cairo" dir="rtl">
       
-      {/* Header & Controls */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h2 className="text-3xl font-black text-[#1B2B48]">
@@ -311,7 +294,7 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
               </button>
               <button 
                 onClick={openAddModal} 
-                className="flex items-center gap-2 px-6 py-2.5 bg-[#1B2B48] text-white rounded-xl font-black text-sm hover:brightness-110 shadow-lg shadow-blue-100 transition-all active:scale-95"
+                className="flex items-center gap-2 px-6 py-2.5 bg-[#1B2B48] text-white rounded-xl font-black text-sm hover:brightness-110 shadow-lg transition-all active:scale-95"
               >
                 <Plus size={20} /> إضافة عمل يدوي
               </button>
@@ -320,7 +303,6 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
         </div>
       </div>
 
-      {/* Filter Bar */}
       <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex flex-col md:flex-row gap-4 items-center">
         <div className="relative flex-1 w-full">
           <Search className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-300" size={18} />
@@ -337,7 +319,6 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
         </button>
       </div>
 
-      {/* Main Table */}
       <div className="bg-white rounded-[30px] border border-gray-100 shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-right">
@@ -400,7 +381,7 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
                         >
                           <Edit size={16} />
                         </button>
-                        {canDelete && (
+                        {isAdmin && (
                           <button 
                             onClick={(e) => { e.stopPropagation(); handleDelete(req?.id); }} 
                             className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
@@ -428,27 +409,26 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
         </div>
       </div>
 
-      {/* Manual Add Modal */}
       <Modal isOpen={isAddModalOpen} onClose={()=>setIsAddModalOpen(false)} title={techForm.id ? "تعديل العمل" : "إضافة عمل فني"}>
         <div className="space-y-4 text-right">
           <div>
             <label className="text-xs text-gray-400 font-bold block mb-1">المشروع</label>
-            <select className="w-full p-4 bg-gray-50 border rounded-2xl font-bold" value={techForm.project_id} onChange={e=>setTechForm({...techForm, project_id:e.target.value})} disabled={!!filteredByProject}>
+            <select className="w-full p-4 bg-gray-50 border rounded-2xl font-bold outline-none focus:ring-1 ring-[#1B2B48]" value={techForm.project_id} onChange={e=>setTechForm({...techForm, project_id:e.target.value})} disabled={!!filteredByProject}>
               <option value="">اختر المشروع...</option>
-              {projects?.map(p=><option key={p?.id} value={p?.id}>{p?.name || p?.title}</option>)}
+              {(projects || []).map(p=><option key={p?.id} value={p?.id}>{p?.name || p?.title}</option>)}
             </select>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="text-xs text-gray-400 font-bold block mb-1">نوع العمل</label>
-              <select className="w-full p-4 bg-gray-50 border rounded-2xl font-bold" value={techForm.service_type} onChange={e=>setTechForm({...techForm, service_type:e.target.value})}>
+              <select className="w-full p-4 bg-gray-50 border rounded-2xl font-bold outline-none" value={techForm.service_type} onChange={e=>setTechForm({...techForm, service_type:e.target.value})}>
                 <option value="">اختر...</option>
                 {WORK_STATEMENTS.map(s=><option key={s} value={s}>{s}</option>)}
               </select>
             </div>
             <div>
               <label className="text-xs text-gray-400 font-bold block mb-1">جهة المراجعة</label>
-              <select className="w-full p-4 bg-gray-50 border rounded-2xl font-bold" value={techForm.reviewing_entity} onChange={e=>setTechForm({...techForm, reviewing_entity:e.target.value})}>
+              <select className="w-full p-4 bg-gray-50 border rounded-2xl font-bold outline-none" value={techForm.reviewing_entity} onChange={e=>setTechForm({...techForm, reviewing_entity:e.target.value})}>
                 <option value="">اختر...</option>
                 {REVIEW_ENTITIES.map(e=><option key={e} value={e}>{e}</option>)}
               </select>
@@ -456,7 +436,7 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
           </div>
           <div>
             <label className="text-xs text-gray-400 font-bold block mb-1">التفاصيل</label>
-            <textarea className="w-full p-4 bg-gray-50 border rounded-2xl font-bold min-h-[100px]" value={techForm.details} onChange={e=>setTechForm({...techForm, details:e.target.value})} placeholder="وصف العمل المطلوب..."></textarea>
+            <textarea className="w-full p-4 bg-gray-50 border rounded-2xl font-bold min-h-[100px] outline-none" value={techForm.details} onChange={e=>setTechForm({...techForm, details:e.target.value})} placeholder="وصف العمل المطلوب..."></textarea>
           </div>
           <button onClick={handleSubmit} disabled={isUploading} className="w-full bg-[#1B2B48] text-white py-5 rounded-[25px] font-black shadow-xl hover:brightness-110 active:scale-95 transition-all">
             {isUploading ? 'جاري الحفظ...' : 'حفظ البيانات'}
@@ -464,7 +444,6 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
         </div>
       </Modal>
 
-      {/* Bulk Upload Modal */}
       <Modal isOpen={isBulkModalOpen} onClose={()=>setIsBulkModalOpen(false)} title="استيراد أعمال من Excel">
         <div className="space-y-6 text-center py-10">
           <div className="border-2 border-dashed border-gray-200 rounded-[30px] p-12 bg-gray-50 hover:border-[#E95D22] transition-all group cursor-pointer relative">
@@ -484,7 +463,7 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
           onClose={()=>setIsManageModalOpen(false)} 
           request={activeRequest} 
           currentUser={currentUser} 
-          usersList={usersList}
+          usersList={usersList || []}
           onUpdateStatus={updateStatus}
           onUpdateDelegation={() => {}}
         />

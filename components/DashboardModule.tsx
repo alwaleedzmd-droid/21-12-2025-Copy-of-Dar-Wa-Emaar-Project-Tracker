@@ -1,6 +1,7 @@
 
 import React, { useState, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+// Corrected import to use 'react-router' as useNavigate might be missing from 'react-router-dom' exports in this environment.
+import { useNavigate } from 'react-router';
 import { 
   Building2, Zap, FileText, CheckCircle2, Clock, 
   Activity, Calendar, ArrowLeft, Filter, Search
