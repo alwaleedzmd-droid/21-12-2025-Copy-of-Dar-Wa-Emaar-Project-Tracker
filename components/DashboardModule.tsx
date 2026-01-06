@@ -9,11 +9,11 @@ import {
 
 interface DashboardProps {
   stats?: {
-    completed: number;
-    pending: number;
+    completedCount: number;
+    pendingCount: number;
     totalDeeds: number;
-    totalProjects: number;
-    progress: number;
+    activeProjects: number;
+    progressPercent: number;
   };
   projects: any[];
   techRequests: any[];
@@ -27,7 +27,7 @@ interface DashboardProps {
 }
 
 const DashboardModule: React.FC<DashboardProps> = ({ 
-  stats: externalStats,
+  stats: aggregatedStats,
   projects = [], 
   techRequests = [], 
   clearanceRequests = [], 
@@ -37,39 +37,22 @@ const DashboardModule: React.FC<DashboardProps> = ({
   const navigate = useNavigate();
   const [activeFilter, setActiveFilter] = useState<'ALL' | 'COMPLETED' | 'PENDING' | 'DEEDS'>('ALL');
 
-  // --- 1. الحسابات التراكمية (Aggregation logic for list view) ---
+  // --- استخدام الإحصائيات المجمعة الممرة من الأب ---
   const stats = useMemo(() => {
-    if (externalStats) return externalStats;
-
-    const allItems = [
-        ...(projectWorks || []), 
-        ...(techRequests || []), 
-        ...(clearanceRequests || [])
-    ];
-
-    const completed = allItems.filter(t => 
-      t?.status === 'completed' || 
-      t?.status === 'منجز' || 
-      t?.status === 'مكتمل'
-    ).length;
-
-    const totalCount = allItems.length;
-    const pending = totalCount - completed;
-
+    if (aggregatedStats) return aggregatedStats;
     return {
-      totalProjects: projects?.length || 0,
-      pending: pending || 0,
+      activeProjects: projects?.length || 0,
+      pendingCount: 0,
       totalDeeds: clearanceRequests?.length || 0,
-      completed: completed || 0,
-      progress: totalCount > 0 ? Math.round((completed / totalCount) * 100) : 0
+      completedCount: 0,
+      progressPercent: 0
     };
-  }, [projects, techRequests, clearanceRequests, projectWorks, externalStats]);
+  }, [projects, clearanceRequests, aggregatedStats]);
 
-  // --- 2. تصفية البيانات والربط العميق (Deep Linking) ---
-  const filteredList = useMemo(() => {
+  // --- قائمة التحديثات الأخيرة مع الربط العميق ---
+  const recentItems = useMemo(() => {
     const mappedWorks = (projectWorks || []).map(item => ({
         ...item,
-        id: item.id,
         type: 'PROJECT_WORK',
         label: item?.task_name || 'عمل مشروع',
         date: item?.created_at,
@@ -78,7 +61,6 @@ const DashboardModule: React.FC<DashboardProps> = ({
 
     const mappedTech = (techRequests || []).map(item => ({
         ...item,
-        id: item.id,
         type: 'TECH_REQUEST',
         label: item?.service_type || 'طلب فني',
         date: item?.created_at,
@@ -87,7 +69,6 @@ const DashboardModule: React.FC<DashboardProps> = ({
 
     const mappedDeeds = (clearanceRequests || []).map(item => ({
         ...item,
-        id: item.id,
         type: 'DEED',
         label: `إفراغ: ${item?.client_name || 'مستفيد'}`,
         date: item?.created_at,
@@ -111,26 +92,20 @@ const DashboardModule: React.FC<DashboardProps> = ({
     return combined.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }, [projectWorks, techRequests, clearanceRequests, activeFilter]);
 
-  // --- 3. حساب تقدم المشاريع الفرعي ---
-  const projectsWithProgress = useMemo(() => {
+  // حساب تقدم المشاريع الفردية للعرض الجانبي
+  const topProjects = useMemo(() => {
       return (projects || []).slice(0, 4).map(p => {
           const projectTasks = (projectWorks || []).filter(w => w?.projectId === p?.id);
-          const projectCompleted = projectTasks.filter(w => w?.status === 'completed' || w?.status === 'منجز').length;
-          const prog = projectTasks.length > 0 ? Math.round((projectCompleted / projectTasks.length) * 100) : (p?.progress || 0);
+          const completed = projectTasks.filter(w => w?.status === 'completed' || w?.status === 'منجز').length;
+          const prog = projectTasks.length > 0 ? Math.round((completed / projectTasks.length) * 100) : (p?.progress || 0);
           return { ...p, calculatedProgress: prog };
       });
   }, [projects, projectWorks]);
 
-  // معالجة الضغط على عنصر في القائمة
-  const handleItemClick = (item: any) => {
-    // نمرر الـ id في الـ state ليتم فتحه تلقائياً في الصفحة المستهدفة
-    navigate(item.path, { state: { openId: item.id } });
-  };
-
   return (
     <div className="space-y-8 animate-in fade-in duration-500 font-cairo text-right">
       
-      {/* Header Info */}
+      {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
         <div>
           <div className="flex items-center gap-2 mb-1">
@@ -145,11 +120,11 @@ const DashboardModule: React.FC<DashboardProps> = ({
         </div>
       </div>
 
-      {/* --- الإحصائيات المركزية (Stats Cards) --- */}
+      {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <StatCard 
             title="مشاريع قائمة" 
-            value={stats.totalProjects} 
+            value={stats.activeProjects} 
             icon={<Building2 size={24}/>} 
             color="blue" 
             onClick={() => navigate('/projects')} 
@@ -166,33 +141,33 @@ const DashboardModule: React.FC<DashboardProps> = ({
         />
         <StatCard 
             title="قيد المتابعة" 
-            value={stats.pending} 
+            value={stats.pendingCount} 
             icon={<Clock size={24}/>} 
             color="orange" 
             active={activeFilter === 'PENDING'}
             onClick={() => setActiveFilter('PENDING')} 
             subtitle="أعمال فنية وإدارية معلقة"
-            alert={stats.pending > 10}
+            alert={stats.pendingCount > 10}
         />
         <StatCard 
             title="أعمال منجزة" 
-            value={stats.completed} 
+            value={stats.completedCount} 
             icon={<CheckCircle2 size={24}/>} 
             color="green" 
             active={activeFilter === 'COMPLETED'}
             onClick={() => setActiveFilter('COMPLETED')} 
-            subtitle={`${stats.progress}% نسبة الإنجاز العام`}
+            subtitle={`${stats.progressPercent}% نسبة الإنجاز العام`}
         />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Recent Activity Section */}
+          {/* Main Activity List */}
           <div className="lg:col-span-2 space-y-4">
               <div className="bg-white p-8 rounded-[40px] shadow-sm border border-gray-100 min-h-[500px] flex flex-col">
                   <div className="flex items-center justify-between mb-6">
                     <h3 className="text-xl font-black text-[#1B2B48] flex items-center gap-2">
                         <Activity className="text-[#E95D22]" size={20} />
-                        {activeFilter === 'ALL' ? 'آخر التحديثات المركزية' : 'نتائج الفلترة النشطة'}
+                        آخر التحديثات المركزية
                     </h3>
                     {activeFilter !== 'ALL' && (
                         <button onClick={() => setActiveFilter('ALL')} className="text-xs text-[#E95D22] font-black hover:underline">عرض الكل</button>
@@ -200,10 +175,10 @@ const DashboardModule: React.FC<DashboardProps> = ({
                   </div>
 
                   <div className="space-y-3 flex-1">
-                    {filteredList?.slice(0, 8).map((item, idx) => (
+                    {recentItems?.slice(0, 8).map((item, idx) => (
                       <div 
                         key={idx} 
-                        onClick={() => handleItemClick(item)}
+                        onClick={() => navigate(item.path, { state: { openId: item.id } })}
                         className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl border border-transparent hover:border-[#E95D22]/30 hover:bg-white hover:shadow-md transition-all cursor-pointer group"
                       >
                         <div className="flex items-center gap-4">
@@ -215,7 +190,7 @@ const DashboardModule: React.FC<DashboardProps> = ({
                           </div>
                           <div>
                             <h4 className="font-bold text-[#1B2B48] text-sm group-hover:text-[#E95D22] transition-colors line-clamp-1">{item.label}</h4>
-                            <p className="text-[10px] text-gray-400 mt-0.5 font-bold uppercase tracking-tighter">
+                            <p className="text-[10px] text-gray-400 mt-0.5 font-bold uppercase">
                                 {item?.project_name || 'عام'} • {new Date(item.date).toLocaleDateString('ar-SA')}
                             </p>
                           </div>
@@ -223,21 +198,17 @@ const DashboardModule: React.FC<DashboardProps> = ({
                         <ChevronLeft size={16} className="text-gray-300 group-hover:text-[#E95D22] transition-colors" />
                       </div>
                     ))}
-                    {filteredList.length === 0 && (
+                    {recentItems.length === 0 && (
                         <div className="h-full flex flex-col items-center justify-center text-gray-300 opacity-50 py-20">
                             <Search size={48} className="mb-2"/>
                             <p className="font-bold">لا توجد بيانات متاحة لهذا التصنيف</p>
                         </div>
                     )}
                   </div>
-                  
-                  {filteredList.length > 8 && (
-                      <button onClick={() => navigate('/projects')} className="mt-4 w-full py-3 text-xs font-black text-gray-400 hover:text-[#1B2B48] border-t border-gray-50">عرض كافة السجلات</button>
-                  )}
               </div>
           </div>
 
-          {/* Side Performance Section */}
+          {/* Performance Dashboard Sidebar */}
           <div className="space-y-6">
               <div className="bg-[#1B2B48] p-8 rounded-[40px] text-white shadow-xl relative overflow-hidden">
                   <div className="absolute top-0 left-0 w-32 h-32 bg-white/5 rounded-full -translate-x-16 -translate-y-16"></div>
@@ -247,11 +218,11 @@ const DashboardModule: React.FC<DashboardProps> = ({
                         <h3 className="font-bold text-lg">متوسط تقدم الأعمال</h3>
                       </div>
                       <div className="flex items-end gap-3 mb-6">
-                          <span className="text-5xl font-black">{stats.progress}%</span>
+                          <span className="text-5xl font-black">{stats.progressPercent}%</span>
                           <span className="text-xs text-gray-400 font-bold pb-2">إنجاز المهام الكلي</span>
                       </div>
                       <div className="w-full bg-white/10 h-2 rounded-full overflow-hidden">
-                          <div className="bg-green-400 h-full rounded-full transition-all duration-1000" style={{width: `${stats.progress}%`}}></div>
+                          <div className="bg-green-400 h-full rounded-full transition-all duration-1000" style={{width: `${stats.progressPercent}%`}}></div>
                       </div>
                   </div>
               </div>
@@ -262,7 +233,7 @@ const DashboardModule: React.FC<DashboardProps> = ({
                       تقدم المشاريع الكبرى
                   </h3>
                   <div className="space-y-4">
-                      {projectsWithProgress?.map(p => (
+                      {topProjects?.map(p => (
                           <div key={p.id} onClick={() => navigate(`/projects/${p.id}`)} className="p-3 hover:bg-gray-50 rounded-2xl transition-all cursor-pointer group">
                               <div className="flex justify-between items-center mb-1.5">
                                   <span className="text-xs font-bold text-gray-600 group-hover:text-[#1B2B48]">{p.name}</span>
@@ -281,13 +252,12 @@ const DashboardModule: React.FC<DashboardProps> = ({
   );
 };
 
-// --- المكونات المساعدة للبطاقات ---
 const StatCard = ({ title, value, icon, color, active, onClick, subtitle, alert }: any) => {
     const colorClasses: Record<string, string> = {
-        blue: 'text-blue-600 bg-blue-50 border-blue-100 hover:border-blue-300',
-        indigo: 'text-indigo-600 bg-indigo-50 border-indigo-100 hover:border-indigo-300',
-        orange: 'text-orange-600 bg-orange-50 border-orange-100 hover:border-orange-300',
-        green: 'text-green-600 bg-green-50 border-green-100 hover:border-green-300'
+        blue: 'text-blue-600 bg-blue-50 border-blue-100',
+        indigo: 'text-indigo-600 bg-indigo-50 border-indigo-100',
+        orange: 'text-orange-600 bg-orange-50 border-orange-100',
+        green: 'text-green-600 bg-green-50 border-green-100'
     };
 
     const activeClasses: Record<string, string> = {
@@ -305,7 +275,7 @@ const StatCard = ({ title, value, icon, color, active, onClick, subtitle, alert 
             }`}
         >
             <div className="flex justify-between items-start mb-4 relative z-10">
-                <div className={`p-3 rounded-2xl transition-transform group-hover:scale-110 ${active ? 'bg-white/20' : colorClasses[color]}`}>
+                <div className={`p-3 rounded-2xl ${active ? 'bg-white/20' : colorClasses[color]}`}>
                     {icon}
                 </div>
                 {alert && !active && (

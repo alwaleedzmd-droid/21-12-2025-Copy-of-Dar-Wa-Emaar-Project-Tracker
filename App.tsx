@@ -22,6 +22,7 @@ import ProjectsModule from './components/ProjectsModule';
 import DeedsDashboard from './components/DeedsDashboard';
 import ProjectDetailView from './components/ProjectDetailView';
 import UsersModule from './components/UsersModule';
+import AIAssistant from './components/AIAssistant';
 
 // --- Error Boundary ---
 class ErrorBoundary extends React.Component<{ children: ReactNode }, { hasError: boolean }> {
@@ -330,17 +331,32 @@ const AppContent: React.FC = () => {
 
   const [loginData, setLoginData] = useState({ email: 'adaldawsari@darwaemaar.com', password: '' });
 
-  // --- Surgical Dashboard Aggregation Logic ---
+  // --- تجميع الإحصائيات المركزية (Aggregator Logic) ---
   const dashboardStats = useMemo(() => {
-    const allOps = [...(projectWorks || []), ...(technicalRequests || []), ...(clearanceRequests || [])];
-    const completed = allOps.filter(i => i?.status === 'منجز' || i?.status === 'completed' || i?.status === 'مكتمل').length;
-    const total = allOps.length;
+    // 1. تجميع كل المهام من الجداول الثلاثة
+    const allTasks = [
+      ...(projectWorks || []),
+      ...(technicalRequests || []),
+      ...(clearanceRequests || [])
+    ];
+
+    // 2. تصفية المنجز
+    const completed = allTasks.filter(item => 
+      item?.status === 'منجز' || 
+      item?.status === 'completed' || 
+      item?.status === 'مكتمل'
+    ).length;
+
+    // 3. حساب الإحصائيات
+    const totalTasks = allTasks.length;
+    const pending = totalTasks - completed;
+
     return {
-        completed,
-        pending: total - completed,
+        completedCount: completed,
+        pendingCount: pending,
         totalDeeds: clearanceRequests?.length || 0,
-        totalProjects: projects?.length || 0,
-        progress: total > 0 ? Math.round((completed / total) * 100) : 0
+        activeProjects: projects?.length || 0,
+        progressPercent: totalTasks > 0 ? Math.round((completed / totalTasks) * 100) : 0
     };
   }, [projectWorks, technicalRequests, clearanceRequests, projects]);
 
@@ -430,6 +446,21 @@ const AppContent: React.FC = () => {
 
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      
+      {/* 
+          تفعيل المساعد الذكي مع تمرير كافة البيانات اللازمة للربط
+          يتم تفعيله فقط للأدوار القيادية كما هو محدد في AIAssistant 
+      */}
+      {['ADMIN', 'PR_MANAGER'].includes(currentUser?.role || '') && (
+        <AIAssistant 
+          currentUser={currentUser}
+          projects={projects}
+          technicalRequests={technicalRequests}
+          clearanceRequests={clearanceRequests}
+          projectWorks={projectWorks}
+          onNavigate={(type, data) => navigate(type === 'PROJECT' ? `/projects/${data.id}` : '/deeds')}
+        />
+      )}
     </MainLayout>
   );
 };
