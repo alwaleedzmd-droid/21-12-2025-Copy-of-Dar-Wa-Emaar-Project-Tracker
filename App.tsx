@@ -325,10 +325,24 @@ const AppContent: React.FC = () => {
   const location = useLocation();
   const { 
     currentUser, isAuthLoading, login, logout,
-    projects = [], technicalRequests = [], clearanceRequests = [], appUsers = [], activities = [], refreshData, logActivity 
+    projects = [], technicalRequests = [], clearanceRequests = [], projectWorks = [], appUsers = [], activities = [], refreshData, logActivity 
   } = useData();
 
   const [loginData, setLoginData] = useState({ email: 'adaldawsari@darwaemaar.com', password: '' });
+
+  // --- Surgical Dashboard Aggregation Logic ---
+  const dashboardStats = useMemo(() => {
+    const allOps = [...(projectWorks || []), ...(technicalRequests || []), ...(clearanceRequests || [])];
+    const completed = allOps.filter(i => i?.status === 'منجز' || i?.status === 'completed' || i?.status === 'مكتمل').length;
+    const total = allOps.length;
+    return {
+        completed,
+        pending: total - completed,
+        totalDeeds: clearanceRequests?.length || 0,
+        totalProjects: projects?.length || 0,
+        progress: total > 0 ? Math.round((completed / total) * 100) : 0
+    };
+  }, [projectWorks, technicalRequests, clearanceRequests, projects]);
 
   // حماية التوجيه التلقائي للأدوار المقيدة
   useEffect(() => {
@@ -370,7 +384,18 @@ const AppContent: React.FC = () => {
         <Route path="/" element={
           (role === 'CONVEYANCE') ? <Navigate to="/deeds" replace /> :
           (role === 'TECHNICAL') ? <Navigate to="/technical" replace /> :
-          <DashboardModule projects={projects} techRequests={technicalRequests} projectWorks={[]} clearanceRequests={clearanceRequests} activities={activities} currentUser={currentUser} users={appUsers} onQuickAction={() => {}} onUpdateStatus={() => {}} />
+          <DashboardModule 
+            stats={dashboardStats}
+            projects={projects} 
+            techRequests={technicalRequests} 
+            projectWorks={projectWorks} 
+            clearanceRequests={clearanceRequests} 
+            activities={activities} 
+            currentUser={currentUser} 
+            users={appUsers} 
+            onQuickAction={() => {}} 
+            onUpdateStatus={() => {}} 
+          />
         } />
 
         {/* Projects Guard */}

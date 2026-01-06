@@ -1,5 +1,6 @@
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
+import { useLocation } from 'react-router';
 import { 
   Plus, MoreHorizontal, Trash2, Edit, FileText, 
   Building2, AlignLeft, CheckCircle2, Paperclip, 
@@ -51,6 +52,7 @@ interface TechnicalModuleProps {
 const TechnicalModule: React.FC<TechnicalModuleProps> = ({ 
   requests, projects, currentUser, usersList, onRefresh, filteredByProject, scopeFilter, logActivity 
 }) => {
+  const location = useLocation();
   // --- State ---
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isManageModalOpen, setIsManageModalOpen] = useState(false);
@@ -73,6 +75,17 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
     progress: 0,
     attachment_url: '' 
   });
+
+  // منطق الربط العميق: فتح الطلب تلقائياً إذا جاء الـ id من لوحة التحكم
+  useEffect(() => {
+    if (location.state?.openId && (requests || []).length > 0) {
+      const targetReq = requests.find(r => r.id === location.state.openId);
+      if (targetReq) {
+        setActiveRequest(targetReq);
+        setIsManageModalOpen(true);
+      }
+    }
+  }, [location.state, requests]);
 
   // --- Handlers ---
 

@@ -18,31 +18,40 @@ const NotificationCenter = () => {
         .order('created_at', { ascending: false })
         .limit(20);
 
-      if (error) throw error;
+      if (error) {
+        // إذا كان الخطأ متعلقاً بعدم وجود الجدول، لا نلقي استثناءً لتجنب إزعاج المستخدم
+        if (error.code === '42P01') {
+          console.warn("إشعار النظام: جدول الإشعارات غير موجود حالياً في قاعدة البيانات.");
+          return;
+        }
+        throw error;
+      }
 
       if (data) {
         setNotifications(data);
         setUnreadCount(data.filter(n => !n.is_read).length);
       }
-    } catch (err) {
-      console.error("Error fetching notifications:", err);
+    } catch (err: any) {
+      // إصلاح خطأ [object Object] عبر استخراج الرسالة النصية للخطأ
+      console.error("Error fetching notifications:", err.message || err);
     }
   };
 
   useEffect(() => {
     fetchNotifications();
-    // تفعيل التحديث التلقائي كل 10 ثواني
-    const interval = setInterval(fetchNotifications, 10000);
+    // تفعيل التحديث التلقائي كل 15 ثانية (تقليل الضغط)
+    const interval = setInterval(fetchNotifications, 15000);
     return () => clearInterval(interval);
   }, []);
 
   // تحديد الكل كمقروء
   const markAllRead = async () => {
     try {
-      await supabase.from('notifications').update({ is_read: true }).eq('is_read', false);
+      const { error } = await supabase.from('notifications').update({ is_read: true }).eq('is_read', false);
+      if (error) throw error;
       fetchNotifications();
-    } catch (err) {
-      console.error("Error marking as read:", err);
+    } catch (err: any) {
+      console.error("Error marking as read:", err.message || err);
     }
   };
 
@@ -76,7 +85,7 @@ const NotificationCenter = () => {
           </div>
 
           {/* القائمة */}
-          <div className="max-h-80 overflow-y-auto">
+          <div className="max-h-80 overflow-y-auto custom-scrollbar">
             {notifications.length === 0 ? (
               <div className="p-8 text-center text-gray-400 text-xs font-bold">
                 لا توجد إشعارات جديدة
@@ -86,7 +95,7 @@ const NotificationCenter = () => {
                 <div key={n.id} className={`p-4 border-b border-gray-50 hover:bg-gray-50 transition-colors ${!n.is_read ? 'bg-blue-50/30' : ''}`}>
                   <div className="flex justify-between items-start mb-1">
                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${n.type === 'new_request' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>
-                        {n.type === 'new_request' ? 'طلب جديد' : 'تعليق'}
+                        {n.type === 'new_request' ? 'طلب جديد' : 'تحديث'}
                      </span>
                      <span className="text-[9px] text-gray-400" dir="ltr">
                         {new Date(n.created_at).toLocaleTimeString('ar-SA', {hour:'2-digit', minute:'2-digit'})}

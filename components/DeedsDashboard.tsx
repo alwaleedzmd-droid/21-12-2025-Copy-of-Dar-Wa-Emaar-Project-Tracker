@@ -1,5 +1,6 @@
 
 import React, { useState, useMemo, useRef, useEffect } from 'react';
+import { useLocation } from 'react-router';
 import { supabase } from '../supabaseClient'; 
 import { 
   Plus, Search, CheckCircle2, Clock, 
@@ -28,6 +29,7 @@ interface DeedsDashboardProps {
 }
 
 const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, currentUserName, filteredProjectName, logActivity }) => {
+    const location = useLocation();
     const { refreshData } = useData();
     const [searchQuery, setSearchQuery] = useState('');
     const [isRegModalOpen, setIsRegModalOpen] = useState(false);
@@ -100,6 +102,16 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
     };
 
     useEffect(() => { fetchDeeds(); }, [filteredProjectName]);
+
+    // منطق الربط العميق: فتح طلب الإفراغ تلقائياً
+    useEffect(() => {
+      if (location.state?.openId && deeds.length > 0) {
+        const targetDeed = deeds.find(d => d.id === location.state.openId);
+        if (targetDeed) {
+          handleOpenManage(targetDeed);
+        }
+      }
+    }, [location.state, deeds]);
 
     const handleOpenManage = (deed: any) => {
         setSelectedDeed(deed);
@@ -195,7 +207,7 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
                         />
                     </div>
                     {['ADMIN', 'PR_MANAGER', 'DEEDS_OFFICER'].includes(currentUserRole || '') && (
-                        <button onClick={() => setIsRegModalOpen(true)} className="flex items-center justify-center gap-2 px-6 py-2.5 bg-[#E95D22] text-white rounded-xl font-black text-xs hover:brightness-110 shadow-lg shadow-orange-100 active:scale-95 transition-all">
+                        <button onClick={() => setIsRegModalOpen(true)} className="flex items-center justify-center gap-2 px-6 py-2.5 bg-[#E95D22] text-white rounded-xl font-black text-sm hover:brightness-110 shadow-lg shadow-orange-100 active:scale-95 transition-all">
                             <Plus size={16} /> تسجيل صك جديد
                         </button>
                     )}
