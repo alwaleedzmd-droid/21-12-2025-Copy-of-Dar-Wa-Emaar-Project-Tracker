@@ -9,7 +9,8 @@ import {
   CreditCard, Calendar, Hash, Phone, MapPin,
   Landmark, FileText, MessageSquare, Send, 
   Trash2, Loader2, XCircle, Activity, Lock,
-  LayoutGrid, Scale, Paperclip, Info
+  LayoutGrid, Scale, Paperclip, Info,
+  TrendingUp, BarChart
 } from 'lucide-react';
 import { ActivityLog, useData } from '../contexts/DataContext';
 import Modal from './Modal';
@@ -43,7 +44,7 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
     const [isCommentLoading, setIsCommentLoading] = useState(false);
     const commentsEndRef = useRef<HTMLDivElement>(null);
 
-    // نموذج الـ 18 حقلًا
+    // نموذج الـ 18 حقلًا للتدقيق الكامل
     const [newDeedForm, setNewDeedForm] = useState<any>({
         project_name: filteredProjectName || '',
         client_name: '',
@@ -64,8 +65,16 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
         status: 'جديد'
     });
 
-    const isAuthorizedToManage = ['ADMIN', 'PR_MANAGER'].includes(currentUserRole || '');
-    const isAdmin = currentUserRole === 'ADMIN';
+    const isAuthorizedToManage = ['ADMIN', 'PR_MANAGER', 'DEEDS_OFFICER', 'CONVEYANCE'].includes(currentUserRole || '');
+    const isExecutive = ['ADMIN', 'PR_MANAGER'].includes(currentUserRole || '');
+
+    // حساب الإحصائيات للوحة المعلومات المصغرة
+    const deedStats = useMemo(() => {
+        const total = deeds.length;
+        const completed = deeds.filter(d => d.status === 'مكتمل' || d.status === 'منجز').length;
+        const pending = total - completed;
+        return { total, completed, pending };
+    }, [deeds]);
 
     const fetchDeeds = async () => {
         setIsLoading(true);
@@ -103,7 +112,6 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
 
     useEffect(() => { fetchDeeds(); }, [filteredProjectName]);
 
-    // منطق الربط العميق: فتح طلب الإفراغ تلقائياً
     useEffect(() => {
       if (location.state?.openId && deeds.length > 0) {
         const targetDeed = deeds.find(d => d.id === location.state.openId);
@@ -190,23 +198,55 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
 
     return (
         <div className="space-y-8 animate-in fade-in duration-500 font-cairo text-right" dir="rtl">
-             {/* Header */}
+             
+             {/* 1. Mini-Dashboard for Conveyance */}
+             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 animate-in slide-in-from-top-4 duration-700">
+                <div className="bg-white p-6 rounded-[35px] border border-gray-100 shadow-sm flex items-center justify-between group hover:shadow-md transition-all">
+                    <div>
+                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">إجمالي الإفراغات</p>
+                        <h3 className="text-3xl font-black text-[#1B2B48]">{isLoading ? <Loader2 className="animate-spin w-6 h-6"/> : deedStats.total}</h3>
+                    </div>
+                    <div className="p-4 rounded-2xl bg-indigo-50 text-indigo-600">
+                        <FileStack size={24}/>
+                    </div>
+                </div>
+                <div className="bg-white p-6 rounded-[35px] border border-gray-100 shadow-sm flex items-center justify-between group hover:shadow-md transition-all">
+                    <div>
+                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">قيد المعالجة</p>
+                        <h3 className="text-3xl font-black text-orange-600">{isLoading ? <Loader2 className="animate-spin w-6 h-6"/> : deedStats.pending}</h3>
+                    </div>
+                    <div className="p-4 rounded-2xl bg-orange-50 text-orange-600">
+                        <Clock size={24}/>
+                    </div>
+                </div>
+                <div className="bg-white p-6 rounded-[35px] border border-gray-100 shadow-sm flex items-center justify-between group hover:shadow-md transition-all">
+                    <div>
+                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">إفراغات مكتملة</p>
+                        <h3 className="text-3xl font-black text-green-600">{isLoading ? <Loader2 className="animate-spin w-6 h-6"/> : deedStats.completed}</h3>
+                    </div>
+                    <div className="p-4 rounded-2xl bg-green-50 text-green-600">
+                        <CheckCircle2 size={24}/>
+                    </div>
+                </div>
+             </div>
+
+             {/* Header & Search */}
              <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-white p-6 rounded-[35px] border border-gray-100 shadow-sm">
                 <div>
                     <h2 className="text-2xl font-black text-[#1B2B48]">سجل الإفراغات والصكوك</h2>
-                    <p className="text-gray-400 text-xs font-bold mt-1 uppercase tracking-widest">إدارة الملكية العقارية - 18 حقل تدقيق</p>
+                    <p className="text-gray-400 text-xs font-bold mt-1 uppercase tracking-widest">إدارة الملكية العقارية - استيفاء 18 حقل تدقيق</p>
                 </div>
                 <div className="flex items-center gap-3 w-full md:w-auto">
                     <div className="relative flex-1 md:w-64">
                         <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-300" size={16}/>
                         <input 
                             placeholder="بحث بالمستفيد، الهوية، أو المشروع..."
-                            className="w-full pr-10 pl-4 py-2 bg-gray-50 border rounded-xl text-xs font-bold outline-none focus:border-[#E95D22]"
+                            className="w-full pr-10 pl-4 py-2.5 bg-gray-50 border border-gray-100 rounded-xl text-xs font-bold outline-none focus:border-[#E95D22] transition-all"
                             value={searchQuery}
                             onChange={e => setSearchQuery(e.target.value)}
                         />
                     </div>
-                    {['ADMIN', 'PR_MANAGER', 'DEEDS_OFFICER'].includes(currentUserRole || '') && (
+                    {isAuthorizedToManage && (
                         <button onClick={() => setIsRegModalOpen(true)} className="flex items-center justify-center gap-2 px-6 py-2.5 bg-[#E95D22] text-white rounded-xl font-black text-sm hover:brightness-110 shadow-lg shadow-orange-100 active:scale-95 transition-all">
                             <Plus size={16} /> تسجيل صك جديد
                         </button>
@@ -229,15 +269,17 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
                         </thead>
                         <tbody className="divide-y divide-gray-50">
                             {isLoading ? (
-                                <tr><td colSpan={5} className="p-10 text-center text-gray-400"><Loader2 className="animate-spin mx-auto"/></td></tr>
+                                <tr><td colSpan={5} className="p-20 text-center"><Loader2 className="animate-spin mx-auto text-gray-300"/></td></tr>
                             ) : filteredDeeds.length === 0 ? (
-                                <tr><td colSpan={5} className="p-20 text-center text-gray-300 font-bold">لا توجد سجلات مطابقة</td></tr>
+                                <tr><td colSpan={5} className="p-20 text-center text-gray-300 font-bold">لا توجد سجلات مطابقة حالياً</td></tr>
                             ) : (
                                 filteredDeeds.map((deed) => (
-                                    <tr key={deed.id} className="hover:bg-gray-50 cursor-pointer group" onClick={() => handleOpenManage(deed)}>
+                                    <tr key={deed.id} className="hover:bg-gray-50 cursor-pointer group transition-colors" onClick={() => handleOpenManage(deed)}>
                                         <td className="p-6">
                                             <div className="flex items-center gap-3">
-                                                <div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-full flex items-center justify-center font-black text-xs">{deed.client_name?.[0]}</div>
+                                                <div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center font-black text-xs border border-indigo-100">
+                                                    {deed.client_name?.[0]}
+                                                </div>
                                                 <div>
                                                     <p className="font-bold text-[#1B2B48] text-sm">{deed.client_name}</p>
                                                     <p className="text-[10px] text-gray-400 font-bold">{deed.id_number}</p>
@@ -260,7 +302,7 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
                                             </span>
                                         </td>
                                         <td className="p-6 text-center">
-                                            <button className="text-blue-500 font-black text-xs hover:underline">عرض وتدقيق</button>
+                                            <button className="text-[#E95D22] font-black text-xs hover:underline bg-orange-50 px-3 py-1.5 rounded-lg border border-orange-100">عرض وتدقيق</button>
                                         </td>
                                     </tr>
                                 ))
@@ -272,59 +314,49 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
 
             {/* Registration Modal (18 Fields Grid) */}
             <Modal isOpen={isRegModalOpen} onClose={() => setIsRegModalOpen(false)} title="تسجيل بيانات إفراغ جديدة">
-                <div className="space-y-6 text-right font-cairo overflow-y-auto max-h-[70vh] p-2">
+                <div className="space-y-6 text-right font-cairo overflow-y-auto max-h-[75vh] p-2 custom-scrollbar">
                     <div className="bg-orange-50 p-4 rounded-2xl border border-orange-100 flex items-center gap-3">
                         <Info size={20} className="text-[#E95D22]"/>
-                        <p className="text-xs font-bold text-orange-800">يرجى استيفاء كافة حقول التدقيق لضمان دقة التقارير.</p>
+                        <p className="text-xs font-bold text-orange-800 leading-relaxed">يرجى استيفاء كافة حقول التدقيق لضمان دقة التقارير الرسمية وإتمام عملية الإفراغ بنجاح.</p>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {/* 1. Project Name */}
                         <div className="space-y-1">
                             <label className="text-[10px] text-gray-400 font-black mr-1 uppercase">اسم المشروع</label>
                             <input className="w-full p-3 bg-gray-50 rounded-xl border outline-none font-bold text-xs focus:border-[#E95D22]" placeholder="اختر المشروع" value={newDeedForm.project_name} onChange={e => setNewDeedForm({...newDeedForm, project_name: e.target.value})} disabled={!!filteredProjectName} />
                         </div>
-                        {/* 2. Client Name */}
                         <div className="space-y-1">
                             <label className="text-[10px] text-gray-400 font-black mr-1 uppercase">اسم المستفيد</label>
                             <input className="w-full p-3 bg-gray-50 rounded-xl border outline-none font-bold text-xs focus:border-[#E95D22]" placeholder="الاسم الكامل كما في الهوية" value={newDeedForm.client_name} onChange={e => setNewDeedForm({...newDeedForm, client_name: e.target.value})} />
                         </div>
-                        {/* 3. ID Number */}
                         <div className="space-y-1">
                             <label className="text-[10px] text-gray-400 font-black mr-1 uppercase">رقم الهوية</label>
                             <input className="w-full p-3 bg-gray-50 rounded-xl border outline-none font-bold text-xs focus:border-[#E95D22]" placeholder="10xxxxxxxx" value={newDeedForm.id_number} onChange={e => setNewDeedForm({...newDeedForm, id_number: e.target.value})} />
                         </div>
-                        {/* 4. Mobile */}
                         <div className="space-y-1">
                             <label className="text-[10px] text-gray-400 font-black mr-1 uppercase">رقم الجوال</label>
                             <input className="w-full p-3 bg-gray-50 rounded-xl border outline-none font-bold text-xs focus:border-[#E95D22]" placeholder="05xxxxxxxx" value={newDeedForm.mobile} onChange={e => setNewDeedForm({...newDeedForm, mobile: e.target.value})} />
                         </div>
-                        {/* 5. Unit No */}
                         <div className="space-y-1">
                             <label className="text-[10px] text-gray-400 font-black mr-1 uppercase">رقم الوحدة</label>
                             <input className="w-full p-3 bg-gray-50 rounded-xl border outline-none font-bold text-xs focus:border-[#E95D22]" placeholder="رقم الشقة/الفيلا" value={newDeedForm.unit_number} onChange={e => setNewDeedForm({...newDeedForm, unit_number: e.target.value})} />
                         </div>
-                        {/* 6. Block No */}
                         <div className="space-y-1">
                             <label className="text-[10px] text-gray-400 font-black mr-1 uppercase">رقم البلوك</label>
                             <input className="w-full p-3 bg-gray-50 rounded-xl border outline-none font-bold text-xs focus:border-[#E95D22]" placeholder="رقم المربع" value={newDeedForm.block_number} onChange={e => setNewDeedForm({...newDeedForm, block_number: e.target.value})} />
                         </div>
-                        {/* 7. Plot No */}
                         <div className="space-y-1">
                             <label className="text-[10px] text-gray-400 font-black mr-1 uppercase">رقم المخطط</label>
                             <input className="w-full p-3 bg-gray-50 rounded-xl border outline-none font-bold text-xs focus:border-[#E95D22]" placeholder="رقم المخطط المعتمد" value={newDeedForm.plot_number} onChange={e => setNewDeedForm({...newDeedForm, plot_number: e.target.value})} />
                         </div>
-                        {/* 8. Total Area */}
                         <div className="space-y-1">
                             <label className="text-[10px] text-gray-400 font-black mr-1 uppercase">المساحة الإجمالية</label>
                             <input className="w-full p-3 bg-gray-50 rounded-xl border outline-none font-bold text-xs focus:border-[#E95D22]" placeholder="بالمتر المربع" value={newDeedForm.total_area} onChange={e => setNewDeedForm({...newDeedForm, total_area: e.target.value})} />
                         </div>
-                        {/* 9. Sale Price */}
                         <div className="space-y-1">
                             <label className="text-[10px] text-gray-400 font-black mr-1 uppercase">قيمة البيع (ريال)</label>
                             <input className="w-full p-3 bg-gray-50 rounded-xl border outline-none font-bold text-xs focus:border-[#E95D22]" placeholder="المبلغ الصافي" value={newDeedForm.sale_price} onChange={e => setNewDeedForm({...newDeedForm, sale_price: e.target.value})} />
                         </div>
-                        {/* 10. Payment Method */}
                         <div className="space-y-1">
                             <label className="text-[10px] text-gray-400 font-black mr-1 uppercase">طريقة الدفع</label>
                             <select className="w-full p-3 bg-gray-50 rounded-xl border outline-none font-bold text-xs focus:border-[#E95D22]" value={newDeedForm.payment_method} onChange={e => setNewDeedForm({...newDeedForm, payment_method: e.target.value})}>
@@ -333,38 +365,31 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
                                 <option>دفعات</option>
                             </select>
                         </div>
-                        {/* 11. Bank Name */}
                         <div className="space-y-1">
                             <label className="text-[10px] text-gray-400 font-black mr-1 uppercase">اسم البنك</label>
                             <input className="w-full p-3 bg-gray-50 rounded-xl border outline-none font-bold text-xs focus:border-[#E95D22]" placeholder="في حال التمويل" value={newDeedForm.bank_name} onChange={e => setNewDeedForm({...newDeedForm, bank_name: e.target.value})} />
                         </div>
-                        {/* 12. Financing Status */}
                         <div className="space-y-1">
                             <label className="text-[10px] text-gray-400 font-black mr-1 uppercase">حالة التمويل</label>
                             <input className="w-full p-3 bg-gray-50 rounded-xl border outline-none font-bold text-xs focus:border-[#E95D22]" placeholder="موافقة مبدئية / نهائية" value={newDeedForm.financing_status} onChange={e => setNewDeedForm({...newDeedForm, financing_status: e.target.value})} />
                         </div>
-                        {/* 13. Contract Date */}
                         <div className="space-y-1">
                             <label className="text-[10px] text-gray-400 font-black mr-1 uppercase">تاريخ العقد</label>
                             <input type="date" className="w-full p-3 bg-gray-50 rounded-xl border outline-none font-bold text-xs focus:border-[#E95D22]" value={newDeedForm.contract_date} onChange={e => setNewDeedForm({...newDeedForm, contract_date: e.target.value})} />
                         </div>
-                        {/* 14. Deed Number */}
                         <div className="space-y-1">
                             <label className="text-[10px] text-gray-400 font-black mr-1 uppercase">رقم الصك</label>
                             <input className="w-full p-3 bg-gray-50 rounded-xl border outline-none font-bold text-xs focus:border-[#E95D22]" placeholder="رقم الصك الصادر" value={newDeedForm.deed_number} onChange={e => setNewDeedForm({...newDeedForm, deed_number: e.target.value})} />
                         </div>
-                        {/* 15. Attachment URL */}
                         <div className="space-y-1">
                             <label className="text-[10px] text-gray-400 font-black mr-1 uppercase">رابط المرفقات</label>
                             <input className="w-full p-3 bg-gray-50 rounded-xl border outline-none font-bold text-xs focus:border-[#E95D22]" placeholder="Dropbox / Google Drive" value={newDeedForm.attachment_url} onChange={e => setNewDeedForm({...newDeedForm, attachment_url: e.target.value})} />
                         </div>
-                        {/* 16. User Identity (Auto) */}
                         <div className="space-y-1 opacity-60">
-                            <label className="text-[10px] text-gray-400 font-black mr-1 uppercase">المُدخل بواسطة</label>
-                            <div className="w-full p-3 bg-gray-100 rounded-xl border font-bold text-xs">{currentUserName}</div>
+                            <label className="text-[10px] text-gray-400 font-black mr-1 uppercase">المُدخل بواسطة (تلقائي)</label>
+                            <div className="w-full p-3 bg-gray-100 rounded-xl border border-gray-200 font-bold text-xs text-gray-500">{currentUserName}</div>
                         </div>
                     </div>
-                    {/* 17. General Notes */}
                     <div className="space-y-1">
                         <label className="text-[10px] text-gray-400 font-black mr-1 uppercase">ملاحظات عامة</label>
                         <textarea className="w-full p-3 bg-gray-50 rounded-xl border outline-none font-bold text-xs min-h-[80px]" placeholder="أي تفاصيل إضافية عن الطلب..." value={newDeedForm.notes} onChange={e => setNewDeedForm({...newDeedForm, notes: e.target.value})}></textarea>
@@ -380,25 +405,23 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
                 </div>
             </Modal>
 
-            {/* Management Modal (Details + Restricted Status + Comments) */}
+            {/* Management Modal */}
             {selectedDeed && (
                 <Modal isOpen={isManageModalOpen} onClose={() => setIsManageModalOpen(false)} title="تدقيق ومتابعة طلب الإفراغ">
-                    <div className="space-y-6 text-right font-cairo overflow-y-auto max-h-[80vh] p-1">
-                        {/* Summary Card */}
+                    <div className="space-y-6 text-right font-cairo overflow-y-auto max-h-[80vh] p-1 custom-scrollbar">
                         <div className={`p-5 rounded-[25px] border shadow-sm ${STATUS_OPTIONS.find(o => o.value === selectedDeed.status)?.color || 'bg-gray-50 text-gray-600'}`}>
                             <div className="flex justify-between items-center">
                                 <div>
                                     <p className="text-[10px] opacity-70 font-bold mb-1">المستفيد</p>
                                     <h3 className="font-black text-xl">{selectedDeed.client_name}</h3>
                                 </div>
-                                <div className="bg-white/50 px-4 py-2 rounded-xl backdrop-blur-md">
+                                <div className="bg-white/50 px-4 py-2 rounded-xl backdrop-blur-md border border-white/30">
                                     <p className="text-[10px] opacity-70 font-bold mb-1">الحالة</p>
                                     <span className="font-black text-sm">{selectedDeed.status}</span>
                                 </div>
                             </div>
                         </div>
 
-                        {/* Detail Grid (Show all 18 fields) */}
                         <div className="bg-white p-6 rounded-[25px] border border-gray-100 shadow-sm grid grid-cols-2 gap-y-4 gap-x-6">
                             <DetailRow label="المشروع" value={selectedDeed.project_name} icon={<Building2 size={12}/>} />
                             <DetailRow label="رقم الهوية" value={selectedDeed.id_number} icon={<Hash size={12}/>} />
@@ -416,22 +439,21 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
                             <DetailRow label="المُدخل" value={selectedDeed.submitted_by} icon={<UserIcon size={12}/>} />
                             {selectedDeed.attachment_url && (
                                 <div className="col-span-2 mt-2">
-                                    <a href={selectedDeed.attachment_url} target="_blank" rel="noreferrer" className="flex items-center gap-2 p-3 bg-blue-50 text-blue-700 rounded-xl font-bold text-xs hover:bg-blue-100 transition-all border border-blue-100">
-                                        <Paperclip size={14}/> عرض المرفقات والملفات الثبوتية
+                                    <a href={selectedDeed.attachment_url} target="_blank" rel="noreferrer" className="flex items-center gap-2 p-3 bg-indigo-50 text-indigo-700 rounded-xl font-bold text-xs hover:bg-indigo-100 transition-all border border-indigo-100">
+                                        <Paperclip size={14}/> عرض المرفقات والملفات الثبوتية (Cloud Storage)
                                     </a>
                                 </div>
                             )}
                             {selectedDeed.notes && (
                                 <div className="col-span-2 mt-2 bg-gray-50 p-4 rounded-xl border border-gray-100">
-                                    <label className="text-[10px] text-gray-400 font-black block mb-1">ملاحظات الطلب</label>
+                                    <label className="text-[10px] text-gray-400 font-black block mb-1">ملاحظات إضافية</label>
                                     <p className="text-xs text-gray-600 font-bold leading-relaxed">{selectedDeed.notes}</p>
                                 </div>
                             )}
                         </div>
 
-                        {/* Restricted Status Update Buttons */}
                         <div className="space-y-3">
-                            <h4 className="text-xs font-black text-gray-400 uppercase tracking-widest mr-1">تحديث الحالة (صلاحيات الإدارة)</h4>
+                            <h4 className="text-xs font-black text-gray-400 uppercase tracking-widest mr-1">تحديث الحالة</h4>
                             {isAuthorizedToManage ? (
                                 <div className="grid grid-cols-4 gap-2">
                                     {STATUS_OPTIONS.map(option => (
@@ -439,7 +461,7 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
                                             key={option.value}
                                             onClick={() => handleUpdateStatus(option.value)}
                                             className={`p-3 rounded-xl font-black text-[10px] flex flex-col items-center gap-1 transition-all active:scale-95 border ${
-                                                selectedDeed.status === option.value ? option.color + ' ring-2 ring-offset-1' : 'bg-gray-50 text-gray-400 border-gray-100 hover:bg-gray-100'
+                                                selectedDeed.status === option.value ? option.color + ' ring-2 ring-indigo-100' : 'bg-gray-50 text-gray-400 border-gray-100 hover:bg-gray-100'
                                             }`}
                                         >
                                             {option.icon}
@@ -448,14 +470,13 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
                                     ))}
                                 </div>
                             ) : (
-                                <div className="bg-amber-50 p-4 rounded-xl border border-amber-100 flex items-center gap-2 text-amber-700 text-xs font-bold shadow-sm">
+                                <div className="bg-amber-50 p-4 rounded-xl border border-amber-100 flex items-center gap-2 text-amber-700 text-xs font-bold">
                                     <Lock size={14}/>
                                     لا تملك الصلاحية لتغيير الحالة، يرجى مراجعة إدارة العلاقات العامة.
                                 </div>
                             )}
                         </div>
 
-                        {/* Comments System */}
                         <div className="border-t border-gray-100 pt-6">
                             <h3 className="font-black text-[#1B2B48] mb-4 flex items-center gap-2">
                                 <MessageSquare size={18} className="text-[#E95D22]"/>
@@ -468,7 +489,7 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
                                 ) : (comments || []).length === 0 ? (
                                     <div className="h-full flex flex-col items-center justify-center text-gray-300 opacity-60">
                                         <MessageSquare size={32} className="mb-2"/>
-                                        <p className="text-xs font-bold">لا توجد ملاحظات حتى الآن</p>
+                                        <p className="text-xs font-bold">لا توجد ملاحظات مسجلة</p>
                                     </div>
                                 ) : (
                                     comments.map((c: any) => (
@@ -486,7 +507,7 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
 
                             <div className="flex gap-2">
                                 <input 
-                                    className="flex-1 p-3 bg-gray-50 border rounded-xl outline-none text-xs font-bold focus:border-[#E95D22] transition-all"
+                                    className="flex-1 p-3 bg-gray-50 border border-gray-200 rounded-xl outline-none text-xs font-bold focus:border-[#E95D22] transition-all"
                                     placeholder="إضافة ملاحظة فنية..."
                                     value={newComment}
                                     onChange={e => setNewComment(e.target.value)}
@@ -495,7 +516,7 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
                                 <button 
                                     onClick={handleAddComment}
                                     disabled={!newComment.trim() || isCommentLoading}
-                                    className="p-3 bg-[#1B2B48] text-white rounded-xl hover:bg-[#E95D22] transition-all disabled:opacity-50"
+                                    className="p-3 bg-[#1B2B48] text-white rounded-xl hover:bg-[#E95D22] transition-all disabled:opacity-50 shadow-md"
                                 >
                                     <Send size={16}/>
                                 </button>
@@ -508,7 +529,6 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
     );
 };
 
-// Component for Detail Grid Rows
 const DetailRow = ({ label, value, icon }: { label: string, value: string | number, icon: any }) => (
     <div className="flex flex-col border-b border-gray-50 pb-2">
         <label className="text-[9px] text-gray-400 font-black flex items-center gap-1 mb-1 uppercase tracking-tighter">
