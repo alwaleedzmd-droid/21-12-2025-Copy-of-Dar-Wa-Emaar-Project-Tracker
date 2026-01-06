@@ -18,7 +18,8 @@ interface MainLayoutProps {
 const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { currentUser, logout, refreshData, canAccess, projects, technicalRequests, clearanceRequests } = useData();
+  // Fix: Destructure missing projectWorks and pass all required data to AIAssistant
+  const { currentUser, logout, refreshData, canAccess, projects, technicalRequests, clearanceRequests, projectWorks } = useData();
 
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => 
     localStorage.getItem('dar_sidebar_v2_collapsed') === 'true'
@@ -109,6 +110,8 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
           currentUser={currentUser}
           projects={projects}
           technicalRequests={technicalRequests}
+          clearanceRequests={clearanceRequests}
+          projectWorks={projectWorks}
           onNavigate={(type, data) => navigate(type === 'PROJECT' ? `/projects/${data.id}` : '/deeds')}
         />
       )}
