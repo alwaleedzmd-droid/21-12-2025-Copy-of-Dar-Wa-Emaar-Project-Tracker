@@ -49,8 +49,12 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [errorState, setErrorState] = useState<string | null>(null);
   
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
-    const cached = localStorage.getItem('dar_user_v2_cache');
-    return cached ? JSON.parse(cached) : null;
+    try {
+      const cached = localStorage.getItem('dar_user_v2_cache');
+      return cached ? JSON.parse(cached) : null;
+    } catch {
+      return null;
+    }
   });
 
   const logActivity = useCallback((action: string, target: string, color: ActivityLog['color'] = 'text-blue-500') => {
@@ -96,47 +100,97 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setErrorState(null);
     } catch (e: any) {
       console.error("Fetch Data Error", e);
-      setErrorState("فشل المزامنة - يتم عرض البيانات المحلية");
+      // في حال كان الخطأ بسبب الجلسة، نقوم بتسجيل الخروج الصامت
+      if (e.message?.includes('JWT') || e.status === 401) {
+        handleAuthFailure();
+      }
+      setErrorState("فشل المزامنة - يرجى التحقق من الاتصال");
     } finally {
       setIsDbLoading(false);
     }
   }, [currentUser]);
 
+  const handleAuthFailure = useCallback(() => {
+    console.warn("Auth Session Expired or Corrupted. Clearing local data.");
+    localStorage.removeItem('dar_user_v2_cache');
+    // مسح مفاتيح Supabase من التخزين المحلي لإصلاح خطأ Refresh Token
+    Object.keys(localStorage).forEach(key => {
+      if (key.includes('sb-') && key.includes('-auth-token')) {
+        localStorage.removeItem(key);
+      }
+    });
+    setCurrentUser(null);
+  }, []);
+
   useEffect(() => {
     const initAuth = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.user) {
-        try {
-          const { data: profile } = await supabase.from('profiles').select('*').eq('id', session.user.id).single();
-          const user: User = {
-            id: session.user.id,
-            email: session.user.email || '',
-            name: profile?.name || session.user.user_metadata?.name || 'موظف دار وإعمار',
-            role: session.user.email === 'adaldawsari@darwaemaar.com' ? 'ADMIN' : (profile?.role || 'PR_OFFICER')
-          };
-          setCurrentUser(user);
-          localStorage.setItem('dar_user_v2_cache', JSON.stringify(user));
-        } catch {
-          const guest: User = { id: session.user.id, email: session.user.email || '', name: 'ضيف', role: 'PR_OFFICER' };
-          setCurrentUser(guest);
+      try {
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        
+        if (sessionError || !session) {
+          if (sessionError) console.error("Session Error:", sessionError.message);
+          handleAuthFailure();
+          setIsAuthLoading(false);
+          return;
         }
+
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', session.user.id)
+          .single();
+
+        if (profileError && profileError.code !== 'PGRST116') {
+          throw profileError;
+        }
+
+        const user: User = {
+          id: session.user.id,
+          email: session.user.email || '',
+          name: profile?.name || session.user.user_metadata?.name || 'موظف دار وإعمار',
+          role: session.user.email === 'adaldawsari@darwaemaar.com' ? 'ADMIN' : (profile?.role || 'PR_OFFICER')
+        };
+
+        setCurrentUser(user);
+        localStorage.setItem('dar_user_v2_cache', JSON.stringify(user));
+      } catch (err: any) {
+        console.error("Init Auth Error:", err.message);
+        handleAuthFailure();
+      } finally {
+        setIsAuthLoading(false);
       }
-      setIsAuthLoading(false);
     };
+
     initAuth();
-  }, []);
+
+    // الاستماع لتغيرات حالة المصادقة لإصلاح أخطاء التوكن بشكل حي
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_OUT' || event === 'USER_UPDATED') {
+        if (!session) handleAuthFailure();
+      }
+      if (event === 'TOKEN_REFRESHED' && session) {
+        console.debug("Token refreshed successfully.");
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [handleAuthFailure]);
 
   const login = async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) throw error;
-    window.location.reload();
+    // تم حذف window.location.reload لتمكين React من إدارة الحالة بسلاسة
   };
 
   const logout = async () => {
-    await supabase.auth.signOut();
-    setCurrentUser(null);
-    localStorage.removeItem('dar_user_v2_cache');
-    window.location.reload();
+    try {
+      await supabase.auth.signOut();
+    } finally {
+      handleAuthFailure();
+      window.location.reload();
+    }
   };
 
   useEffect(() => {

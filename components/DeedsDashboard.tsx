@@ -10,7 +10,7 @@ import {
   Landmark, FileText, MessageSquare, Send, 
   Trash2, Loader2, XCircle, Activity, Lock,
   LayoutGrid, Scale, Paperclip, Info,
-  TrendingUp, BarChart
+  TrendingUp, BarChart, Check
 } from 'lucide-react';
 import { ActivityLog, useData } from '../contexts/DataContext';
 import Modal from './Modal';
@@ -31,7 +31,7 @@ interface DeedsDashboardProps {
 
 const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, currentUserName, filteredProjectName, logActivity }) => {
     const location = useLocation();
-    const { refreshData } = useData();
+    const { refreshData, projects = [] } = useData();
     const [searchQuery, setSearchQuery] = useState('');
     const [isRegModalOpen, setIsRegModalOpen] = useState(false);
     const [isManageModalOpen, setIsManageModalOpen] = useState(false);
@@ -42,6 +42,11 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
     const [isCommentLoading, setIsCommentLoading] = useState(false);
+    
+    // حالات الإكمال التلقائي الذكي
+    const [isAutoFilling, setIsAutoFilling] = useState(false);
+    const [autoFillSuccess, setAutoFillSuccess] = useState(false);
+
     const commentsEndRef = useRef<HTMLDivElement>(null);
 
     // نموذج الـ 18 حقلًا للتدقيق الكامل
@@ -59,6 +64,8 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
         bank_name: '',
         financing_status: 'قيد المراجعة',
         contract_date: '',
+        birth_date: '',
+        sakani_support_number: '',
         deed_number: '',
         attachment_url: '',
         notes: '',
@@ -68,7 +75,70 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
     const isAuthorizedToManage = ['ADMIN', 'PR_MANAGER', 'DEEDS_OFFICER', 'CONVEYANCE'].includes(currentUserRole || '');
     const isExecutive = ['ADMIN', 'PR_MANAGER'].includes(currentUserRole || '');
 
-    // حساب الإحصائيات للوحة المعلومات المصغرة
+    // دالة جلب بيانات العميل من الأرشيف (Smart Auto-Fill)
+    const fetchClientData = async (idNum: string) => {
+        if (idNum.length !== 10) return;
+        
+        setIsAutoFilling(true);
+        setAutoFillSuccess(false);
+        
+        try {
+            const { data, error } = await supabase
+                .from('client_archive')
+                .select('*')
+                .eq('id_number', idNum)
+                .maybeSingle();
+
+            if (error) throw error;
+
+            if (data) {
+                // منطق ربط اسم المشروع الذكي
+                let matchedProjectName = newDeedForm.project_name;
+                if (!matchedProjectName && data.project_name) {
+                    const matchedProj = projects.find(p => 
+                        (p.name || p.title || "").toLowerCase().includes(data.project_name.toLowerCase()) ||
+                        data.project_name.toLowerCase().includes((p.name || p.title || "").toLowerCase())
+                    );
+                    if (matchedProj) {
+                        matchedProjectName = matchedProj.name || matchedProj.title;
+                    }
+                }
+
+                // تحديث النموذج بالبيانات الموجودة فقط
+                setNewDeedForm((prev: any) => ({
+                    ...prev,
+                    client_name: data.customer_name || prev.client_name,
+                    mobile: data.mobile_number || prev.mobile,
+                    unit_number: data.unit_number || prev.unit_number,
+                    block_number: data.block_number || prev.block_number,
+                    plot_number: data.plot_number || prev.plot_number,
+                    total_area: data.total_area || prev.total_area,
+                    sale_price: data.sale_price || prev.sale_price,
+                    bank_name: data.bank_name || prev.bank_name,
+                    deed_number: data.deed_number || prev.deed_number,
+                    birth_date: data.birth_date || prev.birth_date,
+                    sakani_support_number: data.housing_contract_number || prev.sakani_support_number,
+                    project_name: matchedProjectName
+                }));
+                
+                setAutoFillSuccess(true);
+                setTimeout(() => setAutoFillSuccess(false), 3000); // إخفاء علامة النجاح بعد 3 ثوانٍ
+            }
+        } catch (err) {
+            console.error("Auto-fill error:", err);
+        } finally {
+            setIsAutoFilling(false);
+        }
+    };
+
+    const handleIdNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const val = e.target.value.replace(/\D/g, '').slice(0, 10);
+        setNewDeedForm({...newDeedForm, id_number: val});
+        if (val.length === 10) {
+            fetchClientData(val);
+        }
+    };
+
     const deedStats = useMemo(() => {
         const total = deeds.length;
         const completed = deeds.filter(d => d.status === 'مكتمل' || d.status === 'منجز').length;
@@ -180,7 +250,7 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
             
             logActivity?.('تسجيل طلب إفراغ جديد', newDeedForm.client_name, 'text-green-500');
             setIsRegModalOpen(false);
-            setNewDeedForm({ project_name: filteredProjectName || '', client_name: '', id_number: '', mobile: '', unit_number: '', block_number: '', plot_number: '', total_area: '', sale_price: '', payment_method: 'تمويل عقاري', bank_name: '', financing_status: 'قيد المراجعة', contract_date: '', deed_number: '', attachment_url: '', notes: '', status: 'جديد' });
+            setNewDeedForm({ project_name: filteredProjectName || '', client_name: '', id_number: '', mobile: '', unit_number: '', block_number: '', plot_number: '', total_area: '', sale_price: '', payment_method: 'تمويل عقاري', bank_name: '', financing_status: 'قيد المراجعة', contract_date: '', birth_date: '', sakani_support_number: '', deed_number: '', attachment_url: '', notes: '', status: 'جديد' });
             fetchDeeds();
             refreshData();
         } catch (error: any) { 
@@ -221,7 +291,7 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
                 </div>
                 <div className="bg-white p-6 rounded-[35px] border border-gray-100 shadow-sm flex items-center justify-between group hover:shadow-md transition-all">
                     <div>
-                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">إفراغات مكتملة</p>
+                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">إفراغ مكتمل</p>
                         <h3 className="text-3xl font-black text-green-600">{isLoading ? <Loader2 className="animate-spin w-6 h-6"/> : deedStats.completed}</h3>
                     </div>
                     <div className="p-4 rounded-2xl bg-green-50 text-green-600">
@@ -277,7 +347,7 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
                                     <tr key={deed.id} className="hover:bg-gray-50 cursor-pointer group transition-colors" onClick={() => handleOpenManage(deed)}>
                                         <td className="p-6">
                                             <div className="flex items-center gap-3">
-                                                <div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center font-black text-xs border border-indigo-100">
+                                                <div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center font-black text-lg border border-indigo-100">
                                                     {deed.client_name?.[0]}
                                                 </div>
                                                 <div>
@@ -322,16 +392,27 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div className="space-y-1">
-                            <label className="text-[10px] text-gray-400 font-black mr-1 uppercase">اسم المشروع</label>
-                            <input className="w-full p-3 bg-gray-50 rounded-xl border outline-none font-bold text-xs focus:border-[#E95D22]" placeholder="اختر المشروع" value={newDeedForm.project_name} onChange={e => setNewDeedForm({...newDeedForm, project_name: e.target.value})} disabled={!!filteredProjectName} />
+                            <label className="text-[10px] text-gray-400 font-black mr-1 uppercase">رقم الهوية</label>
+                            <div className="relative">
+                                <input 
+                                    className="w-full p-3 bg-gray-50 rounded-xl border outline-none font-bold text-xs focus:border-[#E95D22] transition-all" 
+                                    placeholder="10xxxxxxxx" 
+                                    value={newDeedForm.id_number} 
+                                    onChange={handleIdNumberChange} 
+                                />
+                                <div className="absolute left-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
+                                    {isAutoFilling && <Loader2 className="animate-spin text-orange-500" size={16}/>}
+                                    {autoFillSuccess && <Check className="text-green-500 animate-in zoom-in" size={16}/>}
+                                </div>
+                            </div>
                         </div>
                         <div className="space-y-1">
                             <label className="text-[10px] text-gray-400 font-black mr-1 uppercase">اسم المستفيد</label>
                             <input className="w-full p-3 bg-gray-50 rounded-xl border outline-none font-bold text-xs focus:border-[#E95D22]" placeholder="الاسم الكامل كما في الهوية" value={newDeedForm.client_name} onChange={e => setNewDeedForm({...newDeedForm, client_name: e.target.value})} />
                         </div>
                         <div className="space-y-1">
-                            <label className="text-[10px] text-gray-400 font-black mr-1 uppercase">رقم الهوية</label>
-                            <input className="w-full p-3 bg-gray-50 rounded-xl border outline-none font-bold text-xs focus:border-[#E95D22]" placeholder="10xxxxxxxx" value={newDeedForm.id_number} onChange={e => setNewDeedForm({...newDeedForm, id_number: e.target.value})} />
+                            <label className="text-[10px] text-gray-400 font-black mr-1 uppercase">اسم المشروع</label>
+                            <input className="w-full p-3 bg-gray-50 rounded-xl border outline-none font-bold text-xs focus:border-[#E95D22]" placeholder="اختر المشروع" value={newDeedForm.project_name} onChange={e => setNewDeedForm({...newDeedForm, project_name: e.target.value})} disabled={!!filteredProjectName} />
                         </div>
                         <div className="space-y-1">
                             <label className="text-[10px] text-gray-400 font-black mr-1 uppercase">رقم الجوال</label>
@@ -376,6 +457,14 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
                         <div className="space-y-1">
                             <label className="text-[10px] text-gray-400 font-black mr-1 uppercase">تاريخ العقد</label>
                             <input type="date" className="w-full p-3 bg-gray-50 rounded-xl border outline-none font-bold text-xs focus:border-[#E95D22]" value={newDeedForm.contract_date} onChange={e => setNewDeedForm({...newDeedForm, contract_date: e.target.value})} />
+                        </div>
+                        <div className="space-y-1">
+                            <label className="text-[10px] text-gray-400 font-black mr-1 uppercase">تاريخ الميلاد</label>
+                            <input className="w-full p-3 bg-gray-50 rounded-xl border outline-none font-bold text-xs focus:border-[#E95D22]" placeholder="هجري / ميلادي" value={newDeedForm.birth_date} onChange={e => setNewDeedForm({...newDeedForm, birth_date: e.target.value})} />
+                        </div>
+                        <div className="space-y-1">
+                            <label className="text-[10px] text-gray-400 font-black mr-1 uppercase">رقم عقد سكني</label>
+                            <input className="w-full p-3 bg-gray-50 rounded-xl border outline-none font-bold text-xs focus:border-[#E95D22]" placeholder="رقم عقد الدعم" value={newDeedForm.sakani_support_number} onChange={e => setNewDeedForm({...newDeedForm, sakani_support_number: e.target.value})} />
                         </div>
                         <div className="space-y-1">
                             <label className="text-[10px] text-gray-400 font-black mr-1 uppercase">رقم الصك</label>
@@ -436,6 +525,8 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
                             <DetailRow label="حالة التمويل" value={selectedDeed.financing_status} icon={<Clock size={12}/>} />
                             <DetailRow label="رقم الصك" value={selectedDeed.deed_number} icon={<FileText size={12}/>} />
                             <DetailRow label="تاريخ العقد" value={selectedDeed.contract_date} icon={<Calendar size={12}/>} />
+                            <DetailRow label="تاريخ الميلاد" value={selectedDeed.birth_date} icon={<Calendar size={12}/>} />
+                            <DetailRow label="رقم عقد الدعم" value={selectedDeed.sakani_support_number} icon={<Hash size={12}/>} />
                             <DetailRow label="المُدخل" value={selectedDeed.submitted_by} icon={<UserIcon size={12}/>} />
                             {selectedDeed.attachment_url && (
                                 <div className="col-span-2 mt-2">

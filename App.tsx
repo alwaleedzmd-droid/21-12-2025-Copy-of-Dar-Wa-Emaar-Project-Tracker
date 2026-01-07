@@ -1,5 +1,4 @@
-
-import React, { useState, useEffect, ReactNode, useMemo, useRef } from 'react';
+import React, { useState, useEffect, ReactNode, useMemo, useRef, Component } from 'react';
 import { Routes, Route, useNavigate, useLocation, useParams, Navigate } from 'react-router';
 import { 
   AlertTriangle, Loader2, Zap, Plus,
@@ -25,9 +24,15 @@ import UsersModule from './components/UsersModule';
 import AIAssistant from './components/AIAssistant';
 
 // --- Error Boundary ---
-class ErrorBoundary extends React.Component<{ children: ReactNode }, { hasError: boolean }> {
-  public state = { hasError: false };
+// Fix: Use React.Component with any for props and state to ensure compatibility across different compiler environments and resolve property access errors.
+class ErrorBoundary extends React.Component<any, any> {
+  constructor(props: any) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
   static getDerivedStateFromError(_: any) { return { hasError: true }; }
+  
   render() {
     if (this.state.hasError) return (
       <div className="min-h-screen flex items-center justify-center text-red-500 font-bold bg-[#f8f9fa] p-10 text-center flex-col gap-4" dir="rtl">
