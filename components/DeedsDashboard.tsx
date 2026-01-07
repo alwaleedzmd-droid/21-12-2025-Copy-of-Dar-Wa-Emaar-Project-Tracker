@@ -73,9 +73,8 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
     });
 
     const isAuthorizedToManage = ['ADMIN', 'PR_MANAGER', 'DEEDS_OFFICER', 'CONVEYANCE'].includes(currentUserRole || '');
-    const isExecutive = ['ADMIN', 'PR_MANAGER'].includes(currentUserRole || '');
 
-    // دالة جلب بيانات العميل من الأرشيف (Smart Auto-Fill)
+    // دالة جلب بيانات العميل من الأرشيف (Smart Auto-Fill) - Implementation of the final request
     const fetchClientData = async (idNum: string) => {
         if (idNum.length !== 10) return;
         
@@ -83,6 +82,7 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
         setAutoFillSuccess(false);
         
         try {
+            // تنفيذ الاستعلام من جدول client_archive
             const { data, error } = await supabase
                 .from('client_archive')
                 .select('*')
@@ -95,34 +95,38 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
                 // منطق ربط اسم المشروع الذكي
                 let matchedProjectName = newDeedForm.project_name;
                 if (!matchedProjectName && data.project_name) {
-                    const matchedProj = projects.find(p => 
-                        (p.name || p.title || "").toLowerCase().includes(data.project_name.toLowerCase()) ||
-                        data.project_name.toLowerCase().includes((p.name || p.title || "").toLowerCase())
-                    );
+                    const matchedProj = projects.find(p => {
+                        const projName = (p.name || p.title || "").toLowerCase();
+                        const archProjName = (data.project_name || "").toLowerCase();
+                        // مطابقة واسعة النطاق
+                        return projName.includes(archProjName) || archProjName.includes(projName);
+                    });
                     if (matchedProj) {
                         matchedProjectName = matchedProj.name || matchedProj.title;
                     }
                 }
 
-                // تحديث النموذج بالبيانات الموجودة فقط
+                // تحديث النموذج بالبيانات المستخرجة (Field Mapping Strict)
+                // في حال كان الحقل في الأرشيف فارغاً، يترك فارغاً في النموذج
                 setNewDeedForm((prev: any) => ({
                     ...prev,
-                    client_name: data.customer_name || prev.client_name,
-                    mobile: data.mobile_number || prev.mobile,
-                    unit_number: data.unit_number || prev.unit_number,
-                    block_number: data.block_number || prev.block_number,
-                    plot_number: data.plot_number || prev.plot_number,
-                    total_area: data.total_area || prev.total_area,
-                    sale_price: data.sale_price || prev.sale_price,
-                    bank_name: data.bank_name || prev.bank_name,
-                    deed_number: data.deed_number || prev.deed_number,
-                    birth_date: data.birth_date || prev.birth_date,
-                    sakani_support_number: data.housing_contract_number || prev.sakani_support_number,
+                    client_name: data.customer_name || "",
+                    mobile: data.mobile_number || "",
+                    unit_number: data.unit_number || "",
+                    block_number: data.block_number || "",
+                    plot_number: data.plot_number || "",
+                    total_area: data.total_area || "",
+                    sale_price: data.sale_price || "",
+                    bank_name: data.bank_name || "",
+                    deed_number: data.deed_number || "",
+                    birth_date: data.birth_date || "",
+                    sakani_support_number: data.housing_contract_number || "",
                     project_name: matchedProjectName
                 }));
                 
                 setAutoFillSuccess(true);
-                setTimeout(() => setAutoFillSuccess(false), 3000); // إخفاء علامة النجاح بعد 3 ثوانٍ
+                // إخفاء علامة الصح بعد فترة قصيرة
+                setTimeout(() => setAutoFillSuccess(false), 2500);
             }
         } catch (err) {
             console.error("Auto-fill error:", err);
@@ -132,8 +136,11 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
     };
 
     const handleIdNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        // تنظيف المدخلات للسماح بالأرقام فقط
         const val = e.target.value.replace(/\D/g, '').slice(0, 10);
         setNewDeedForm({...newDeedForm, id_number: val});
+        
+        // تفعيل الجلب التلقائي عند اكتمال 10 أرقام
         if (val.length === 10) {
             fetchClientData(val);
         }
@@ -391,6 +398,7 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {/* ID Number Input with Auto-Fill Logic */}
                         <div className="space-y-1">
                             <label className="text-[10px] text-gray-400 font-black mr-1 uppercase">رقم الهوية</label>
                             <div className="relative">
@@ -402,7 +410,7 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
                                 />
                                 <div className="absolute left-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
                                     {isAutoFilling && <Loader2 className="animate-spin text-orange-500" size={16}/>}
-                                    {autoFillSuccess && <Check className="text-green-500 animate-in zoom-in" size={16}/>}
+                                    {autoFillSuccess && <Check className="text-green-500 animate-in zoom-in" size={18}/>}
                                 </div>
                             </div>
                         </div>
