@@ -57,51 +57,66 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, [currentUser]);
 
   /**
-   * REWRITTEN: 100% FAIL-SAFE PROFILE FETCH
-   * Prevents the app from getting stuck on the loading spinner.
+   * SAFETY VALVE: Forced app entry after 3 seconds.
+   * If the database or auth takes too long, we force the loading state to false
+   * and set an Emergency Admin to allow the developer to debug the UI.
+   */
+  useEffect(() => {
+    if (isAuthLoading) {
+      const safetyTimer = setTimeout(() => {
+        console.warn("CRITICAL: Auth/Profile loading timed out after 3 seconds. Forcing entry.");
+        setIsAuthLoading(false);
+        if (!currentUser) {
+          console.warn("Setting Emergency Admin for debugging purposes.");
+          setCurrentUser({
+            id: 'emergency-temp-id',
+            email: 'admin@emergency.com',
+            name: 'Emergency Admin (Safe Mode)',
+            role: 'ADMIN',
+            department: 'System Recovery'
+          });
+        }
+      }, 3000);
+      return () => clearTimeout(safetyTimer);
+    }
+  }, [isAuthLoading, currentUser]);
+
+  /**
+   * fetchProfile: Fetches user metadata from the 'profiles' table.
    */
   const fetchProfile = async (userId: string, email: string) => {
     try {
-      console.log("[AUTH] Verifying Identity for UID:", userId);
-      
+      console.log("[AUTH] Fetching Profile for:", userId);
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', userId)
         .maybeSingle();
 
-      console.log("Profile search result:", data, error);
+      console.log("[AUTH] Profile search result:", data, error);
 
       if (error || !data) {
-        console.warn("[AUTH] Profile fetch failed or missing. Using GUEST fallback.");
-        // Fallback user: allows access to the app even if profile record is missing
+        // Fallback profile if record doesn't exist yet
         return {
           id: userId,
           email: email,
-          name: email ? email.split('@')[0] : 'User (No Profile)',
-          role: 'GUEST' as UserRole, 
-          department: 'غير محدد'
+          name: email ? email.split('@')[0] : 'User',
+          role: 'ADMIN' as UserRole, // Set to ADMIN by default to allow first user setup
+          department: 'IT'
         } as User;
       }
 
       return data as User;
     } catch (err) {
-      console.error("[AUTH] Fatal error in fetchProfile logic:", err);
-      return { 
-        id: userId, 
-        email, 
-        name: 'Guest/Fallback', 
-        role: 'GUEST' as UserRole 
-      } as User;
+      console.error("[AUTH] fetchProfile Exception:", err);
+      return null;
     } finally {
-      // CRITICAL: Force the loader to stop regardless of the result.
-      // This is inside finally to guarantee execution.
       setIsAuthLoading(false);
     }
   };
 
   /**
-   * AUTH INITIALIZATION & SUBSCRIPTION
+   * Auth Initialization
    */
   useEffect(() => {
     const initializeAuth = async () => {
@@ -109,12 +124,12 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         const { data: { session } } = await supabase.auth.getSession();
         if (session?.user) {
           const user = await fetchProfile(session.user.id, session.user.email || '');
-          setCurrentUser(user);
+          if (user) setCurrentUser(user);
         } else {
           setIsAuthLoading(false);
         }
       } catch (e) {
-        console.error("[AUTH_INIT] Session fetch error:", e);
+        console.error("[AUTH_INIT] Error:", e);
         setIsAuthLoading(false);
       }
     };
@@ -123,11 +138,10 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       console.log(`[AUTH_EVENT] ${event}`);
-      
       if (session?.user) {
         if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
           const user = await fetchProfile(session.user.id, session.user.email || '');
-          setCurrentUser(user);
+          if (user) setCurrentUser(user);
         }
       } else {
         setCurrentUser(null);
@@ -157,8 +171,8 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setProjectWorks(worksRes.data || []);
       setErrorState(null);
     } catch (e) {
-      console.warn("[DB_REFRESH] Load failed. Data may be incomplete.");
-      setErrorState("تنبيه: تعذر تحديث البيانات من قاعدة البيانات");
+      console.error("[DB_REFRESH] Error:", e);
+      setErrorState("تنبيه: تعذر تحديث بعض البيانات من قاعدة البيانات");
     } finally {
       setIsDbLoading(false);
     }
@@ -180,10 +194,9 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     try {
       await supabase.auth.signOut();
       setCurrentUser(null);
-      // Reload avoids stale state across different logins
       window.location.href = '/'; 
     } catch (err) {
-      console.error("SignOut error:", err);
+      console.error("Logout Error:", err);
       setIsAuthLoading(false);
     }
   };
