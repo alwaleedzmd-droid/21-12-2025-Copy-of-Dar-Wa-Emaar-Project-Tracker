@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router';
 import { 
@@ -25,33 +24,33 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   if (!currentUser) return <>{children}</>;
 
   /**
-   * تحديث منطق الصلاحيات للقائمة الجانبية:
-   * PR_MANAGER و PR_OFFICER يمكنهم رؤية كل شيء عدا "إدارة المستخدمين"
+   * تعريف صلاحيات القائمة الجانبية حسب الأدوار
+   * موظفو العلاقات العامة (Manager & Employee) لديهم وصول شامل باستثناء إدارة المستخدمين
    */
   const navItems = [
     { 
       label: 'لوحة التحكم', 
       icon: <LayoutDashboard size={20} />, 
       path: '/dashboard', 
-      roles: ['ADMIN', 'PR_MANAGER', 'PR_OFFICER'] 
+      roles: ['ADMIN', 'PR_MANAGER', 'PR_EMPLOYEE'] 
     },
     { 
       label: 'إدارة المشاريع', 
       icon: <Building2 size={20} />, 
       path: '/projects', 
-      roles: ['ADMIN', 'PR_MANAGER', 'PR_OFFICER', 'TECHNICAL'] 
+      roles: ['ADMIN', 'PR_MANAGER', 'PR_EMPLOYEE', 'TECHNICAL'] 
     },
     { 
       label: 'الطلبات الفنية', 
       icon: <Zap size={20} />, 
       path: '/technical', 
-      roles: ['ADMIN', 'TECHNICAL', 'PR_MANAGER', 'PR_OFFICER'] 
+      roles: ['ADMIN', 'TECHNICAL', 'PR_MANAGER', 'PR_EMPLOYEE'] 
     },
     { 
       label: 'سجل الإفراغ', 
       icon: <FileStack size={20} />, 
       path: '/deeds', 
-      roles: ['ADMIN', 'CONVEYANCE', 'DEEDS_OFFICER', 'PR_MANAGER', 'PR_OFFICER'] 
+      roles: ['ADMIN', 'CONVEYANCE', 'DEEDS_OFFICER', 'PR_MANAGER', 'PR_EMPLOYEE'] 
     },
     { 
       label: 'إدارة المستخدمين', 

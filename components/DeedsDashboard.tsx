@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useLocation } from 'react-router';
 import { supabase } from '../supabaseClient'; 
@@ -69,7 +68,7 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
         status: 'جديد'
     });
 
-    const isAuthorizedToManage = ['ADMIN', 'PR_MANAGER', 'DEEDS_OFFICER', 'CONVEYANCE'].includes(currentUserRole || '');
+    const isAuthorizedToManage = ['ADMIN', 'PR_MANAGER', 'PR_EMPLOYEE', 'DEEDS_OFFICER', 'CONVEYANCE'].includes(currentUserRole || '');
 
     const fetchDeeds = async () => {
         setIsLoading(true);

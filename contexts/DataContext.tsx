@@ -57,11 +57,12 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, [currentUser]);
 
   /**
-   * REAL PROFILE FETCH: Retrieves user role and data from 'profiles' table.
+   * REWRITTEN: FAIL-SAFE PROFILE FETCH
+   * Ensures loader is always stopped and handles missing profiles gracefully.
    */
   const fetchProfile = async (userId: string, email: string) => {
     try {
-      console.log("[PROFILE_FETCH] Fetching real profile for:", userId);
+      console.log("[AUTH] Fetching profile for UID:", userId);
       
       const { data, error } = await supabase
         .from('profiles')
@@ -69,10 +70,14 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         .eq('id', userId)
         .maybeSingle();
 
-      if (error && error.code !== 'PGRST116') throw error;
+      if (error && error.code !== 'PGRST116') {
+        console.error("[AUTH] Database error fetching profile:", error);
+        throw error;
+      }
 
       if (!data) {
-        console.warn("[PROFILE_FETCH] Profile not found in DB. Falling back to GUEST.");
+        console.warn("[AUTH] Profile record not found in database. Setting fallback GUEST role.");
+        // Fallback user object if the profile hasn't been created in the public.profiles table yet
         return {
           id: userId,
           email: email,
@@ -82,24 +87,51 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         } as User;
       }
 
-      console.log("[PROFILE_FETCH_SUCCESS] Profile retrieved successfully.");
+      console.log("[AUTH] Profile found. Role:", data.role);
       return data as User;
     } catch (err) {
-      console.error("Critical Error in fetchProfile:", err);
+      console.error("[AUTH] Fatal error in fetchProfile logic:", err);
       return null;
     } finally {
+      // CRITICAL: Stop the loading spinner no matter what happens
       setIsAuthLoading(false);
     }
   };
 
+  /**
+   * INITIAL AUTH LISTENER
+   */
   useEffect(() => {
-    console.log("[AUTH_INIT] Initializing Auth listener...");
+    console.log("[AUTH_INIT] Starting auth listener...");
+    
+    // Check initial session
+    const checkInitialSession = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user) {
+          const user = await fetchProfile(session.user.id, session.user.email || '');
+          setCurrentUser(user);
+        } else {
+          setIsAuthLoading(false);
+        }
+      } catch (e) {
+        setIsAuthLoading(false);
+      }
+    };
+    checkInitialSession();
+
+    // Listen for changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       console.log(`[AUTH_EVENT] ${event}`);
+      
       if (session?.user) {
-        const user = await fetchProfile(session.user.id, session.user.email || '');
-        setCurrentUser(user);
+        // Only trigger loading if we don't have a user yet or it's a new login
+        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+          const user = await fetchProfile(session.user.id, session.user.email || '');
+          setCurrentUser(user);
+        }
       } else {
+        // Handle SIGNED_OUT or session loss
         setCurrentUser(null);
         setIsAuthLoading(false);
       }
@@ -135,14 +167,23 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, [currentUser]);
 
   const login = async (email: string, password: string) => {
+    setIsAuthLoading(true);
     const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) throw error;
+    if (error) {
+      setIsAuthLoading(false);
+      throw error;
+    }
   };
 
   const logout = async () => {
-    await supabase.auth.signOut();
-    setCurrentUser(null);
-    window.location.href = '/'; 
+    setIsAuthLoading(true);
+    try {
+      await supabase.auth.signOut();
+      setCurrentUser(null);
+      window.location.href = '/'; 
+    } finally {
+      setIsAuthLoading(false);
+    }
   };
 
   const canAccess = (allowedRoles: UserRole[]) => {

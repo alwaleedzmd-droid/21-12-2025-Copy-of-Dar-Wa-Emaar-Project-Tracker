@@ -11,14 +11,14 @@ import { User, UserRole } from '../types';
 import Modal from './Modal';
 import { useData } from '../contexts/DataContext';
 
-// Fix: Added missing 'GUEST' property to satisfy Record<UserRole, string>
+// Fix: Corrected 'PR_OFFICER' to 'PR_EMPLOYEE' to match UserRole type defined in types.ts
 const ROLE_LABELS: Record<UserRole, string> = {
   'ADMIN': 'مدير نظام',
   'PR_MANAGER': 'مدير علاقات عامة',
   'CONVEYANCE': 'مسؤول إفراغات',
   'TECHNICAL': 'مهندس فني',
   'FINANCE': 'مالية',
-  'PR_OFFICER': 'موظف علاقات',
+  'PR_EMPLOYEE': 'موظف علاقات',
   'DEEDS_OFFICER': 'موظف صكوك',
   'GUEST': 'زائر'
 };
@@ -42,7 +42,8 @@ const UsersModule: React.FC = () => {
 
   // --- Handlers ---
   const handleOpenAdd = () => {
-    setSelectedUser({ name: '', email: '', role: 'PR_OFFICER', department: '' });
+    // Fix: Corrected 'PR_OFFICER' to 'PR_EMPLOYEE' to match UserRole type
+    setSelectedUser({ name: '', email: '', role: 'PR_EMPLOYEE', department: '' });
     setIsModalOpen(true);
   };
 
@@ -269,7 +270,8 @@ const UsersModule: React.FC = () => {
               <label className="text-[10px] font-black text-gray-400 mr-1 uppercase">الصلاحية</label>
               <select 
                 className="w-full p-4 bg-gray-50 border border-gray-100 rounded-[20px] outline-none focus:border-[#E95D22] text-sm font-bold cursor-pointer"
-                value={selectedUser?.role || 'PR_OFFICER'}
+                // Fix: Corrected 'PR_OFFICER' to 'PR_EMPLOYEE' to match UserRole type
+                value={selectedUser?.role || 'PR_EMPLOYEE'}
                 onChange={e => setSelectedUser({...selectedUser, role: e.target.value as UserRole})}
               >
                 {Object.entries(ROLE_LABELS).map(([val, label]) => (
