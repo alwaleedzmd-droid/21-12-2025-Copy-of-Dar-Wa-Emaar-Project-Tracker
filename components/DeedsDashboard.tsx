@@ -114,8 +114,8 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
     };
 
     /**
-     * FIX: Auto-fill Client Data
-     * Refactored to query 'client_archive' table and handle column mapping
+     * UPDATED: fetchClientDetails with Strict Mapping
+     * Mapping from 'client_archive' to 'newDeedForm'
      */
     const fetchClientDetails = async (id: string) => {
         if (!id || id.length < 10) return;
@@ -123,66 +123,77 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
         setAutoFillSuccess(false);
 
         try {
-            console.log("🔍 Triggering Auto-fill for Identity:", id);
+            console.log("🔍 Auto-fill Triggered for ID:", id);
             
-            // 1. البحث في جدول أرشيف العملاء (Correct Table Name)
+            // 1. Search in client_archive
             const { data, error } = await supabase
                 .from('client_archive')
                 .select('*')
-                .eq('id_number', id) // Assuming 'id_number' is the primary key or unique identifier in client_archive
+                .eq('id_number', id)
                 .maybeSingle();
 
             if (error) {
-                console.warn("⚠️ Supabase 'client_archive' Query Error:", error.message);
+                console.warn("⚠️ Database Error (client_archive):", error.message);
             }
 
+            console.log("DB Response (client_archive):", data);
+
             if (data) {
-                console.log("✅ Fetched Client Data from 'client_archive':", data);
-                
                 setNewDeedForm((prev: any) => ({
                     ...prev,
-                    // Mapping DB columns correctly based on common naming conventions
-                    client_name: data.full_name || data.name || data.client_name || prev.client_name,
-                    mobile: data.mobile_number || data.phone || data.mobile || prev.mobile,
-                    dob_hijri: data.dob_hijri || prev.dob_hijri,
+                    // Strict Mapping based on DB schema provided by user
+                    client_name: data.customer_name || prev.client_name,
+                    project_name: data.project_name || prev.project_name,
+                    unit_number: data.unit_number || prev.unit_number,
+                    unit_value: data.sale_price || prev.unit_value,
+                    bank_name: data.bank_name || prev.bank_name,
+                    sakani_support_number: data.housing_contract_number || prev.sakani_support_number,
+                    dob_hijri: data.birth_date || prev.dob_hijri,
+                    mobile: data.mobile_number || prev.mobile,
+                    // Additional helpful fields if they exist
                     tax_number: data.tax_number || prev.tax_number,
-                    region: data.region || prev.region,
-                    city: data.city || prev.city
+                    city: data.city || prev.city,
+                    region: data.region || prev.region
                 }));
                 
                 setAutoFillSuccess(true);
+                console.log("✅ Form Auto-filled from Archive.");
                 setTimeout(() => setAutoFillSuccess(false), 3000);
                 return;
             }
 
-            // 2. BACKUP: البحث في تاريخ الإفراغات إذا لم يوجد في الأرشيف
-            console.log("⏳ Client not in archive, searching deeds history...");
+            // 2. Backup Search in deeds_requests (Historical Data)
+            console.log("⏳ Not found in archive, checking history...");
             const { data: histData, error: histError } = await supabase
                 .from('deeds_requests')
-                .select('client_name, mobile, dob_hijri, tax_number, region, city')
+                .select('*')
                 .eq('id_number', id)
                 .order('created_at', { ascending: false })
                 .limit(1)
                 .maybeSingle();
 
             if (histData && !histError) {
-                console.log("✅ Client data recovered from historical deed records:", histData);
+                console.log("✅ Found in deeds_requests history:", histData);
                 setNewDeedForm((prev: any) => ({
                     ...prev,
                     client_name: histData.client_name || prev.client_name,
-                    mobile: histData.mobile || prev.mobile,
+                    project_name: histData.project_name || prev.project_name,
+                    unit_number: histData.unit_number || prev.unit_number,
+                    unit_value: histData.unit_value || prev.unit_value,
+                    bank_name: histData.bank_name || prev.bank_name,
+                    sakani_support_number: histData.sakani_support_number || prev.sakani_support_number,
                     dob_hijri: histData.dob_hijri || prev.dob_hijri,
-                    tax_number: histData.tax_number || prev.tax_number,
-                    region: histData.region || prev.region,
-                    city: histData.city || prev.city
+                    mobile: histData.mobile || prev.mobile,
+                    city: histData.city || prev.city,
+                    region: histData.region || prev.region
                 }));
                 setAutoFillSuccess(true);
                 setTimeout(() => setAutoFillSuccess(false), 3000);
             } else {
-                console.log("❌ No data found for this Identity Number in archive or history.");
+                console.log("❌ No records found for this Identity Number.");
             }
         } catch (err) {
-            console.error("🔥 Critical fetch error in fetchClientDetails:", err);
+            console.error("🔥 Error in fetchClientDetails:", err);
         } finally {
             setIsAutoFilling(false);
         }
