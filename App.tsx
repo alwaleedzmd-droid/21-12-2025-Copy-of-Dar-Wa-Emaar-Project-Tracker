@@ -103,7 +103,7 @@ const ProjectDetailWrapper = ({ projects = [], currentUser }: any) => {
    const commentsEndRef = useRef<HTMLDivElement>(null);
 
    const project = useMemo(() => projects.find((p: any) => p.id === Number(id)), [projects, id]);
-   const isManager = ['ADMIN', 'PR_MANAGER'].includes(currentUser?.role || '');
+   const isManager = ['ADMIN', 'PR_MANAGER', 'PR_OFFICER'].includes(currentUser?.role || '');
    const isAdmin = currentUser?.role === 'ADMIN';
 
    const fetchWorks = async () => {
@@ -320,17 +320,14 @@ const AppContent: React.FC = () => {
   const getDefaultPath = (role: UserRole) => {
     switch (role) {
       case 'ADMIN':
-        return '/dashboard';
       case 'PR_MANAGER':
+      case 'PR_OFFICER':
         return '/dashboard';
       case 'TECHNICAL':
         return '/technical';
       case 'CONVEYANCE':
-        return '/deeds';
       case 'DEEDS_OFFICER':
         return '/deeds';
-      case 'PR_OFFICER':
-        return '/dashboard';
       case 'GUEST':
       default:
         return '/dashboard'; // سيقوم ProtectedRoute بمنعه وعرض رسالة الخطأ
@@ -407,41 +404,41 @@ const AppContent: React.FC = () => {
       <Routes>
         <Route path="/" element={<Navigate to={getDefaultPath(currentUser.role)} replace />} />
 
-        {/* مسار لوحة التحكم الرئيسية */}
+        {/* مسار لوحة التحكم الرئيسية - متاح للأدمن والعلاقات العامة */}
         <Route path="/dashboard" element={
-          <ProtectedRoute allowedRoles={['ADMIN', 'PR_MANAGER']} currentUser={currentUser}>
+          <ProtectedRoute allowedRoles={['ADMIN', 'PR_MANAGER', 'PR_OFFICER']} currentUser={currentUser}>
             <AppMapDashboard currentUser={currentUser} onLogout={logout} />
           </ProtectedRoute>
         } />
         
-        {/* مسارات المشاريع */}
+        {/* مسارات المشاريع - متاحة للأدمن والعلاقات العامة والمهندسين */}
         <Route path="/projects" element={
-          <ProtectedRoute allowedRoles={['ADMIN', 'PR_MANAGER']} currentUser={currentUser}>
+          <ProtectedRoute allowedRoles={['ADMIN', 'PR_MANAGER', 'PR_OFFICER', 'TECHNICAL']} currentUser={currentUser}>
             <ProjectsModule projects={projects} stats={{ projects: projects.length, techRequests: technicalRequests.length, clearRequests: clearanceRequests.length }} currentUser={currentUser} onProjectClick={(p) => navigate(`/projects/${p?.id}`)} onRefresh={refreshData} />
           </ProtectedRoute>
         } />
 
         <Route path="/projects/:id" element={
-          <ProtectedRoute allowedRoles={['ADMIN', 'PR_MANAGER']} currentUser={currentUser}>
+          <ProtectedRoute allowedRoles={['ADMIN', 'PR_MANAGER', 'PR_OFFICER', 'TECHNICAL']} currentUser={currentUser}>
             <ProjectDetailWrapper projects={projects} onRefresh={refreshData} currentUser={currentUser} />
           </ProtectedRoute>
         } />
         
-        {/* مسارات الخدمات الفنية */}
+        {/* مسارات الخدمات الفنية - متاحة للأدمن والمهندسين والعلاقات العامة */}
         <Route path="/technical" element={
-          <ProtectedRoute allowedRoles={['ADMIN', 'TECHNICAL']} currentUser={currentUser}>
+          <ProtectedRoute allowedRoles={['ADMIN', 'TECHNICAL', 'PR_MANAGER', 'PR_OFFICER']} currentUser={currentUser}>
             <TechnicalModule requests={technicalRequests} projects={projects} currentUser={currentUser} usersList={appUsers} onRefresh={refreshData} logActivity={logActivity} />
           </ProtectedRoute>
         } />
 
-        {/* مسارات الإفراغات */}
+        {/* مسارات الإفراغات - متاحة للأدمن وفريق الإفراغ والعلاقات العامة */}
         <Route path="/deeds" element={
-          <ProtectedRoute allowedRoles={['ADMIN', 'CONVEYANCE']} currentUser={currentUser}>
+          <ProtectedRoute allowedRoles={['ADMIN', 'CONVEYANCE', 'DEEDS_OFFICER', 'PR_MANAGER', 'PR_OFFICER']} currentUser={currentUser}>
             <DeedsDashboard currentUserRole={currentUser.role} currentUserName={currentUser.name} logActivity={logActivity} />
           </ProtectedRoute>
         } />
         
-        {/* إدارة المستخدمين */}
+        {/* إدارة المستخدمين - حصرية للمدير فقط */}
         <Route path="/users" element={ 
           <ProtectedRoute allowedRoles={['ADMIN']} currentUser={currentUser}>
             <UserManagement />
@@ -452,7 +449,7 @@ const AppContent: React.FC = () => {
         <Route path="*" element={<Navigate to={getDefaultPath(currentUser.role)} replace />} />
       </Routes>
       
-      {['ADMIN', 'PR_MANAGER'].includes(currentUser?.role || '') && (
+      {['ADMIN', 'PR_MANAGER', 'PR_OFFICER'].includes(currentUser?.role || '') && (
         <AIAssistant currentUser={currentUser} projects={projects} technicalRequests={technicalRequests} clearanceRequests={clearanceRequests} projectWorks={projectWorks} onNavigate={(type, data) => navigate(type === 'PROJECT' ? `/projects/${data.id}` : '/deeds')} />
       )}
     </MainLayout>

@@ -25,36 +25,33 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   if (!currentUser) return <>{children}</>;
 
   /**
-   * تعريف صارم للصلاحيات حسب متطلبات المستخدم:
-   * ADMIN: الكل
-   * CONVEYANCE: فقط Deeds
-   * TECHNICAL: فقط Technical
-   * PR_MANAGER: فقط Dashboard/Projects
+   * تحديث منطق الصلاحيات للقائمة الجانبية:
+   * PR_MANAGER و PR_OFFICER يمكنهم رؤية كل شيء عدا "إدارة المستخدمين"
    */
   const navItems = [
     { 
       label: 'لوحة التحكم', 
       icon: <LayoutDashboard size={20} />, 
       path: '/dashboard', 
-      roles: ['ADMIN', 'PR_MANAGER'] 
+      roles: ['ADMIN', 'PR_MANAGER', 'PR_OFFICER'] 
     },
     { 
-      label: 'المشاريع', 
+      label: 'إدارة المشاريع', 
       icon: <Building2 size={20} />, 
       path: '/projects', 
-      roles: ['ADMIN', 'PR_MANAGER'] 
+      roles: ['ADMIN', 'PR_MANAGER', 'PR_OFFICER', 'TECHNICAL'] 
     },
     { 
       label: 'الطلبات الفنية', 
       icon: <Zap size={20} />, 
       path: '/technical', 
-      roles: ['ADMIN', 'TECHNICAL'] 
+      roles: ['ADMIN', 'TECHNICAL', 'PR_MANAGER', 'PR_OFFICER'] 
     },
     { 
       label: 'سجل الإفراغ', 
       icon: <FileStack size={20} />, 
       path: '/deeds', 
-      roles: ['ADMIN', 'CONVEYANCE'] 
+      roles: ['ADMIN', 'CONVEYANCE', 'DEEDS_OFFICER', 'PR_MANAGER', 'PR_OFFICER'] 
     },
     { 
       label: 'إدارة المستخدمين', 
