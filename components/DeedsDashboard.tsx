@@ -10,7 +10,8 @@ import {
   Landmark, FileText, MessageSquare, Send, 
   Trash2, Loader2, XCircle, Activity, Lock,
   LayoutGrid, Scale, Paperclip, Info,
-  TrendingUp, BarChart, Check, FileSpreadsheet
+  TrendingUp, BarChart, Check, FileSpreadsheet,
+  Sparkles
 } from 'lucide-react';
 import { ActivityLog, useData } from '../contexts/DataContext';
 import { notificationService } from '../services/notificationService';
@@ -110,6 +111,66 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
         } catch (error) {
             console.error("Critical: Deeds fetch error", error);
         } finally { setIsLoading(false); }
+    };
+
+    const fetchClientDetails = async (id: string) => {
+        if (!id || id.length < 10) return;
+        setIsAutoFilling(true);
+        try {
+            console.log("Searching for client with ID:", id);
+            
+            // محاولة البحث في جدول العملاء
+            const { data, error } = await supabase
+                .from('clients')
+                .select('*')
+                .eq('id_number', id)
+                .maybeSingle();
+
+            if (error) console.warn("Supabase check 'clients' table:", error.message);
+
+            if (data) {
+                console.log("Client found in 'clients' table:", data);
+                setNewDeedForm((prev: any) => ({
+                    ...prev,
+                    client_name: data.name || data.client_name || prev.client_name,
+                    mobile: data.mobile || prev.mobile,
+                    dob_hijri: data.dob_hijri || prev.dob_hijri,
+                    tax_number: data.tax_number || prev.tax_number
+                }));
+                setAutoFillSuccess(true);
+                setTimeout(() => setAutoFillSuccess(false), 3000);
+                return;
+            }
+
+            // إذا لم يوجد في جدول العملاء، ابحث في تاريخ الإفراغات
+            console.log("Searching in 'deeds_requests' history...");
+            const { data: histData, error: histError } = await supabase
+                .from('deeds_requests')
+                .select('client_name, mobile, dob_hijri, tax_number')
+                .eq('id_number', id)
+                .order('created_at', { ascending: false })
+                .limit(1)
+                .maybeSingle();
+
+            if (histData && !histError) {
+                console.log("Client found in history:", histData);
+                setNewDeedForm((prev: any) => ({
+                    ...prev,
+                    client_name: histData.client_name || prev.client_name,
+                    mobile: histData.mobile || prev.mobile,
+                    dob_hijri: histData.dob_hijri || prev.dob_hijri,
+                    tax_number: histData.tax_number || prev.tax_number
+                }));
+                setAutoFillSuccess(true);
+                setTimeout(() => setAutoFillSuccess(false), 3000);
+            } else {
+                console.log("No historical data found for this ID.");
+            }
+        } catch (err) {
+            console.error("Auto-fill client details failed:", err);
+        } finally {
+            setIsAutoFilling(false);
+        }
     };
 
     const fetchComments = async (deedId: number) => {
@@ -253,25 +314,52 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
 
             <Modal isOpen={isRegModalOpen} onClose={() => setIsRegModalOpen(false)} title="تسجيل بيانات إفراغ">
                 <div className="space-y-4 text-right overflow-y-auto max-h-[70vh] p-2 custom-scrollbar">
+                    <div className="bg-orange-50 p-4 rounded-2xl border border-orange-100 flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-3">
+                            <Sparkles className="text-[#E95D22]" size={20} />
+                            <div>
+                                <p className="text-xs font-black text-[#1B2B48]">خاصية الإكمال التلقائي</p>
+                                <p className="text-[10px] text-gray-500 font-bold">أدخل رقم الهوية لجلب بيانات العميل المسجلة سابقاً</p>
+                            </div>
+                        </div>
+                        {isAutoFilling && <Loader2 size={16} className="animate-spin text-[#E95D22]" />}
+                        {autoFillSuccess && <CheckCircle2 size={16} className="text-green-500 animate-bounce" />}
+                    </div>
+
                     <div className="grid grid-cols-2 gap-3">
-                        <Field label="المنطقة" value={newDeedForm.region} onChange={v => setNewDeedForm({...newDeedForm, region: v})} />
-                        <Field label="مدينة العقار" value={newDeedForm.city} onChange={v => setNewDeedForm({...newDeedForm, city: v})} />
-                        <Field label="اسم المشروع" value={newDeedForm.project_name} onChange={v => setNewDeedForm({...newDeedForm, project_name: v})} />
-                        <Field label="رقم المخطط" value={newDeedForm.plan_number} onChange={v => setNewDeedForm({...newDeedForm, plan_number: v})} />
-                        <Field label="رقم الوحدة" value={newDeedForm.unit_number} onChange={v => setNewDeedForm({...newDeedForm, unit_number: v})} />
-                        <Field label="رقم الصك القديم" value={newDeedForm.old_deed_number} onChange={v => setNewDeedForm({...newDeedForm, old_deed_number: v})} />
-                        <Field label="تاريخ الصك" value={newDeedForm.deed_date} onChange={v => setNewDeedForm({...newDeedForm, deed_date: v})} />
-                        <Field label="اسم المستفيد" value={newDeedForm.client_name} onChange={v => setNewDeedForm({...newDeedForm, client_name: v})} />
-                        <Field label="هوية المستفيد" value={newDeedForm.id_number} onChange={v => setNewDeedForm({...newDeedForm, id_number: v})} />
-                        <Field label="جوال المستفيد" value={newDeedForm.mobile} onChange={v => setNewDeedForm({...newDeedForm, mobile: v})} />
-                        <Field label="تاريخ الميلاد" value={newDeedForm.dob_hijri} onChange={v => setNewDeedForm({...newDeedForm, dob_hijri: v})} />
-                        <Field label="قيمة الوحدة" value={newDeedForm.unit_value} onChange={v => setNewDeedForm({...newDeedForm, unit_value: v})} />
-                        <Field label="الرقم الضريبي" value={newDeedForm.tax_number} onChange={v => setNewDeedForm({...newDeedForm, tax_number: v})} />
-                        <Field label="الجهة التمويلية" value={newDeedForm.bank_name} onChange={v => setNewDeedForm({...newDeedForm, bank_name: v})} />
-                        <Field label="نوع العقد" value={newDeedForm.contract_type} onChange={v => setNewDeedForm({...newDeedForm, contract_type: v})} />
-                        <Field label="رقم الصك الجديد" value={newDeedForm.new_deed_number} onChange={v => setNewDeedForm({...newDeedForm, new_deed_number: v})} />
-                        <Field label="تاريخ الصك الجديد" value={newDeedForm.new_deed_date} onChange={v => setNewDeedForm({...newDeedForm, new_deed_date: v})} />
-                        <Field label="رقم عقد الدعم" value={newDeedForm.sakani_support_number} onChange={v => setNewDeedForm({...newDeedForm, sakani_support_number: v})} />
+                        <div className="col-span-2">
+                           <div className="space-y-1 relative">
+                                <label className="text-[10px] text-gray-400 font-black">رقم الهوية</label>
+                                <input 
+                                    className={`w-full p-3 bg-white rounded-xl border outline-none font-black text-sm transition-all focus:border-[#E95D22] shadow-sm ${autoFillSuccess ? 'ring-2 ring-green-100 border-green-500' : 'border-gray-100'}`} 
+                                    placeholder="100XXXXXXXX"
+                                    value={newDeedForm.id_number} 
+                                    onBlur={(e) => fetchClientDetails(e.target.value)}
+                                    onChange={e => setNewDeedForm({...newDeedForm, id_number: e.target.value})} 
+                                />
+                                {isAutoFilling && <div className="absolute left-3 bottom-2.5"><Loader2 size={14} className="animate-spin text-gray-300" /></div>}
+                           </div>
+                        </div>
+                        <Field label="اسم المستفيد" value={newDeedForm.client_name} onChange={(v: string) => setNewDeedForm({...newDeedForm, client_name: v})} />
+                        <Field label="جوال المستفيد" value={newDeedForm.mobile} onChange={(v: string) => setNewDeedForm({...newDeedForm, mobile: v})} />
+                        
+                        <div className="col-span-2 border-t pt-2 mt-2 opacity-30 text-[9px] font-black text-gray-400 uppercase tracking-widest">بيانات العقار والصفقة</div>
+                        
+                        <Field label="المنطقة" value={newDeedForm.region} onChange={(v: string) => setNewDeedForm({...newDeedForm, region: v})} />
+                        <Field label="مدينة العقار" value={newDeedForm.city} onChange={(v: string) => setNewDeedForm({...newDeedForm, city: v})} />
+                        <Field label="اسم المشروع" value={newDeedForm.project_name} onChange={(v: string) => setNewDeedForm({...newDeedForm, project_name: v})} />
+                        <Field label="رقم المخطط" value={newDeedForm.plan_number} onChange={(v: string) => setNewDeedForm({...newDeedForm, plan_number: v})} />
+                        <Field label="رقم الوحدة" value={newDeedForm.unit_number} onChange={(v: string) => setNewDeedForm({...newDeedForm, unit_number: v})} />
+                        <Field label="رقم الصك القديم" value={newDeedForm.old_deed_number} onChange={(v: string) => setNewDeedForm({...newDeedForm, old_deed_number: v})} />
+                        <Field label="تاريخ الصك" value={newDeedForm.deed_date} onChange={(v: string) => setNewDeedForm({...newDeedForm, deed_date: v})} />
+                        <Field label="تاريخ الميلاد" value={newDeedForm.dob_hijri} onChange={(v: string) => setNewDeedForm({...newDeedForm, dob_hijri: v})} />
+                        <Field label="قيمة الوحدة" value={newDeedForm.unit_value} onChange={(v: string) => setNewDeedForm({...newDeedForm, unit_value: v})} />
+                        <Field label="الرقم الضريبي" value={newDeedForm.tax_number} onChange={(v: string) => setNewDeedForm({...newDeedForm, tax_number: v})} />
+                        <Field label="الجهة التمويلية" value={newDeedForm.bank_name} onChange={(v: string) => setNewDeedForm({...newDeedForm, bank_name: v})} />
+                        <Field label="نوع العقد" value={newDeedForm.contract_type} onChange={(v: string) => setNewDeedForm({...newDeedForm, contract_type: v})} />
+                        <Field label="رقم الصك الجديد" value={newDeedForm.new_deed_number} onChange={(v: string) => setNewDeedForm({...newDeedForm, new_deed_number: v})} />
+                        <Field label="تاريخ الصك الجديد" value={newDeedForm.new_deed_date} onChange={(v: string) => setNewDeedForm({...newDeedForm, new_deed_date: v})} />
+                        <Field label="رقم عقد الدعم" value={newDeedForm.sakani_support_number} onChange={(v: string) => setNewDeedForm({...newDeedForm, sakani_support_number: v})} />
                     </div>
                     <button onClick={handleSaveNewDeed} disabled={isSaving} className="w-full bg-[#1B2B48] text-white py-4 rounded-xl font-black mt-4 shadow-lg flex items-center justify-center gap-2">
                         {isSaving ? <Loader2 className="animate-spin" size={20}/> : 'حفظ البيانات'}
@@ -307,7 +395,7 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
 const Field = ({ label, value, onChange }: any) => (
     <div className="space-y-1">
         <label className="text-[10px] text-gray-400 font-black">{label}</label>
-        <input className="w-full p-2.5 bg-gray-50 rounded-xl border outline-none font-bold text-xs focus:border-[#E95D22]" value={value} onChange={e => onChange(e.target.value)} />
+        <input className="w-full p-2.5 bg-gray-50 rounded-xl border border-gray-100 outline-none font-bold text-xs focus:border-[#E95D22]" value={value} onChange={e => onChange(e.target.value)} />
     </div>
 );
 
