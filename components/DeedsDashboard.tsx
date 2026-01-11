@@ -193,10 +193,10 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
                 unit_number: newDeedForm.unit_number,
                 old_deed_number: newDeedForm.old_deed_number,
                 deed_date: newDeedForm.deed_date || null,
-                client_name: newDeedForm.client_name, // Mapping to strict client_name column
-                id_number: newDeedForm.id_number,     // Mapping to strict id_number column
-                mobile: newDeedForm.mobile,           // Mapping to strict mobile column
-                dob_hijri: newDeedForm.dob_hijri || null,
+                client_name: newDeedForm.client_name, 
+                id_number: newDeedForm.id_number,     
+                mobile: newDeedForm.mobile,           
+                birth_date: newDeedForm.dob_hijri || null, // FIXED: Changed from dob_hijri to birth_date to match DB
                 unit_value: parseFloat(newDeedForm.unit_value) || 0,
                 tax_number: newDeedForm.tax_number,
                 bank_name: newDeedForm.bank_name,
