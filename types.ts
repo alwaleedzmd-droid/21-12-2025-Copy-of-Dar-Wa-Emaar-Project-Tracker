@@ -1,5 +1,5 @@
 
-export type UserRole = 'ADMIN' | 'PR_MANAGER' | 'CONVEYANCE' | 'TECHNICAL' | 'FINANCE' | 'PR_OFFICER' | 'DEEDS_OFFICER';
+export type UserRole = 'ADMIN' | 'PR_MANAGER' | 'CONVEYANCE' | 'TECHNICAL' | 'FINANCE' | 'PR_OFFICER' | 'DEEDS_OFFICER' | 'GUEST';
 
 export interface User {
   id: string;

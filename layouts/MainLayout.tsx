@@ -24,31 +24,37 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
 
   if (!currentUser) return <>{children}</>;
 
-  // تعريف صارم للصلاحيات لكل رابط
+  /**
+   * تعريف صارم للصلاحيات حسب متطلبات المستخدم:
+   * ADMIN: الكل
+   * CONVEYANCE: فقط Deeds
+   * TECHNICAL: فقط Technical
+   * PR_MANAGER: فقط Dashboard/Projects
+   */
   const navItems = [
     { 
       label: 'لوحة التحكم', 
       icon: <LayoutDashboard size={20} />, 
       path: '/dashboard', 
-      roles: ['ADMIN', 'PR_MANAGER', 'PR_OFFICER'] 
+      roles: ['ADMIN', 'PR_MANAGER'] 
     },
     { 
       label: 'المشاريع', 
       icon: <Building2 size={20} />, 
       path: '/projects', 
-      roles: ['ADMIN', 'PR_MANAGER', 'PR_OFFICER'] 
+      roles: ['ADMIN', 'PR_MANAGER'] 
     },
     { 
       label: 'الطلبات الفنية', 
       icon: <Zap size={20} />, 
       path: '/technical', 
-      roles: ['ADMIN', 'TECHNICAL', 'PR_OFFICER'] 
+      roles: ['ADMIN', 'TECHNICAL'] 
     },
     { 
       label: 'سجل الإفراغ', 
       icon: <FileStack size={20} />, 
       path: '/deeds', 
-      roles: ['ADMIN', 'CONVEYANCE', 'DEEDS_OFFICER'] 
+      roles: ['ADMIN', 'CONVEYANCE'] 
     },
     { 
       label: 'إدارة المستخدمين', 

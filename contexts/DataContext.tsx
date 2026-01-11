@@ -57,34 +57,37 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, [currentUser]);
 
   /**
-   * STRICT REFACTOR: Bypass Supabase database for profile fetching.
-   * This prevents the hang during [PROFILE_FETCH].
+   * REAL PROFILE FETCH: Retrieves user role and data from 'profiles' table.
    */
   const fetchProfile = async (userId: string, email: string) => {
     try {
-      console.log("[PROFILE_FETCH] Attempting to fetch profile for:", userId);
-      console.log("⚠️ BYPASSING DATABASE (Temporary Fix for stability)");
+      console.log("[PROFILE_FETCH] Fetching real profile for:", userId);
       
-      // Artificial delay to simulate network
-      await new Promise(resolve => setTimeout(resolve, 500));
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .maybeSingle();
 
-      // Force mock user based on your provided details
-      const mockUser: User = {
-        id: userId,
-        email: email,
-        name: "الوليد الدوسري",
-        role: "ADMIN" as UserRole,
-        department: "الإدارة"
-      };
+      if (error && error.code !== 'PGRST116') throw error;
 
-      console.log("[PROFILE_FETCH_SUCCESS] Mock user generated:", mockUser);
-      return mockUser;
+      if (!data) {
+        console.warn("[PROFILE_FETCH] Profile not found in DB. Falling back to GUEST.");
+        return {
+          id: userId,
+          email: email,
+          name: email.split('@')[0],
+          role: 'GUEST' as UserRole,
+          department: 'غير محدد'
+        } as User;
+      }
+
+      console.log("[PROFILE_FETCH_SUCCESS] Profile retrieved successfully.");
+      return data as User;
     } catch (err) {
       console.error("Critical Error in fetchProfile:", err);
       return null;
     } finally {
-      // GUARANTEED execution to stop the loader
-      console.log("[AUTH_FINALLY] Stopping loader...");
       setIsAuthLoading(false);
     }
   };
@@ -97,7 +100,6 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         const user = await fetchProfile(session.user.id, session.user.email || '');
         setCurrentUser(user);
       } else {
-        console.log("[AUTH_EVENT] No session, cleaning up.");
         setCurrentUser(null);
         setIsAuthLoading(false);
       }
@@ -110,7 +112,6 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     if (!currentUser) return;
     setIsDbLoading(true);
     try {
-      // We still try to fetch business data, but we wrap in try/catch to not block the UI
       const [pRes, trRes, profilesRes, deedsRes, worksRes] = await Promise.all([
         supabase.from('projects').select('*').order('id', { ascending: true }),
         supabase.from('technical_requests').select('*').order('created_at', { ascending: false }),
@@ -126,7 +127,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setProjectWorks(worksRes.data || []);
       setErrorState(null);
     } catch (e) {
-      console.warn("[DB_REFRESH] Business data fetch failed (likely RLS), using empty arrays.");
+      console.warn("[DB_REFRESH] Business data fetch failed.");
       setErrorState("تنبيه: تعذر جلب بعض البيانات من الخادم");
     } finally {
       setIsDbLoading(false);

@@ -21,7 +21,7 @@ import TechnicalModule from './components/TechnicalModule';
 import ProjectsModule from './components/ProjectsModule';
 import DeedsDashboard from './components/DeedsDashboard';
 import ProjectDetailView from './components/ProjectDetailView';
-import UserManagement from './components/UserManagement'; // Updated import
+import UserManagement from './components/UserManagement'; 
 import AIAssistant from './components/AIAssistant';
 import AppMapDashboard from './components/AppMapDashboard';
 
@@ -42,7 +42,8 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowedRoles,
         </div>
         <h2 className="text-3xl font-black text-[#1B2B48] mb-4">403 - الوصول مرفوض</h2>
         <p className="text-gray-500 font-bold max-w-md leading-relaxed">
-          عذراً، لا تملك الصلاحيات الكافية لعرض هذه الصفحة. يرجى مراجعة مدير النظام إذا كنت تعتقد أن هذا خطأ.
+          عذراً، لا تملك الصلاحيات الكافية لعرض هذه الصفحة.
+          {currentUser.role === 'GUEST' ? " لم يتم إسناد دور لك في النظام بعد، يرجى التواصل مع المدير." : " يرجى مراجعة مدير النظام إذا كنت تعتقد أن هذا خطأ."}
         </p>
         <button 
           onClick={() => window.history.back()}
@@ -315,20 +316,24 @@ const AppContent: React.FC = () => {
   const [loginError, setLoginError] = useState<string | null>(null);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
 
-  // منطق التوجيه الافتراضي بناءً على الدور
+  // منطق التوجيه الافتراضي بناءً على الدور حسب القواعد الصارمة الجديدة
   const getDefaultPath = (role: UserRole) => {
     switch (role) {
       case 'ADMIN':
+        return '/dashboard';
       case 'PR_MANAGER':
-      case 'PR_OFFICER':
         return '/dashboard';
       case 'TECHNICAL':
         return '/technical';
       case 'CONVEYANCE':
+        return '/deeds';
       case 'DEEDS_OFFICER':
         return '/deeds';
-      default:
+      case 'PR_OFFICER':
         return '/dashboard';
+      case 'GUEST':
+      default:
+        return '/dashboard'; // سيقوم ProtectedRoute بمنعه وعرض رسالة الخطأ
     }
   };
 
@@ -339,8 +344,6 @@ const AppContent: React.FC = () => {
     
     try {
       await login(loginData.email, loginData.password);
-      // بعد تسجيل الدخول، سيقوم DataProvider بتحديث currentUser
-      // وسيتم التعامل مع التوجيه في useEffect أدناه
     } catch (err: any) {
       if (err.message?.includes('Invalid login credentials')) {
         setLoginError("خطأ في البريد الإلكتروني أو كلمة المرور");
@@ -352,7 +355,6 @@ const AppContent: React.FC = () => {
     }
   };
 
-  // معالجة التوجيه عند تغيير المستخدم (تسجيل الدخول)
   useEffect(() => {
     if (currentUser && location.pathname === '/') {
       navigate(getDefaultPath(currentUser.role), { replace: true });
@@ -407,34 +409,34 @@ const AppContent: React.FC = () => {
 
         {/* مسار لوحة التحكم الرئيسية */}
         <Route path="/dashboard" element={
-          <ProtectedRoute allowedRoles={['ADMIN', 'PR_MANAGER', 'PR_OFFICER']} currentUser={currentUser}>
+          <ProtectedRoute allowedRoles={['ADMIN', 'PR_MANAGER']} currentUser={currentUser}>
             <AppMapDashboard currentUser={currentUser} onLogout={logout} />
           </ProtectedRoute>
         } />
         
         {/* مسارات المشاريع */}
         <Route path="/projects" element={
-          <ProtectedRoute allowedRoles={['ADMIN', 'PR_MANAGER', 'PR_OFFICER']} currentUser={currentUser}>
+          <ProtectedRoute allowedRoles={['ADMIN', 'PR_MANAGER']} currentUser={currentUser}>
             <ProjectsModule projects={projects} stats={{ projects: projects.length, techRequests: technicalRequests.length, clearRequests: clearanceRequests.length }} currentUser={currentUser} onProjectClick={(p) => navigate(`/projects/${p?.id}`)} onRefresh={refreshData} />
           </ProtectedRoute>
         } />
 
         <Route path="/projects/:id" element={
-          <ProtectedRoute allowedRoles={['ADMIN', 'PR_MANAGER', 'PR_OFFICER']} currentUser={currentUser}>
+          <ProtectedRoute allowedRoles={['ADMIN', 'PR_MANAGER']} currentUser={currentUser}>
             <ProjectDetailWrapper projects={projects} onRefresh={refreshData} currentUser={currentUser} />
           </ProtectedRoute>
         } />
         
         {/* مسارات الخدمات الفنية */}
         <Route path="/technical" element={
-          <ProtectedRoute allowedRoles={['ADMIN', 'TECHNICAL', 'PR_OFFICER', 'PR_MANAGER']} currentUser={currentUser}>
+          <ProtectedRoute allowedRoles={['ADMIN', 'TECHNICAL']} currentUser={currentUser}>
             <TechnicalModule requests={technicalRequests} projects={projects} currentUser={currentUser} usersList={appUsers} onRefresh={refreshData} logActivity={logActivity} />
           </ProtectedRoute>
         } />
 
         {/* مسارات الإفراغات */}
         <Route path="/deeds" element={
-          <ProtectedRoute allowedRoles={['ADMIN', 'CONVEYANCE', 'DEEDS_OFFICER', 'PR_MANAGER']} currentUser={currentUser}>
+          <ProtectedRoute allowedRoles={['ADMIN', 'CONVEYANCE']} currentUser={currentUser}>
             <DeedsDashboard currentUserRole={currentUser.role} currentUserName={currentUser.name} logActivity={logActivity} />
           </ProtectedRoute>
         } />

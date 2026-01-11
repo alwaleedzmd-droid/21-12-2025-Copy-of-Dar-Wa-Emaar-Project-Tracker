@@ -11,6 +11,7 @@ import { User, UserRole } from '../types';
 import Modal from './Modal';
 import { useData } from '../contexts/DataContext';
 
+// Fix: Added missing 'GUEST' property to satisfy Record<UserRole, string>
 const ROLE_LABELS: Record<UserRole, string> = {
   'ADMIN': 'مدير نظام',
   'PR_MANAGER': 'مدير علاقات عامة',
@@ -18,7 +19,8 @@ const ROLE_LABELS: Record<UserRole, string> = {
   'TECHNICAL': 'مهندس فني',
   'FINANCE': 'مالية',
   'PR_OFFICER': 'موظف علاقات',
-  'DEEDS_OFFICER': 'موظف صكوك'
+  'DEEDS_OFFICER': 'موظف صكوك',
+  'GUEST': 'زائر'
 };
 
 const UsersModule: React.FC = () => {

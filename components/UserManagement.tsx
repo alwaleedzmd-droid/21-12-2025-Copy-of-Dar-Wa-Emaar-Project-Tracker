@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Users, UserPlus, Search, Shield, 
@@ -11,6 +12,7 @@ import { User, UserRole } from '../types';
 import Modal from './Modal';
 import { useData } from '../contexts/DataContext';
 
+// Fix: Added missing 'GUEST' property to satisfy Record<UserRole, { label: string; color: string; bg: string }>
 const ROLE_CONFIG: Record<UserRole, { label: string; color: string; bg: string }> = {
   'ADMIN': { label: 'مدير نظام', color: 'text-purple-700', bg: 'bg-purple-50 border-purple-100' },
   'PR_MANAGER': { label: 'مدير علاقات عامة', color: 'text-blue-700', bg: 'bg-blue-50 border-blue-100' },
@@ -18,7 +20,8 @@ const ROLE_CONFIG: Record<UserRole, { label: string; color: string; bg: string }
   'TECHNICAL': { label: 'مهندس فني', color: 'text-emerald-700', bg: 'bg-emerald-50 border-emerald-100' },
   'FINANCE': { label: 'مالية', color: 'text-rose-700', bg: 'bg-rose-50 border-rose-100' },
   'PR_OFFICER': { label: 'موظف علاقات', color: 'text-indigo-700', bg: 'bg-indigo-50 border-indigo-100' },
-  'DEEDS_OFFICER': { label: 'موظف صكوك', color: 'text-amber-700', bg: 'bg-amber-50 border-amber-100' }
+  'DEEDS_OFFICER': { label: 'موظف صكوك', color: 'text-amber-700', bg: 'bg-amber-50 border-amber-100' },
+  'GUEST': { label: 'زائر', color: 'text-gray-600', bg: 'bg-gray-50 border-gray-100' }
 };
 
 const UserManagement: React.FC = () => {
