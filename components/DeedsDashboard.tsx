@@ -55,17 +55,17 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
         unit_number: '',
         old_deed_number: '',
         deed_date: '',
-        client_name: '', // customer_name
-        id_number: '',   // identity_number
-        mobile: '',      // customer_mobile
-        dob_hijri: '',   // birth_date
-        unit_value: '',  // unit_price
+        client_name: '', 
+        id_number: '',   
+        mobile: '',      
+        dob_hijri: '',   
+        unit_value: '',  
         tax_number: '',
         bank_name: '',
         contract_type: 'تمويل عقاري',
         new_deed_number: '',
         new_deed_date: '',
-        sakani_support_number: '', // support_contract_number
+        sakani_support_number: '', 
         status: 'جديد'
     });
 
@@ -162,7 +162,7 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
             if (error) throw error;
             setNewComment('');
             fetchComments(selectedDeed.id);
-            notificationService.send('PR_MANAGER', `💬 ملاحظة جديدة على إفراغ: ${selectedDeed.customer_name}`, '/deeds', currentUserName);
+            notificationService.send('PR_MANAGER', `💬 ملاحظة جديدة على إفراغ: ${selectedDeed.client_name}`, '/deeds', currentUserName);
         } catch (err: any) {
             alert("فشل إضافة التعليق: " + err.message);
         } finally { setIsCommentLoading(false); }
@@ -175,7 +175,7 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
             if (error) throw error;
             setSelectedDeed({ ...selectedDeed, status });
             fetchDeeds();
-            logActivity?.('تحديث حالة إفراغ', `${selectedDeed.customer_name} -> ${status}`, 'text-blue-500');
+            logActivity?.('تحديث حالة إفراغ', `${selectedDeed.client_name} -> ${status}`, 'text-blue-500');
         } catch (err: any) {
             alert("خطأ: " + err.message);
         }
@@ -187,45 +187,48 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
         try {
             const payload = {
                 region: newDeedForm.region,
+                city: newDeedForm.city,
                 project_name: newDeedForm.project_name,
                 plan_number: newDeedForm.plan_number,
                 unit_number: newDeedForm.unit_number,
                 old_deed_number: newDeedForm.old_deed_number,
-                // Sending exact string for Hijri support
                 deed_date: newDeedForm.deed_date || null,
-                customer_name: newDeedForm.client_name,
-                identity_number: newDeedForm.id_number,
-                customer_mobile: newDeedForm.mobile,
-                birth_date: newDeedForm.dob_hijri || null,
-                unit_price: parseFloat(newDeedForm.unit_value) || 0,
+                client_name: newDeedForm.client_name, // Mapping to strict client_name column
+                id_number: newDeedForm.id_number,     // Mapping to strict id_number column
+                mobile: newDeedForm.mobile,           // Mapping to strict mobile column
+                dob_hijri: newDeedForm.dob_hijri || null,
+                unit_value: parseFloat(newDeedForm.unit_value) || 0,
                 tax_number: newDeedForm.tax_number,
                 bank_name: newDeedForm.bank_name,
                 contract_type: newDeedForm.contract_type,
                 new_deed_number: newDeedForm.new_deed_number,
                 new_deed_date: newDeedForm.new_deed_date || null,
-                support_contract_number: newDeedForm.sakani_support_number,
+                sakani_support_number: newDeedForm.sakani_support_number,
                 status: 'جديد',
                 submitted_by: currentUserName
             };
 
+            console.log("Final Payload for DB:", payload);
+
             const { error } = await supabase.from('deeds_requests').insert([payload]);
             if (error) throw error;
             
-            logActivity?.('تسجيل إفراغ جديد', payload.customer_name, 'text-green-500');
-            notificationService.send('PR_MANAGER', `🆕 طلب إفراغ جديد للمستفيد: ${payload.customer_name}`, '/deeds', currentUserName);
+            logActivity?.('تسجيل إفراغ جديد', payload.client_name, 'text-green-500');
+            notificationService.send('PR_MANAGER', `🆕 طلب إفراغ جديد للمستفيد: ${payload.client_name}`, '/deeds', currentUserName);
 
             setIsRegModalOpen(false);
             fetchDeeds();
             refreshData();
         } catch (error: any) { 
+            console.error("DB Save Error:", error);
             alert("حدث خطأ أثناء الحفظ: " + error.message); 
         } finally { setIsSaving(false); }
     };
 
     const filteredDeeds = useMemo(() => {
         return (deeds || []).filter(d => 
-            d.customer_name?.includes(searchQuery) || 
-            d.identity_number?.includes(searchQuery) || 
+            d.client_name?.includes(searchQuery) || 
+            d.id_number?.includes(searchQuery) || 
             d.project_name?.includes(searchQuery)
         );
     }, [deeds, searchQuery]);
@@ -272,15 +275,15 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
                                 filteredDeeds.map((deed) => (
                                     <tr key={deed.id} className="hover:bg-gray-50 cursor-pointer transition-colors" onClick={() => handleOpenManage(deed)}>
                                         <td className="p-6">
-                                            <p className="font-bold text-[#1B2B48] text-sm">{deed.customer_name}</p>
-                                            <p className="text-[10px] text-gray-400 font-bold">{deed.identity_number}</p>
+                                            <p className="font-bold text-[#1B2B48] text-sm">{deed.client_name}</p>
+                                            <p className="text-[10px] text-gray-400 font-bold">{deed.id_number}</p>
                                         </td>
                                         <td className="p-6">
                                             <p className="text-sm font-bold text-[#1B2B48]">{deed.project_name}</p>
                                             <p className="text-[10px] text-gray-400 font-bold">وحدة: {deed.unit_number}</p>
                                         </td>
                                         <td className="p-6">
-                                            <p className="text-xs font-bold text-gray-600">{parseFloat(deed.unit_price || 0).toLocaleString()} ر.س</p>
+                                            <p className="text-xs font-bold text-gray-600">{parseFloat(deed.unit_value || 0).toLocaleString()} ر.س</p>
                                             <p className="text-[9px] text-gray-400">{deed.bank_name || '-'}</p>
                                         </td>
                                         <td className="p-6">
@@ -339,7 +342,6 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
                         <Field label="رقم الوحدة" value={newDeedForm.unit_number} onChange={(v: string) => setNewDeedForm({...newDeedForm, unit_number: v})} icon={<Building2 size={14}/>} />
                         <Field label="رقم الصك القديم" value={newDeedForm.old_deed_number} onChange={(v: string) => setNewDeedForm({...newDeedForm, old_deed_number: v})} icon={<FileText size={14}/>} />
                         
-                        {/* Modified Date Fields: Type Text with Placeholder for Hijri/Any String Support */}
                         <Field 
                             label="تاريخ الصك" 
                             value={newDeedForm.deed_date} 
@@ -383,10 +385,10 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
                 <Modal isOpen={isManageModalOpen} onClose={() => setIsManageModalOpen(false)} title="تدقيق ومتابعة طلب الإفراغ">
                     <div className="space-y-6 text-right overflow-y-auto max-h-[85vh] p-1 custom-scrollbar">
                         <div className="bg-gray-50 p-6 rounded-[30px] border border-gray-100 grid grid-cols-2 gap-6 shadow-inner">
-                            <Detail label="المستفيد" value={selectedDeed.customer_name} icon={<UserIcon size={14}/>} />
-                            <Detail label="الهوية" value={selectedDeed.identity_number} icon={<FileText size={14}/>} />
+                            <Detail label="المستفيد" value={selectedDeed.client_name} icon={<UserIcon size={14}/>} />
+                            <Detail label="الهوية" value={selectedDeed.id_number} icon={<FileText size={14}/>} />
                             <Detail label="المشروع" value={selectedDeed.project_name} icon={<Building2 size={14}/>} />
-                            <Detail label="القيمة" value={`${parseFloat(selectedDeed.unit_price || 0).toLocaleString()} ر.س`} icon={<CreditCard size={14}/>} />
+                            <Detail label="القيمة" value={`${parseFloat(selectedDeed.unit_value || 0).toLocaleString()} ر.س`} icon={<CreditCard size={14}/>} />
                             <Detail label="البنك" value={selectedDeed.bank_name} icon={<Landmark size={14}/>} />
                             <Detail label="رقم الصك الجديد" value={selectedDeed.new_deed_number} icon={<FileText size={14}/>} />
                         </div>
