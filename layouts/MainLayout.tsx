@@ -7,7 +7,6 @@ import {
 } from 'lucide-react';
 import { useData } from '../contexts/DataContext';
 import { DAR_LOGO } from '../constants';
-import AIAssistant from '../components/AIAssistant';
 import NotificationBell from '../components/NotificationBell';
 
 interface MainLayoutProps {
@@ -17,7 +16,7 @@ interface MainLayoutProps {
 const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { currentUser, logout, refreshData, canAccess, projects, technicalRequests, clearanceRequests, projectWorks } = useData();
+  const { currentUser, logout, refreshData } = useData();
 
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => 
     localStorage.getItem('dar_sidebar_v2_collapsed') === 'true'
@@ -26,7 +25,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   if (!currentUser) return <>{children}</>;
 
   const navItems = [
-    { label: 'لوحة التحكم', icon: <LayoutDashboard size={20} />, path: '/', roles: ['ADMIN', 'PR_MANAGER', 'PR_OFFICER'] },
+    { label: 'لوحة التحكم', icon: <LayoutDashboard size={20} />, path: '/dashboard', roles: ['ADMIN', 'PR_MANAGER', 'PR_OFFICER', 'TECHNICAL', 'DEEDS_OFFICER', 'CONVEYANCE'] },
     { label: 'المشاريع', icon: <Building2 size={20} />, path: '/projects', roles: ['ADMIN', 'PR_MANAGER', 'PR_OFFICER'] },
     { label: 'الطلبات الفنية', icon: <Zap size={20} />, path: '/technical', roles: ['ADMIN', 'PR_MANAGER', 'TECHNICAL', 'PR_OFFICER'] },
     { label: 'سجل الإفراغ', icon: <FileStack size={20} />, path: '/deeds', roles: ['ADMIN', 'PR_MANAGER', 'DEEDS_OFFICER', 'CONVEYANCE'] },
@@ -52,7 +51,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
 
         <nav className="flex-1 px-4 py-8 space-y-2 overflow-y-auto">
           {filteredNav.map(item => {
-            const isActive = location.pathname === item.path;
+            const isActive = location.pathname === item.path || (item.path === '/dashboard' && location.pathname === '/');
             return (
               <button 
                 key={item.path} 

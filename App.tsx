@@ -23,6 +23,7 @@ import DeedsDashboard from './components/DeedsDashboard';
 import ProjectDetailView from './components/ProjectDetailView';
 import UsersModule from './components/UsersModule';
 import AIAssistant from './components/AIAssistant';
+import AppMapDashboard from './components/AppMapDashboard';
 
 interface ErrorBoundaryProps {
   children?: React.ReactNode;
@@ -274,7 +275,7 @@ const AppContent: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { 
-    currentUser, isAuthLoading, login,
+    currentUser, isAuthLoading, login, logout,
     projects = [], technicalRequests = [], clearanceRequests = [], projectWorks = [], appUsers = [], activities = [], refreshData, logActivity 
   } = useData();
 
@@ -362,11 +363,9 @@ const AppContent: React.FC = () => {
         {/* التوجيه الأساسي عند الدخول للرابط الجذري */}
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
 
-        {/* مسار لوحة التحكم الرئيسية */}
+        {/* مسار لوحة التحكم الرئيسية - خريطة النظام */}
         <Route path="/dashboard" element={
-          (role === 'ADMIN' || role === 'PR_MANAGER' || role === 'PR_OFFICER') 
-            ? <DeedsDashboard currentUserRole={currentUser.role} currentUserName={currentUser.name} logActivity={logActivity} />
-            : <DashboardModule stats={dashboardStats} projects={projects} techRequests={technicalRequests} projectWorks={projectWorks} clearanceRequests={clearanceRequests} activities={activities} currentUser={currentUser} users={appUsers} onQuickAction={() => {}} onUpdateStatus={() => {}} />
+          <AppMapDashboard currentUser={currentUser} onLogout={logout} />
         } />
         
         {/* مسارات المشاريع */}

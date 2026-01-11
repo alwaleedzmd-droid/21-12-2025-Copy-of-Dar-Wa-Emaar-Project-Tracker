@@ -2,8 +2,6 @@
 import React from 'react';
 import { 
   FileStack, 
-  PlusCircle, 
-  MessageSquare, 
   LogIn, 
   BarChart3, 
   Users, 
@@ -11,20 +9,20 @@ import {
   ArrowLeft,
   ShieldAlert,
   ChevronLeft,
-  // Added missing Building2 and Zap icon imports
   Building2,
   Zap
 } from 'lucide-react';
-import { User, ViewState } from '../types';
+import { useNavigate } from 'react-router-dom';
+import { User } from '../types';
 
 interface AppMapDashboardProps {
   currentUser: User | null;
-  setView: (view: ViewState) => void;
   onLogout: () => void;
 }
 
-const AppMapDashboard: React.FC<AppMapDashboardProps> = ({ currentUser, setView, onLogout }) => {
-  // Restored access for ADMIN and PR_MANAGER
+const AppMapDashboard: React.FC<AppMapDashboardProps> = ({ currentUser, onLogout }) => {
+  const navigate = useNavigate();
+
   if (!currentUser || !['ADMIN', 'PR_MANAGER'].includes(currentUser.role)) {
     return (
       <div className="min-h-[60vh] flex flex-col items-center justify-center p-12 text-center animate-in fade-in duration-500">
@@ -36,7 +34,7 @@ const AppMapDashboard: React.FC<AppMapDashboardProps> = ({ currentUser, setView,
           عذراً، هذه الصفحة مخصصة حصرياً لإدارة العلاقات العامة ومدير النظام. لا تملك الصلاحيات الكافية لعرض خريطة التطبيق.
         </p>
         <button 
-          onClick={() => setView('DASHBOARD')}
+          onClick={() => navigate('/dashboard')}
           className="mt-8 flex items-center gap-2 px-8 py-4 bg-[#1B2B48] text-white rounded-2xl font-black transition-all hover:scale-105 active:scale-95 shadow-xl"
         >
           <ArrowLeft size={20} /> العودة للرئيسية
@@ -47,40 +45,38 @@ const AppMapDashboard: React.FC<AppMapDashboardProps> = ({ currentUser, setView,
 
   const mapItems = [
     {
+      title: 'لوحة الإحصائيات',
+      description: 'تحليل بياني شامل لأداء المشاريع ونسب الإنجاز الفنية.',
+      icon: <BarChart3 className="text-emerald-600" size={32} />,
+      action: () => navigate('/dashboard'),
+      color: 'bg-emerald-50'
+    },
+    {
       title: 'إدارة المشاريع',
       description: 'استعراض وإدارة كافة المشاريع الإنشائية وتفاصيلها الفنية والهندسية.',
-      // Fixed: Using imported Building2
       icon: <Building2 className="text-blue-600" size={32} />,
-      action: () => setView('PROJECTS_LIST'),
+      action: () => navigate('/projects'),
       color: 'bg-blue-50'
     },
     {
       title: 'سجل الإفراغات العام',
       description: 'استعراض كافة طلبات الإفراغ وإدارة الحالة القانونية للصفقات.',
       icon: <FileStack className="text-orange-500" size={32} />,
-      action: () => setView('CONVEYANCE_SERVICES'),
+      action: () => navigate('/deeds'),
       color: 'bg-orange-50'
     },
     {
       title: 'الطلبات الفنية',
       description: 'متابعة المراجعات الحكومية والطلبات الفنية مع الجهات ذات العلاقة.',
-      // Fixed: Using imported Zap
       icon: <Zap className="text-indigo-600" size={32} />,
-      action: () => setView('TECHNICAL_SERVICES'),
+      action: () => navigate('/technical'),
       color: 'bg-indigo-50'
-    },
-    {
-      title: 'لوحة الإحصائيات',
-      description: 'تحليل بياني شامل لأداء المشاريع ونسب الإنجاز الفنية.',
-      icon: <BarChart3 className="text-emerald-600" size={32} />,
-      action: () => setView('DASHBOARD'),
-      color: 'bg-emerald-50'
     },
     {
       title: 'إدارة المستخدمين',
       description: 'استعراض صلاحيات فريق العمل وتوزيع الأدوار (عرض فقط).',
       icon: <Users className="text-rose-600" size={32} />,
-      action: () => setView('USERS'),
+      action: () => navigate('/users'),
       color: 'bg-rose-50'
     },
     {
