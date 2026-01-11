@@ -30,7 +30,6 @@ const UserManagement: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [selectedUser, setSelectedUser] = useState<any>(null);
 
   const [userForm, setUserForm] = useState({
     id: '',
@@ -111,7 +110,7 @@ const UserManagement: React.FC = () => {
     setIsSaving(true);
     try {
       if (userForm.id) {
-        // Update profile
+        // Update existing profile metadata
         const { error } = await supabase.from('profiles').update({
           name: userForm.name,
           role: userForm.role,
@@ -120,22 +119,30 @@ const UserManagement: React.FC = () => {
         if (error) throw error;
         logActivity?.('تحديث بيانات مستخدم', userForm.name, 'text-blue-500');
       } else {
-        // Create profile (auth is typically handled separately in Supabase, this is the profiles table part)
-        const { error } = await supabase.from('profiles').insert([{
-          name: userForm.name,
+        // Create NEW user using RPC (Handles Auth + Profile record)
+        if (!userForm.password || userForm.password.length < 6) {
+          throw new Error("كلمة المرور يجب أن لا تقل عن 6 خانات");
+        }
+
+        const { data, error } = await supabase.rpc('create_new_user', {
           email: userForm.email,
-          role: userForm.role,
-          department: userForm.department
-        }]);
+          password: userForm.password,
+          full_name: userForm.name,
+          user_role: userForm.role
+        });
+
         if (error) throw error;
         logActivity?.('إضافة مستخدم جديد', userForm.name, 'text-green-500');
       }
+      
       setIsModalOpen(false);
-      fetchProfiles();
-      refreshData();
+      await fetchProfiles();
+      await refreshData();
     } catch (err: any) {
-      alert(err.message);
+      console.error("Submission error:", err);
+      alert("فشل العملية: " + (err.message || "خطأ غير معروف"));
     } finally {
+      // CRITICAL: Force stop loader no matter what happens
       setIsSaving(false);
     }
   };
@@ -232,8 +239,8 @@ const UserManagement: React.FC = () => {
                     </td>
                     <td className="p-6 text-left">
                       <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button onClick={() => handleOpenEdit(user)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg"><Edit3 size={18}/></button>
-                        <button onClick={() => handleDelete(user.id)} className="p-2 text-red-500 hover:bg-red-50 rounded-lg"><Trash2 size={18}/></button>
+                        <button onClick={() => handleOpenEdit(user)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg" title="تعديل"><Edit3 size={18}/></button>
+                        <button onClick={() => handleDelete(user.id)} className="p-2 text-red-500 hover:bg-red-50 rounded-lg" title="حذف"><Trash2 size={18}/></button>
                       </div>
                     </td>
                   </tr>
@@ -254,6 +261,20 @@ const UserManagement: React.FC = () => {
             <label className="text-xs font-bold text-gray-400 block mb-1">البريد الإلكتروني</label>
             <input className="w-full p-4 bg-gray-50 border rounded-2xl font-bold outline-none focus:border-[#E95D22]" value={userForm.email} onChange={e => setUserForm({...userForm, email: e.target.value})} disabled={!!userForm.id} required />
           </div>
+          
+          {!userForm.id && (
+            <div>
+              <label className="text-xs font-bold text-gray-400 block mb-1">كلمة المرور (6 خانات على الأقل)</label>
+              <input 
+                type="password" 
+                className="w-full p-4 bg-gray-50 border rounded-2xl font-bold outline-none focus:border-[#E95D22]" 
+                value={userForm.password} 
+                onChange={e => setUserForm({...userForm, password: e.target.value})} 
+                required={!userForm.id} 
+              />
+            </div>
+          )}
+
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="text-xs font-bold text-gray-400 block mb-1">الدور الوظيفي</label>
@@ -268,8 +289,9 @@ const UserManagement: React.FC = () => {
               <input className="w-full p-4 bg-gray-50 border rounded-2xl font-bold outline-none focus:border-[#E95D22]" value={userForm.department} onChange={e => setUserForm({...userForm, department: e.target.value})} />
             </div>
           </div>
-          <button type="submit" disabled={isSaving} className="w-full bg-[#1B2B48] text-white py-4 rounded-2xl font-black mt-4 shadow-lg hover:brightness-110 active:scale-95 transition-all">
-            {isSaving ? <Loader2 className="animate-spin mx-auto" /> : (userForm.id ? 'تحديث البيانات' : 'حفظ البيانات')}
+          
+          <button type="submit" disabled={isSaving} className="w-full bg-[#1B2B48] text-white py-4 rounded-2xl font-black mt-4 shadow-lg hover:brightness-110 active:scale-95 transition-all flex items-center justify-center gap-2">
+            {isSaving ? <Loader2 className="animate-spin" size={20} /> : (userForm.id ? 'تحديث البيانات' : 'حفظ البيانات وإنشاء الحساب')}
           </button>
         </form>
       </Modal>
