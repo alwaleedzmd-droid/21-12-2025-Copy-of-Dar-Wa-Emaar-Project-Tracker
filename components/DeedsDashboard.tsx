@@ -113,61 +113,76 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
         } finally { setIsLoading(false); }
     };
 
+    /**
+     * FIX: Auto-fill Client Data
+     * Refactored to query 'client_archive' table and handle column mapping
+     */
     const fetchClientDetails = async (id: string) => {
         if (!id || id.length < 10) return;
         setIsAutoFilling(true);
+        setAutoFillSuccess(false);
+
         try {
-            console.log("Searching for client with ID:", id);
+            console.log("🔍 Triggering Auto-fill for Identity:", id);
             
-            // محاولة البحث في جدول العملاء
+            // 1. البحث في جدول أرشيف العملاء (Correct Table Name)
             const { data, error } = await supabase
-                .from('clients')
+                .from('client_archive')
                 .select('*')
-                .eq('id_number', id)
+                .eq('id_number', id) // Assuming 'id_number' is the primary key or unique identifier in client_archive
                 .maybeSingle();
 
-            if (error) console.warn("Supabase check 'clients' table:", error.message);
+            if (error) {
+                console.warn("⚠️ Supabase 'client_archive' Query Error:", error.message);
+            }
 
             if (data) {
-                console.log("Client found in 'clients' table:", data);
+                console.log("✅ Fetched Client Data from 'client_archive':", data);
+                
                 setNewDeedForm((prev: any) => ({
                     ...prev,
-                    client_name: data.name || data.client_name || prev.client_name,
-                    mobile: data.mobile || prev.mobile,
+                    // Mapping DB columns correctly based on common naming conventions
+                    client_name: data.full_name || data.name || data.client_name || prev.client_name,
+                    mobile: data.mobile_number || data.phone || data.mobile || prev.mobile,
                     dob_hijri: data.dob_hijri || prev.dob_hijri,
-                    tax_number: data.tax_number || prev.tax_number
+                    tax_number: data.tax_number || prev.tax_number,
+                    region: data.region || prev.region,
+                    city: data.city || prev.city
                 }));
+                
                 setAutoFillSuccess(true);
                 setTimeout(() => setAutoFillSuccess(false), 3000);
                 return;
             }
 
-            // إذا لم يوجد في جدول العملاء، ابحث في تاريخ الإفراغات
-            console.log("Searching in 'deeds_requests' history...");
+            // 2. BACKUP: البحث في تاريخ الإفراغات إذا لم يوجد في الأرشيف
+            console.log("⏳ Client not in archive, searching deeds history...");
             const { data: histData, error: histError } = await supabase
                 .from('deeds_requests')
-                .select('client_name, mobile, dob_hijri, tax_number')
+                .select('client_name, mobile, dob_hijri, tax_number, region, city')
                 .eq('id_number', id)
                 .order('created_at', { ascending: false })
                 .limit(1)
                 .maybeSingle();
 
             if (histData && !histError) {
-                console.log("Client found in history:", histData);
+                console.log("✅ Client data recovered from historical deed records:", histData);
                 setNewDeedForm((prev: any) => ({
                     ...prev,
                     client_name: histData.client_name || prev.client_name,
                     mobile: histData.mobile || prev.mobile,
                     dob_hijri: histData.dob_hijri || prev.dob_hijri,
-                    tax_number: histData.tax_number || prev.tax_number
+                    tax_number: histData.tax_number || prev.tax_number,
+                    region: histData.region || prev.region,
+                    city: histData.city || prev.city
                 }));
                 setAutoFillSuccess(true);
                 setTimeout(() => setAutoFillSuccess(false), 3000);
             } else {
-                console.log("No historical data found for this ID.");
+                console.log("❌ No data found for this Identity Number in archive or history.");
             }
         } catch (err) {
-            console.error("Auto-fill client details failed:", err);
+            console.error("🔥 Critical fetch error in fetchClientDetails:", err);
         } finally {
             setIsAutoFilling(false);
         }
@@ -318,8 +333,8 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
                         <div className="flex items-center gap-3">
                             <Sparkles className="text-[#E95D22]" size={20} />
                             <div>
-                                <p className="text-xs font-black text-[#1B2B48]">خاصية الإكمال التلقائي</p>
-                                <p className="text-[10px] text-gray-500 font-bold">أدخل رقم الهوية لجلب بيانات العميل المسجلة سابقاً</p>
+                                <p className="text-xs font-black text-[#1B2B48]">خاصية الإكمال التلقائي الذكية</p>
+                                <p className="text-[10px] text-gray-500 font-bold">أدخل رقم الهوية لجلب البيانات من الأرشيف آلياً</p>
                             </div>
                         </div>
                         {isAutoFilling && <Loader2 size={16} className="animate-spin text-[#E95D22]" />}
