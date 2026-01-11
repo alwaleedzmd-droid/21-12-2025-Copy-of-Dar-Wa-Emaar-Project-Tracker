@@ -5,10 +5,10 @@ import {
   AlertTriangle, Loader2, Plus, 
   CheckCircle2, Clock, Info, Lock,
   ChevronLeft, ShieldAlert,
-  MessageSquare, Send 
+  MessageSquare, Send, ArrowLeft
 } from 'lucide-react';
 import { supabase } from './supabaseClient';
-import { ProjectWork, UserRole } from './types';
+import { ProjectWork, UserRole, User } from './types';
 import { DAR_LOGO } from './constants';
 import Modal from './components/Modal';
 import { useData } from './contexts/DataContext';
@@ -21,9 +21,41 @@ import TechnicalModule from './components/TechnicalModule';
 import ProjectsModule from './components/ProjectsModule';
 import DeedsDashboard from './components/DeedsDashboard';
 import ProjectDetailView from './components/ProjectDetailView';
-import UsersModule from './components/UsersModule';
+import UserManagement from './components/UserManagement'; // Updated import
 import AIAssistant from './components/AIAssistant';
 import AppMapDashboard from './components/AppMapDashboard';
+
+interface ProtectedRouteProps {
+  children: React.ReactNode;
+  allowedRoles: UserRole[];
+  currentUser: User | null;
+}
+
+const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowedRoles, currentUser }) => {
+  if (!currentUser) return <Navigate to="/" replace />;
+  
+  if (!allowedRoles.includes(currentUser.role)) {
+    return (
+      <div className="min-h-[60vh] flex flex-col items-center justify-center p-12 text-center animate-in fade-in duration-500 font-cairo">
+        <div className="bg-red-50 p-6 rounded-3xl text-red-500 mb-6 border border-red-100 shadow-sm">
+          <ShieldAlert size={64} />
+        </div>
+        <h2 className="text-3xl font-black text-[#1B2B48] mb-4">403 - الوصول مرفوض</h2>
+        <p className="text-gray-500 font-bold max-w-md leading-relaxed">
+          عذراً، لا تملك الصلاحيات الكافية لعرض هذه الصفحة. يرجى مراجعة مدير النظام إذا كنت تعتقد أن هذا خطأ.
+        </p>
+        <button 
+          onClick={() => window.history.back()}
+          className="mt-8 flex items-center gap-2 px-8 py-4 bg-[#1B2B48] text-white rounded-2xl font-black transition-all hover:scale-105 active:scale-95 shadow-xl"
+        >
+          <ArrowLeft size={20} /> العودة للخلف
+        </button>
+      </div>
+    );
+  }
+
+  return <>{children}</>;
+};
 
 interface ErrorBoundaryProps {
   children?: React.ReactNode;
@@ -283,18 +315,22 @@ const AppContent: React.FC = () => {
   const [loginError, setLoginError] = useState<string | null>(null);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
 
-  const dashboardStats = useMemo(() => {
-    const allTasks = [...(projectWorks || []), ...(technicalRequests || []), ...(clearanceRequests || [])];
-    const completed = allTasks.filter(item => item?.status === 'منجز' || item?.status === 'completed' || item?.status === 'مكتمل').length;
-    const totalTasks = allTasks.length;
-    return {
-        completedCount: completed,
-        pendingCount: totalTasks - completed,
-        totalDeeds: clearanceRequests?.length || 0,
-        activeProjects: projects?.length || 0,
-        progressPercent: totalTasks > 0 ? Math.round((completed / totalTasks) * 100) : 0
-    };
-  }, [projectWorks, technicalRequests, clearanceRequests, projects]);
+  // منطق التوجيه الافتراضي بناءً على الدور
+  const getDefaultPath = (role: UserRole) => {
+    switch (role) {
+      case 'ADMIN':
+      case 'PR_MANAGER':
+      case 'PR_OFFICER':
+        return '/dashboard';
+      case 'TECHNICAL':
+        return '/technical';
+      case 'CONVEYANCE':
+      case 'DEEDS_OFFICER':
+        return '/deeds';
+      default:
+        return '/dashboard';
+    }
+  };
 
   const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -303,6 +339,8 @@ const AppContent: React.FC = () => {
     
     try {
       await login(loginData.email, loginData.password);
+      // بعد تسجيل الدخول، سيقوم DataProvider بتحديث currentUser
+      // وسيتم التعامل مع التوجيه في useEffect أدناه
     } catch (err: any) {
       if (err.message?.includes('Invalid login credentials')) {
         setLoginError("خطأ في البريد الإلكتروني أو كلمة المرور");
@@ -313,6 +351,13 @@ const AppContent: React.FC = () => {
       setIsLoggingIn(false);
     }
   };
+
+  // معالجة التوجيه عند تغيير المستخدم (تسجيل الدخول)
+  useEffect(() => {
+    if (currentUser && location.pathname === '/') {
+      navigate(getDefaultPath(currentUser.role), { replace: true });
+    }
+  }, [currentUser, navigate, location.pathname]);
 
   if (isAuthLoading) return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 flex-col gap-4">
@@ -355,32 +400,54 @@ const AppContent: React.FC = () => {
     </div>
   );
 
-  const role = currentUser.role;
-
   return (
     <MainLayout>
       <Routes>
-        {/* التوجيه الأساسي عند الدخول للرابط الجذري */}
-        <Route path="/" element={<Navigate to="/dashboard" replace />} />
+        <Route path="/" element={<Navigate to={getDefaultPath(currentUser.role)} replace />} />
 
-        {/* مسار لوحة التحكم الرئيسية - خريطة النظام */}
+        {/* مسار لوحة التحكم الرئيسية */}
         <Route path="/dashboard" element={
-          <AppMapDashboard currentUser={currentUser} onLogout={logout} />
+          <ProtectedRoute allowedRoles={['ADMIN', 'PR_MANAGER', 'PR_OFFICER']} currentUser={currentUser}>
+            <AppMapDashboard currentUser={currentUser} onLogout={logout} />
+          </ProtectedRoute>
         } />
         
         {/* مسارات المشاريع */}
-        <Route path="/projects" element={(role === 'ADMIN' || role === 'PR_MANAGER' || role === 'PR_OFFICER') ? <ProjectsModule projects={projects} stats={{ projects: projects.length, techRequests: technicalRequests.length, clearRequests: clearanceRequests.length }} currentUser={currentUser} onProjectClick={(p) => navigate(`/projects/${p?.id}`)} onRefresh={refreshData} /> : <Navigate to="/dashboard" replace />} />
-        <Route path="/projects/:id" element={(role === 'ADMIN' || role === 'PR_MANAGER' || role === 'PR_OFFICER') ? <ProjectDetailWrapper projects={projects} onRefresh={refreshData} currentUser={currentUser} /> : <Navigate to="/dashboard" replace />} />
+        <Route path="/projects" element={
+          <ProtectedRoute allowedRoles={['ADMIN', 'PR_MANAGER', 'PR_OFFICER']} currentUser={currentUser}>
+            <ProjectsModule projects={projects} stats={{ projects: projects.length, techRequests: technicalRequests.length, clearRequests: clearanceRequests.length }} currentUser={currentUser} onProjectClick={(p) => navigate(`/projects/${p?.id}`)} onRefresh={refreshData} />
+          </ProtectedRoute>
+        } />
+
+        <Route path="/projects/:id" element={
+          <ProtectedRoute allowedRoles={['ADMIN', 'PR_MANAGER', 'PR_OFFICER']} currentUser={currentUser}>
+            <ProjectDetailWrapper projects={projects} onRefresh={refreshData} currentUser={currentUser} />
+          </ProtectedRoute>
+        } />
         
-        {/* مسارات الخدمات الفنية والإفراغات */}
-        <Route path="/technical" element={(role === 'ADMIN' || role === 'PR_MANAGER' || role === 'TECHNICAL' || role === 'PR_OFFICER') ? <TechnicalModule requests={technicalRequests} projects={projects} currentUser={currentUser} usersList={appUsers} onRefresh={refreshData} logActivity={logActivity} /> : <Navigate to="/dashboard" replace />} />
-        <Route path="/deeds" element={(role === 'ADMIN' || role === 'PR_MANAGER' || role === 'DEEDS_OFFICER' || role === 'CONVEYANCE') ? <DeedsDashboard currentUserRole={currentUser.role} currentUserName={currentUser.name} logActivity={logActivity} /> : <Navigate to="/dashboard" replace />} />
+        {/* مسارات الخدمات الفنية */}
+        <Route path="/technical" element={
+          <ProtectedRoute allowedRoles={['ADMIN', 'TECHNICAL', 'PR_OFFICER', 'PR_MANAGER']} currentUser={currentUser}>
+            <TechnicalModule requests={technicalRequests} projects={projects} currentUser={currentUser} usersList={appUsers} onRefresh={refreshData} logActivity={logActivity} />
+          </ProtectedRoute>
+        } />
+
+        {/* مسارات الإفراغات */}
+        <Route path="/deeds" element={
+          <ProtectedRoute allowedRoles={['ADMIN', 'CONVEYANCE', 'DEEDS_OFFICER', 'PR_MANAGER']} currentUser={currentUser}>
+            <DeedsDashboard currentUserRole={currentUser.role} currentUserName={currentUser.name} logActivity={logActivity} />
+          </ProtectedRoute>
+        } />
         
         {/* إدارة المستخدمين */}
-        <Route path="/users" element={ (role === 'ADMIN') ? <UsersModule /> : <Navigate to="/dashboard" replace /> } />
+        <Route path="/users" element={ 
+          <ProtectedRoute allowedRoles={['ADMIN']} currentUser={currentUser}>
+            <UserManagement />
+          </ProtectedRoute>
+        } />
         
-        {/* أي مسار غير مطابق يتم تحويله للوحة التحكم */}
-        <Route path="*" element={<Navigate to="/dashboard" replace />} />
+        {/* أي مسار غير مطابق يتم تحويله للرئيسية المسموحة */}
+        <Route path="*" element={<Navigate to={getDefaultPath(currentUser.role)} replace />} />
       </Routes>
       
       {['ADMIN', 'PR_MANAGER'].includes(currentUser?.role || '') && (
