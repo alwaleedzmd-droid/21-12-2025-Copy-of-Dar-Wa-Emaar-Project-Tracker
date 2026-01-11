@@ -10,10 +10,12 @@ import {
   Landmark, FileText, MessageSquare, Send, 
   Trash2, Loader2, XCircle, Activity, Lock,
   LayoutGrid, Scale, Paperclip, Info,
-  TrendingUp, BarChart, Check
+  TrendingUp, BarChart, Check, FileSpreadsheet
 } from 'lucide-react';
 import { ActivityLog, useData } from '../contexts/DataContext';
+import { notificationService } from '../services/notificationService';
 import Modal from './Modal';
+import { parseClearanceExcel } from '../utils/excelHandler';
 
 const STATUS_OPTIONS = [
   { value: 'جديد', label: 'جديد', color: 'bg-indigo-50 text-indigo-700 border-indigo-100', icon: <Plus size={16}/> },
@@ -43,115 +45,54 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
     const [isSaving, setIsSaving] = useState(false);
     const [isCommentLoading, setIsCommentLoading] = useState(false);
     
-    // حالات الإكمال التلقائي الذكي
     const [isAutoFilling, setIsAutoFilling] = useState(false);
     const [autoFillSuccess, setAutoFillSuccess] = useState(false);
+    const [isImporting, setIsImporting] = useState(false);
 
+    const fileInputRef = useRef<HTMLInputElement>(null);
     const commentsEndRef = useRef<HTMLDivElement>(null);
 
-    // نموذج الـ 18 حقلًا للتدقيق الكامل
     const [newDeedForm, setNewDeedForm] = useState<any>({
+        region: 'الرياض',
+        city: 'الرياض',
         project_name: filteredProjectName || '',
+        plan_number: '',
+        unit_number: '',
+        old_deed_number: '',
+        deed_date: '',
         client_name: '',
         id_number: '',
         mobile: '',
-        unit_number: '',
-        block_number: '',
-        plot_number: '',
-        total_area: '',
-        sale_price: '',
-        payment_method: 'تمويل عقاري',
+        dob_hijri: '',
+        unit_value: '',
+        tax_number: '',
         bank_name: '',
-        financing_status: 'قيد المراجعة',
-        contract_date: '',
-        birth_date: '',
+        contract_type: 'تمويل عقاري',
+        new_deed_number: '',
+        new_deed_date: '',
         sakani_support_number: '',
-        deed_number: '',
-        attachment_url: '',
-        notes: '',
         status: 'جديد'
     });
 
     const isAuthorizedToManage = ['ADMIN', 'PR_MANAGER', 'DEEDS_OFFICER', 'CONVEYANCE'].includes(currentUserRole || '');
 
-    // دالة جلب بيانات العميل من الأرشيف (Smart Auto-Fill) - Implementation of the final request
-    const fetchClientData = async (idNum: string) => {
-        if (idNum.length !== 10) return;
-        
-        setIsAutoFilling(true);
-        setAutoFillSuccess(false);
-        
-        try {
-            // تنفيذ الاستعلام من جدول client_archive
-            const { data, error } = await supabase
-                .from('client_archive')
-                .select('*')
-                .eq('id_number', idNum)
-                .maybeSingle();
-
-            if (error) throw error;
-
-            if (data) {
-                // منطق ربط اسم المشروع الذكي
-                let matchedProjectName = newDeedForm.project_name;
-                if (!matchedProjectName && data.project_name) {
-                    const matchedProj = projects.find(p => {
-                        const projName = (p.name || p.title || "").toLowerCase();
-                        const archProjName = (data.project_name || "").toLowerCase();
-                        // مطابقة واسعة النطاق
-                        return projName.includes(archProjName) || archProjName.includes(projName);
-                    });
-                    if (matchedProj) {
-                        matchedProjectName = matchedProj.name || matchedProj.title;
-                    }
-                }
-
-                // تحديث النموذج بالبيانات المستخرجة (Field Mapping Strict)
-                // في حال كان الحقل في الأرشيف فارغاً، يترك فارغاً في النموذج
-                setNewDeedForm((prev: any) => ({
-                    ...prev,
-                    client_name: data.customer_name || "",
-                    mobile: data.mobile_number || "",
-                    unit_number: data.unit_number || "",
-                    block_number: data.block_number || "",
-                    plot_number: data.plot_number || "",
-                    total_area: data.total_area || "",
-                    sale_price: data.sale_price || "",
-                    bank_name: data.bank_name || "",
-                    deed_number: data.deed_number || "",
-                    birth_date: data.birth_date || "",
-                    sakani_support_number: data.housing_contract_number || "",
-                    project_name: matchedProjectName
-                }));
-                
-                setAutoFillSuccess(true);
-                // إخفاء علامة الصح بعد فترة قصيرة
-                setTimeout(() => setAutoFillSuccess(false), 2500);
-            }
-        } catch (err) {
-            console.error("Auto-fill error:", err);
-        } finally {
-            setIsAutoFilling(false);
-        }
+    const handleImportExcel = async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      setIsImporting(true);
+      try {
+        const data = await parseClearanceExcel(file, null, { name: currentUserName } as any);
+        const { error } = await supabase.from('deeds_requests').insert(data);
+        if (error) throw error;
+        alert(`تم استيراد ${data.length} سجل بنجاح ✅`);
+        fetchDeeds();
+      } catch (err: any) {
+        alert("خطأ أثناء الاستيراد: " + err.message);
+      } finally {
+        setIsImporting(false);
+        if (fileInputRef.current) fileInputRef.current.value = '';
+      }
     };
-
-    const handleIdNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        // تنظيف المدخلات للسماح بالأرقام فقط
-        const val = e.target.value.replace(/\D/g, '').slice(0, 10);
-        setNewDeedForm({...newDeedForm, id_number: val});
-        
-        // تفعيل الجلب التلقائي عند اكتمال 10 أرقام
-        if (val.length === 10) {
-            fetchClientData(val);
-        }
-    };
-
-    const deedStats = useMemo(() => {
-        const total = deeds.length;
-        const completed = deeds.filter(d => d.status === 'مكتمل' || d.status === 'منجز').length;
-        const pending = total - completed;
-        return { total, completed, pending };
-    }, [deeds]);
 
     const fetchDeeds = async () => {
         setIsLoading(true);
@@ -192,9 +133,7 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
     useEffect(() => {
       if (location.state?.openId && deeds.length > 0) {
         const targetDeed = deeds.find(d => d.id === location.state.openId);
-        if (targetDeed) {
-          handleOpenManage(targetDeed);
-        }
+        if (targetDeed) handleOpenManage(targetDeed);
       }
     }, [location.state, deeds]);
 
@@ -206,63 +145,27 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
 
     const handleUpdateStatus = async (status: string) => {
         if (!selectedDeed || !isAuthorizedToManage) return;
-        if (!window.confirm(`تغيير حالة طلب ${selectedDeed.client_name} إلى ${status}؟`)) return;
-        
         try {
-            const { error } = await supabase
-                .from('deeds_requests')
-                .update({ status })
-                .eq('id', selectedDeed.id);
+            const { error } = await supabase.from('deeds_requests').update({ status }).eq('id', selectedDeed.id);
             if (error) throw error;
-            
             setSelectedDeed({ ...selectedDeed, status });
-            logActivity?.('تحديث حالة صك', `${selectedDeed.client_name} -> ${status}`, 'text-blue-500');
             fetchDeeds();
-            refreshData();
         } catch (err: any) {
-            alert("خطأ في التحديث: " + err.message);
+            alert("خطأ: " + err.message);
         }
     };
 
-    const handleAddComment = async () => {
-        if (!newComment.trim() || !selectedDeed) return;
-        setIsCommentLoading(true);
-        try {
-            const { error } = await supabase
-                .from('deed_comments')
-                .insert([{
-                    deed_id: selectedDeed.id,
-                    user_name: currentUserName || 'مستخدم',
-                    content: newComment.trim()
-                }]);
-            if (error) throw error;
-            setNewComment('');
-            fetchComments(selectedDeed.id);
-        } catch (err: any) {
-            alert("فشل إضافة التعليق: " + err.message);
-        } finally { setIsCommentLoading(false); }
-    };
-
     const handleSaveNewDeed = async () => {
-        if (!newDeedForm.client_name || !newDeedForm.id_number) return alert("يرجى إكمال البيانات الأساسية (المستفيد والهوية)");
+        if (!newDeedForm.client_name || !newDeedForm.id_number) return alert("الاسم والهوية مطلوبان");
         setIsSaving(true);
         try {
-            const payload = {
-                ...newDeedForm,
-                submitted_by: currentUserName,
-                created_at: new Date().toISOString()
-            };
+            const payload = { ...newDeedForm, submitted_by: currentUserName };
             const { error } = await supabase.from('deeds_requests').insert([payload]);
             if (error) throw error;
-            
-            logActivity?.('تسجيل طلب إفراغ جديد', newDeedForm.client_name, 'text-green-500');
             setIsRegModalOpen(false);
-            setNewDeedForm({ project_name: filteredProjectName || '', client_name: '', id_number: '', mobile: '', unit_number: '', block_number: '', plot_number: '', total_area: '', sale_price: '', payment_method: 'تمويل عقاري', bank_name: '', financing_status: 'قيد المراجعة', contract_date: '', birth_date: '', sakani_support_number: '', deed_number: '', attachment_url: '', notes: '', status: 'جديد' });
             fetchDeeds();
             refreshData();
-        } catch (error: any) { 
-            alert('فشل الحفظ: ' + error.message); 
-        } finally { setIsSaving(false); }
+        } catch (error: any) { alert(error.message); } finally { setIsSaving(false); }
     };
 
     const filteredDeeds = useMemo(() => {
@@ -275,63 +178,29 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
 
     return (
         <div className="space-y-8 animate-in fade-in duration-500 font-cairo text-right" dir="rtl">
-             
-             {/* 1. Mini-Dashboard for Conveyance */}
-             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 animate-in slide-in-from-top-4 duration-700">
-                <div className="bg-white p-6 rounded-[35px] border border-gray-100 shadow-sm flex items-center justify-between group hover:shadow-md transition-all">
-                    <div>
-                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">إجمالي الإفراغات</p>
-                        <h3 className="text-3xl font-black text-[#1B2B48]">{isLoading ? <Loader2 className="animate-spin w-6 h-6"/> : deedStats.total}</h3>
-                    </div>
-                    <div className="p-4 rounded-2xl bg-indigo-50 text-indigo-600">
-                        <FileStack size={24}/>
-                    </div>
-                </div>
-                <div className="bg-white p-6 rounded-[35px] border border-gray-100 shadow-sm flex items-center justify-between group hover:shadow-md transition-all">
-                    <div>
-                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">قيد المعالجة</p>
-                        <h3 className="text-3xl font-black text-orange-600">{isLoading ? <Loader2 className="animate-spin w-6 h-6"/> : deedStats.pending}</h3>
-                    </div>
-                    <div className="p-4 rounded-2xl bg-orange-50 text-orange-600">
-                        <Clock size={24}/>
-                    </div>
-                </div>
-                <div className="bg-white p-6 rounded-[35px] border border-gray-100 shadow-sm flex items-center justify-between group hover:shadow-md transition-all">
-                    <div>
-                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">إفراغ مكتمل</p>
-                        <h3 className="text-3xl font-black text-green-600">{isLoading ? <Loader2 className="animate-spin w-6 h-6"/> : deedStats.completed}</h3>
-                    </div>
-                    <div className="p-4 rounded-2xl bg-green-50 text-green-600">
-                        <CheckCircle2 size={24}/>
-                    </div>
-                </div>
-             </div>
-
-             {/* Header & Search */}
              <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-white p-6 rounded-[35px] border border-gray-100 shadow-sm">
                 <div>
-                    <h2 className="text-2xl font-black text-[#1B2B48]">سجل الإفراغات والصكوك</h2>
-                    <p className="text-gray-400 text-xs font-bold mt-1 uppercase tracking-widest">إدارة الملكية العقارية - استيفاء 18 حقل تدقيق</p>
+                    <h2 className="text-2xl font-black text-[#1B2B48]">سجل الإفراغات (18 حقل)</h2>
+                    <p className="text-gray-400 text-xs font-bold mt-1 uppercase tracking-widest">إدارة متكاملة حسب متطلبات ملف الإكسل</p>
                 </div>
                 <div className="flex items-center gap-3 w-full md:w-auto">
-                    <div className="relative flex-1 md:w-64">
-                        <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-300" size={16}/>
-                        <input 
-                            placeholder="بحث بالمستفيد، الهوية، أو المشروع..."
-                            className="w-full pr-10 pl-4 py-2.5 bg-gray-50 border border-gray-100 rounded-xl text-xs font-bold outline-none focus:border-[#E95D22] transition-all"
-                            value={searchQuery}
-                            onChange={e => setSearchQuery(e.target.value)}
-                        />
-                    </div>
-                    {isAuthorizedToManage && (
-                        <button onClick={() => setIsRegModalOpen(true)} className="flex items-center justify-center gap-2 px-6 py-2.5 bg-[#E95D22] text-white rounded-xl font-black text-sm hover:brightness-110 shadow-lg shadow-orange-100 active:scale-95 transition-all">
-                            <Plus size={16} /> تسجيل صك جديد
-                        </button>
-                    )}
+                    <input type="file" ref={fileInputRef} className="hidden" accept=".xlsx,.xls" onChange={handleImportExcel} />
+                    <button onClick={() => fileInputRef.current?.click()} className="flex items-center gap-2 px-4 py-2.5 bg-green-50 text-green-700 rounded-xl font-black text-sm hover:bg-green-100 border border-green-100 transition-all">
+                        {isImporting ? <Loader2 size={16} className="animate-spin" /> : <FileSpreadsheet size={16} />} استيراد Excel
+                    </button>
+                    <button onClick={() => setIsRegModalOpen(true)} className="flex items-center justify-center gap-2 px-6 py-2.5 bg-[#E95D22] text-white rounded-xl font-black text-sm hover:brightness-110 shadow-lg active:scale-95 transition-all">
+                        <Plus size={16} /> تسجيل صك جديد
+                    </button>
                 </div>
             </div>
 
-            {/* List Table */}
+            <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
+                <div className="relative">
+                    <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-300" size={16}/>
+                    <input placeholder="بحث بالمستفيد، الهوية، أو المشروع..." className="w-full pr-10 pl-4 py-2.5 bg-gray-50 border border-gray-100 rounded-xl text-xs font-bold outline-none focus:border-[#E95D22]" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} />
+                </div>
+            </div>
+
             <div className="bg-white rounded-[40px] border border-gray-100 shadow-sm overflow-hidden">
                 <div className="overflow-x-auto">
                     <table className="w-full">
@@ -339,47 +208,40 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
                             <tr className="text-right text-gray-400 text-[10px] font-black uppercase tracking-widest">
                                 <th className="p-6">المستفيد</th>
                                 <th className="p-6">المشروع / الوحدة</th>
-                                <th className="p-6">طريقة الدفع</th>
+                                <th className="p-6">القيمة / البنك</th>
                                 <th className="p-6">الحالة</th>
-                                <th className="p-6 text-center">الإجراء</th>
+                                <th className="p-6"></th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-50">
                             {isLoading ? (
                                 <tr><td colSpan={5} className="p-20 text-center"><Loader2 className="animate-spin mx-auto text-gray-300"/></td></tr>
                             ) : filteredDeeds.length === 0 ? (
-                                <tr><td colSpan={5} className="p-20 text-center text-gray-300 font-bold">لا توجد سجلات مطابقة حالياً</td></tr>
+                                <tr><td colSpan={5} className="p-20 text-center text-gray-300 font-bold">لا توجد سجلات</td></tr>
                             ) : (
                                 filteredDeeds.map((deed) => (
-                                    <tr key={deed.id} className="hover:bg-gray-50 cursor-pointer group transition-colors" onClick={() => handleOpenManage(deed)}>
+                                    <tr key={deed.id} className="hover:bg-gray-50 cursor-pointer transition-colors" onClick={() => handleOpenManage(deed)}>
                                         <td className="p-6">
-                                            <div className="flex items-center gap-3">
-                                                <div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center font-black text-lg border border-indigo-100">
-                                                    {deed.client_name?.[0]}
-                                                </div>
-                                                <div>
-                                                    <p className="font-bold text-[#1B2B48] text-sm">{deed.client_name}</p>
-                                                    <p className="text-[10px] text-gray-400 font-bold">{deed.id_number}</p>
-                                                </div>
-                                            </div>
+                                            <p className="font-bold text-[#1B2B48] text-sm">{deed.client_name}</p>
+                                            <p className="text-[10px] text-gray-400 font-bold">{deed.id_number}</p>
                                         </td>
                                         <td className="p-6">
-                                            <p className="text-sm font-bold text-[#1B2B48]">{deed.project_name || 'عام'}</p>
-                                            <p className="text-[10px] text-gray-400 font-bold">وحدة: {deed.unit_number || '-'} | بلوك: {deed.block_number || '-'}</p>
+                                            <p className="text-sm font-bold text-[#1B2B48]">{deed.project_name}</p>
+                                            <p className="text-[10px] text-gray-400 font-bold">وحدة: {deed.unit_number}</p>
                                         </td>
                                         <td className="p-6">
-                                            <p className="text-xs font-bold text-gray-600">{deed.payment_method}</p>
-                                            <p className="text-[9px] text-gray-400">{deed.bank_name || 'نقداً'}</p>
+                                            <p className="text-xs font-bold text-gray-600">{parseFloat(deed.unit_value || deed.sale_price || 0).toLocaleString()} ر.س</p>
+                                            <p className="text-[9px] text-gray-400">{deed.bank_name || '-'}</p>
                                         </td>
                                         <td className="p-6">
                                             <span className={`px-4 py-1.5 rounded-xl text-[10px] font-black border ${
-                                                STATUS_OPTIONS.find(o => o.value === deed.status)?.color || 'bg-gray-50 text-gray-600 border-gray-100'
+                                                STATUS_OPTIONS.find(o => o.value === deed.status)?.color || 'bg-gray-50'
                                             }`}>
                                                 {deed.status}
                                             </span>
                                         </td>
                                         <td className="p-6 text-center">
-                                            <button className="text-[#E95D22] font-black text-xs hover:underline bg-orange-50 px-3 py-1.5 rounded-lg border border-orange-100">عرض وتدقيق</button>
+                                            <ChevronDown size={16} className="text-gray-300" />
                                         </td>
                                     </tr>
                                 ))
@@ -389,237 +251,51 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
                 </div>
             </div>
 
-            {/* Registration Modal (18 Fields Grid) */}
-            <Modal isOpen={isRegModalOpen} onClose={() => setIsRegModalOpen(false)} title="تسجيل بيانات إفراغ جديدة">
-                <div className="space-y-6 text-right font-cairo overflow-y-auto max-h-[75vh] p-2 custom-scrollbar">
-                    <div className="bg-orange-50 p-4 rounded-2xl border border-orange-100 flex items-center gap-3">
-                        <Info size={20} className="text-[#E95D22]"/>
-                        <p className="text-xs font-bold text-orange-800 leading-relaxed">يرجى استيفاء كافة حقول التدقيق لضمان دقة التقارير الرسمية وإتمام عملية الإفراغ بنجاح.</p>
+            <Modal isOpen={isRegModalOpen} onClose={() => setIsRegModalOpen(false)} title="تسجيل بيانات إفراغ">
+                <div className="space-y-4 text-right overflow-y-auto max-h-[70vh] p-2 custom-scrollbar">
+                    <div className="grid grid-cols-2 gap-3">
+                        <Field label="المنطقة" value={newDeedForm.region} onChange={v => setNewDeedForm({...newDeedForm, region: v})} />
+                        <Field label="مدينة العقار" value={newDeedForm.city} onChange={v => setNewDeedForm({...newDeedForm, city: v})} />
+                        <Field label="اسم المشروع" value={newDeedForm.project_name} onChange={v => setNewDeedForm({...newDeedForm, project_name: v})} />
+                        <Field label="رقم المخطط" value={newDeedForm.plan_number} onChange={v => setNewDeedForm({...newDeedForm, plan_number: v})} />
+                        <Field label="رقم الوحدة" value={newDeedForm.unit_number} onChange={v => setNewDeedForm({...newDeedForm, unit_number: v})} />
+                        <Field label="رقم الصك القديم" value={newDeedForm.old_deed_number} onChange={v => setNewDeedForm({...newDeedForm, old_deed_number: v})} />
+                        <Field label="تاريخ الصك" value={newDeedForm.deed_date} onChange={v => setNewDeedForm({...newDeedForm, deed_date: v})} />
+                        <Field label="اسم المستفيد" value={newDeedForm.client_name} onChange={v => setNewDeedForm({...newDeedForm, client_name: v})} />
+                        <Field label="هوية المستفيد" value={newDeedForm.id_number} onChange={v => setNewDeedForm({...newDeedForm, id_number: v})} />
+                        <Field label="جوال المستفيد" value={newDeedForm.mobile} onChange={v => setNewDeedForm({...newDeedForm, mobile: v})} />
+                        <Field label="تاريخ الميلاد" value={newDeedForm.dob_hijri} onChange={v => setNewDeedForm({...newDeedForm, dob_hijri: v})} />
+                        <Field label="قيمة الوحدة" value={newDeedForm.unit_value} onChange={v => setNewDeedForm({...newDeedForm, unit_value: v})} />
+                        <Field label="الرقم الضريبي" value={newDeedForm.tax_number} onChange={v => setNewDeedForm({...newDeedForm, tax_number: v})} />
+                        <Field label="الجهة التمويلية" value={newDeedForm.bank_name} onChange={v => setNewDeedForm({...newDeedForm, bank_name: v})} />
+                        <Field label="نوع العقد" value={newDeedForm.contract_type} onChange={v => setNewDeedForm({...newDeedForm, contract_type: v})} />
+                        <Field label="رقم الصك الجديد" value={newDeedForm.new_deed_number} onChange={v => setNewDeedForm({...newDeedForm, new_deed_number: v})} />
+                        <Field label="تاريخ الصك الجديد" value={newDeedForm.new_deed_date} onChange={v => setNewDeedForm({...newDeedForm, new_deed_date: v})} />
+                        <Field label="رقم عقد الدعم" value={newDeedForm.sakani_support_number} onChange={v => setNewDeedForm({...newDeedForm, sakani_support_number: v})} />
                     </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {/* ID Number Input with Auto-Fill Logic */}
-                        <div className="space-y-1">
-                            <label className="text-[10px] text-gray-400 font-black mr-1 uppercase">رقم الهوية</label>
-                            <div className="relative">
-                                <input 
-                                    className="w-full p-3 bg-gray-50 rounded-xl border outline-none font-bold text-xs focus:border-[#E95D22] transition-all" 
-                                    placeholder="10xxxxxxxx" 
-                                    value={newDeedForm.id_number} 
-                                    onChange={handleIdNumberChange} 
-                                />
-                                <div className="absolute left-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
-                                    {isAutoFilling && <Loader2 className="animate-spin text-orange-500" size={16}/>}
-                                    {autoFillSuccess && <Check className="text-green-500 animate-in zoom-in" size={18}/>}
-                                </div>
-                            </div>
-                        </div>
-                        <div className="space-y-1">
-                            <label className="text-[10px] text-gray-400 font-black mr-1 uppercase">اسم المستفيد</label>
-                            <input className="w-full p-3 bg-gray-50 rounded-xl border outline-none font-bold text-xs focus:border-[#E95D22]" placeholder="الاسم الكامل كما في الهوية" value={newDeedForm.client_name} onChange={e => setNewDeedForm({...newDeedForm, client_name: e.target.value})} />
-                        </div>
-                        <div className="space-y-1">
-                            <label className="text-[10px] text-gray-400 font-black mr-1 uppercase">اسم المشروع</label>
-                            <input className="w-full p-3 bg-gray-50 rounded-xl border outline-none font-bold text-xs focus:border-[#E95D22]" placeholder="اختر المشروع" value={newDeedForm.project_name} onChange={e => setNewDeedForm({...newDeedForm, project_name: e.target.value})} disabled={!!filteredProjectName} />
-                        </div>
-                        <div className="space-y-1">
-                            <label className="text-[10px] text-gray-400 font-black mr-1 uppercase">رقم الجوال</label>
-                            <input className="w-full p-3 bg-gray-50 rounded-xl border outline-none font-bold text-xs focus:border-[#E95D22]" placeholder="05xxxxxxxx" value={newDeedForm.mobile} onChange={e => setNewDeedForm({...newDeedForm, mobile: e.target.value})} />
-                        </div>
-                        <div className="space-y-1">
-                            <label className="text-[10px] text-gray-400 font-black mr-1 uppercase">رقم الوحدة</label>
-                            <input className="w-full p-3 bg-gray-50 rounded-xl border outline-none font-bold text-xs focus:border-[#E95D22]" placeholder="رقم الشقة/الفيلا" value={newDeedForm.unit_number} onChange={e => setNewDeedForm({...newDeedForm, unit_number: e.target.value})} />
-                        </div>
-                        <div className="space-y-1">
-                            <label className="text-[10px] text-gray-400 font-black mr-1 uppercase">رقم البلوك</label>
-                            <input className="w-full p-3 bg-gray-50 rounded-xl border outline-none font-bold text-xs focus:border-[#E95D22]" placeholder="رقم المربع" value={newDeedForm.block_number} onChange={e => setNewDeedForm({...newDeedForm, block_number: e.target.value})} />
-                        </div>
-                        <div className="space-y-1">
-                            <label className="text-[10px] text-gray-400 font-black mr-1 uppercase">رقم المخطط</label>
-                            <input className="w-full p-3 bg-gray-50 rounded-xl border outline-none font-bold text-xs focus:border-[#E95D22]" placeholder="رقم المخطط المعتمد" value={newDeedForm.plot_number} onChange={e => setNewDeedForm({...newDeedForm, plot_number: e.target.value})} />
-                        </div>
-                        <div className="space-y-1">
-                            <label className="text-[10px] text-gray-400 font-black mr-1 uppercase">المساحة الإجمالية</label>
-                            <input className="w-full p-3 bg-gray-50 rounded-xl border outline-none font-bold text-xs focus:border-[#E95D22]" placeholder="بالمتر المربع" value={newDeedForm.total_area} onChange={e => setNewDeedForm({...newDeedForm, total_area: e.target.value})} />
-                        </div>
-                        <div className="space-y-1">
-                            <label className="text-[10px] text-gray-400 font-black mr-1 uppercase">قيمة البيع (ريال)</label>
-                            <input className="w-full p-3 bg-gray-50 rounded-xl border outline-none font-bold text-xs focus:border-[#E95D22]" placeholder="المبلغ الصافي" value={newDeedForm.sale_price} onChange={e => setNewDeedForm({...newDeedForm, sale_price: e.target.value})} />
-                        </div>
-                        <div className="space-y-1">
-                            <label className="text-[10px] text-gray-400 font-black mr-1 uppercase">طريقة الدفع</label>
-                            <select className="w-full p-3 bg-gray-50 rounded-xl border outline-none font-bold text-xs focus:border-[#E95D22]" value={newDeedForm.payment_method} onChange={e => setNewDeedForm({...newDeedForm, payment_method: e.target.value})}>
-                                <option>تمويل عقاري</option>
-                                <option>نقداً (كاش)</option>
-                                <option>دفعات</option>
-                            </select>
-                        </div>
-                        <div className="space-y-1">
-                            <label className="text-[10px] text-gray-400 font-black mr-1 uppercase">اسم البنك</label>
-                            <input className="w-full p-3 bg-gray-50 rounded-xl border outline-none font-bold text-xs focus:border-[#E95D22]" placeholder="في حال التمويل" value={newDeedForm.bank_name} onChange={e => setNewDeedForm({...newDeedForm, bank_name: e.target.value})} />
-                        </div>
-                        <div className="space-y-1">
-                            <label className="text-[10px] text-gray-400 font-black mr-1 uppercase">حالة التمويل</label>
-                            <input className="w-full p-3 bg-gray-50 rounded-xl border outline-none font-bold text-xs focus:border-[#E95D22]" placeholder="موافقة مبدئية / نهائية" value={newDeedForm.financing_status} onChange={e => setNewDeedForm({...newDeedForm, financing_status: e.target.value})} />
-                        </div>
-                        <div className="space-y-1">
-                            <label className="text-[10px] text-gray-400 font-black mr-1 uppercase">تاريخ العقد</label>
-                            <input type="date" className="w-full p-3 bg-gray-50 rounded-xl border outline-none font-bold text-xs focus:border-[#E95D22]" value={newDeedForm.contract_date} onChange={e => setNewDeedForm({...newDeedForm, contract_date: e.target.value})} />
-                        </div>
-                        <div className="space-y-1">
-                            <label className="text-[10px] text-gray-400 font-black mr-1 uppercase">تاريخ الميلاد</label>
-                            <input className="w-full p-3 bg-gray-50 rounded-xl border outline-none font-bold text-xs focus:border-[#E95D22]" placeholder="هجري / ميلادي" value={newDeedForm.birth_date} onChange={e => setNewDeedForm({...newDeedForm, birth_date: e.target.value})} />
-                        </div>
-                        <div className="space-y-1">
-                            <label className="text-[10px] text-gray-400 font-black mr-1 uppercase">رقم عقد سكني</label>
-                            <input className="w-full p-3 bg-gray-50 rounded-xl border outline-none font-bold text-xs focus:border-[#E95D22]" placeholder="رقم عقد الدعم" value={newDeedForm.sakani_support_number} onChange={e => setNewDeedForm({...newDeedForm, sakani_support_number: e.target.value})} />
-                        </div>
-                        <div className="space-y-1">
-                            <label className="text-[10px] text-gray-400 font-black mr-1 uppercase">رقم الصك</label>
-                            <input className="w-full p-3 bg-gray-50 rounded-xl border outline-none font-bold text-xs focus:border-[#E95D22]" placeholder="رقم الصك الصادر" value={newDeedForm.deed_number} onChange={e => setNewDeedForm({...newDeedForm, deed_number: e.target.value})} />
-                        </div>
-                        <div className="space-y-1">
-                            <label className="text-[10px] text-gray-400 font-black mr-1 uppercase">رابط المرفقات</label>
-                            <input className="w-full p-3 bg-gray-50 rounded-xl border outline-none font-bold text-xs focus:border-[#E95D22]" placeholder="Dropbox / Google Drive" value={newDeedForm.attachment_url} onChange={e => setNewDeedForm({...newDeedForm, attachment_url: e.target.value})} />
-                        </div>
-                        <div className="space-y-1 opacity-60">
-                            <label className="text-[10px] text-gray-400 font-black mr-1 uppercase">المُدخل بواسطة (تلقائي)</label>
-                            <div className="w-full p-3 bg-gray-100 rounded-xl border border-gray-200 font-bold text-xs text-gray-500">{currentUserName}</div>
-                        </div>
-                    </div>
-                    <div className="space-y-1">
-                        <label className="text-[10px] text-gray-400 font-black mr-1 uppercase">ملاحظات عامة</label>
-                        <textarea className="w-full p-3 bg-gray-50 rounded-xl border outline-none font-bold text-xs min-h-[80px]" placeholder="أي تفاصيل إضافية عن الطلب..." value={newDeedForm.notes} onChange={e => setNewDeedForm({...newDeedForm, notes: e.target.value})}></textarea>
-                    </div>
-
-                    <button 
-                        onClick={handleSaveNewDeed} 
-                        disabled={isSaving} 
-                        className="w-full bg-[#1B2B48] text-white py-4 rounded-[25px] font-black mt-4 hover:brightness-110 active:scale-95 transition-all shadow-xl shadow-blue-100 flex items-center justify-center gap-2"
-                    >
-                        {isSaving ? <Loader2 className="animate-spin" size={20}/> : 'تأكيد وحفظ بيانات الإفراغ'}
+                    <button onClick={handleSaveNewDeed} disabled={isSaving} className="w-full bg-[#1B2B48] text-white py-4 rounded-xl font-black mt-4 shadow-lg flex items-center justify-center gap-2">
+                        {isSaving ? <Loader2 className="animate-spin" size={20}/> : 'حفظ البيانات'}
                     </button>
                 </div>
             </Modal>
 
-            {/* Management Modal */}
             {selectedDeed && (
-                <Modal isOpen={isManageModalOpen} onClose={() => setIsManageModalOpen(false)} title="تدقيق ومتابعة طلب الإفراغ">
-                    <div className="space-y-6 text-right font-cairo overflow-y-auto max-h-[80vh] p-1 custom-scrollbar">
-                        <div className={`p-5 rounded-[25px] border shadow-sm ${STATUS_OPTIONS.find(o => o.value === selectedDeed.status)?.color || 'bg-gray-50 text-gray-600'}`}>
-                            <div className="flex justify-between items-center">
-                                <div>
-                                    <p className="text-[10px] opacity-70 font-bold mb-1">المستفيد</p>
-                                    <h3 className="font-black text-xl">{selectedDeed.client_name}</h3>
-                                </div>
-                                <div className="bg-white/50 px-4 py-2 rounded-xl backdrop-blur-md border border-white/30">
-                                    <p className="text-[10px] opacity-70 font-bold mb-1">الحالة</p>
-                                    <span className="font-black text-sm">{selectedDeed.status}</span>
-                                </div>
-                            </div>
+                <Modal isOpen={isManageModalOpen} onClose={() => setIsManageModalOpen(false)} title="تدقيق طلب الإفراغ">
+                    <div className="space-y-6 text-right overflow-y-auto max-h-[80vh] p-1 custom-scrollbar">
+                        <div className="bg-gray-50 p-6 rounded-[25px] border border-gray-100 grid grid-cols-2 gap-4">
+                            <Detail label="المستفيد" value={selectedDeed.client_name} />
+                            <Detail label="الهوية" value={selectedDeed.id_number} />
+                            <Detail label="المشروع" value={selectedDeed.project_name} />
+                            <Detail label="القيمة" value={selectedDeed.unit_value || selectedDeed.sale_price} />
+                            <Detail label="البنك" value={selectedDeed.bank_name} />
+                            <Detail label="رقم الصك الجديد" value={selectedDeed.new_deed_number} />
                         </div>
-
-                        <div className="bg-white p-6 rounded-[25px] border border-gray-100 shadow-sm grid grid-cols-2 gap-y-4 gap-x-6">
-                            <DetailRow label="المشروع" value={selectedDeed.project_name} icon={<Building2 size={12}/>} />
-                            <DetailRow label="رقم الهوية" value={selectedDeed.id_number} icon={<Hash size={12}/>} />
-                            <DetailRow label="رقم الجوال" value={selectedDeed.mobile} icon={<Phone size={12}/>} />
-                            <DetailRow label="رقم الوحدة" value={selectedDeed.unit_number} icon={<LayoutGrid size={12}/>} />
-                            <DetailRow label="البلوك" value={selectedDeed.block_number} icon={<MapPin size={12}/>} />
-                            <DetailRow label="المخطط" value={selectedDeed.plot_number} icon={<MapPin size={12}/>} />
-                            <DetailRow label="المساحة" value={selectedDeed.total_area} icon={<Scale size={12}/>} />
-                            <DetailRow label="القيمة" value={selectedDeed.sale_price} icon={<CreditCard size={12}/>} />
-                            <DetailRow label="البنك" value={selectedDeed.bank_name} icon={<Landmark size={12}/>} />
-                            <DetailRow label="طريقة الدفع" value={selectedDeed.payment_method} icon={<CreditCard size={12}/>} />
-                            <DetailRow label="حالة التمويل" value={selectedDeed.financing_status} icon={<Clock size={12}/>} />
-                            <DetailRow label="رقم الصك" value={selectedDeed.deed_number} icon={<FileText size={12}/>} />
-                            <DetailRow label="تاريخ العقد" value={selectedDeed.contract_date} icon={<Calendar size={12}/>} />
-                            <DetailRow label="تاريخ الميلاد" value={selectedDeed.birth_date} icon={<Calendar size={12}/>} />
-                            <DetailRow label="رقم عقد الدعم" value={selectedDeed.sakani_support_number} icon={<Hash size={12}/>} />
-                            <DetailRow label="المُدخل" value={selectedDeed.submitted_by} icon={<UserIcon size={12}/>} />
-                            {selectedDeed.attachment_url && (
-                                <div className="col-span-2 mt-2">
-                                    <a href={selectedDeed.attachment_url} target="_blank" rel="noreferrer" className="flex items-center gap-2 p-3 bg-indigo-50 text-indigo-700 rounded-xl font-bold text-xs hover:bg-indigo-100 transition-all border border-indigo-100">
-                                        <Paperclip size={14}/> عرض المرفقات والملفات الثبوتية (Cloud Storage)
-                                    </a>
-                                </div>
-                            )}
-                            {selectedDeed.notes && (
-                                <div className="col-span-2 mt-2 bg-gray-50 p-4 rounded-xl border border-gray-100">
-                                    <label className="text-[10px] text-gray-400 font-black block mb-1">ملاحظات إضافية</label>
-                                    <p className="text-xs text-gray-600 font-bold leading-relaxed">{selectedDeed.notes}</p>
-                                </div>
-                            )}
-                        </div>
-
-                        <div className="space-y-3">
-                            <h4 className="text-xs font-black text-gray-400 uppercase tracking-widest mr-1">تحديث الحالة</h4>
-                            {isAuthorizedToManage ? (
-                                <div className="grid grid-cols-4 gap-2">
-                                    {STATUS_OPTIONS.map(option => (
-                                        <button 
-                                            key={option.value}
-                                            onClick={() => handleUpdateStatus(option.value)}
-                                            className={`p-3 rounded-xl font-black text-[10px] flex flex-col items-center gap-1 transition-all active:scale-95 border ${
-                                                selectedDeed.status === option.value ? option.color + ' ring-2 ring-indigo-100' : 'bg-gray-50 text-gray-400 border-gray-100 hover:bg-gray-100'
-                                            }`}
-                                        >
-                                            {option.icon}
-                                            {option.label}
-                                        </button>
-                                    ))}
-                                </div>
-                            ) : (
-                                <div className="bg-amber-50 p-4 rounded-xl border border-amber-100 flex items-center gap-2 text-amber-700 text-xs font-bold">
-                                    <Lock size={14}/>
-                                    لا تملك الصلاحية لتغيير الحالة، يرجى مراجعة إدارة العلاقات العامة.
-                                </div>
-                            )}
-                        </div>
-
-                        <div className="border-t border-gray-100 pt-6">
-                            <h3 className="font-black text-[#1B2B48] mb-4 flex items-center gap-2">
-                                <MessageSquare size={18} className="text-[#E95D22]"/>
-                                سجل الملاحظات والتدقيق
-                            </h3>
-
-                            <div className="bg-gray-50 rounded-2xl p-4 h-60 overflow-y-auto space-y-3 mb-4 border border-gray-100 custom-scrollbar shadow-inner">
-                                {isCommentLoading ? (
-                                    <div className="h-full flex items-center justify-center"><Loader2 className="animate-spin text-gray-300"/></div>
-                                ) : (comments || []).length === 0 ? (
-                                    <div className="h-full flex flex-col items-center justify-center text-gray-300 opacity-60">
-                                        <MessageSquare size={32} className="mb-2"/>
-                                        <p className="text-xs font-bold">لا توجد ملاحظات مسجلة</p>
-                                    </div>
-                                ) : (
-                                    comments.map((c: any) => (
-                                        <div key={c.id} className={`p-3 rounded-xl shadow-sm max-w-[85%] ${c.user_name === currentUserName ? 'bg-blue-50 mr-auto border border-blue-100' : 'bg-white ml-auto border border-gray-100'}`}>
-                                            <div className="flex justify-between items-center mb-1 gap-4">
-                                                <span className="font-black text-[10px] text-[#1B2B48]">{c.user_name}</span>
-                                                <span className="text-[9px] text-gray-400" dir="ltr">{new Date(c.created_at).toLocaleTimeString('ar-SA', {hour:'2-digit', minute:'2-digit'})}</span>
-                                            </div>
-                                            <p className="text-xs text-gray-700 font-bold leading-relaxed">{c.content}</p>
-                                        </div>
-                                    ))
-                                )}
-                                <div ref={commentsEndRef} />
-                            </div>
-
-                            <div className="flex gap-2">
-                                <input 
-                                    className="flex-1 p-3 bg-gray-50 border border-gray-200 rounded-xl outline-none text-xs font-bold focus:border-[#E95D22] transition-all"
-                                    placeholder="إضافة ملاحظة فنية..."
-                                    value={newComment}
-                                    onChange={e => setNewComment(e.target.value)}
-                                    onKeyDown={e => e.key === 'Enter' && handleAddComment()}
-                                />
-                                <button 
-                                    onClick={handleAddComment}
-                                    disabled={!newComment.trim() || isCommentLoading}
-                                    className="p-3 bg-[#1B2B48] text-white rounded-xl hover:bg-[#E95D22] transition-all disabled:opacity-50 shadow-md"
-                                >
-                                    <Send size={16}/>
-                                </button>
-                            </div>
+                        <div className="flex gap-2">
+                             {STATUS_OPTIONS.map(opt => (
+                               <button key={opt.value} onClick={() => handleUpdateStatus(opt.value)} className={`flex-1 p-3 rounded-xl font-bold text-[10px] border ${selectedDeed.status === opt.value ? opt.color : 'bg-white'}`}>
+                                 {opt.label}
+                               </button>
+                             ))}
                         </div>
                     </div>
                 </Modal>
@@ -628,14 +304,17 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
     );
 };
 
-const DetailRow = ({ label, value, icon }: { label: string, value: string | number, icon: any }) => (
-    <div className="flex flex-col border-b border-gray-50 pb-2">
-        <label className="text-[9px] text-gray-400 font-black flex items-center gap-1 mb-1 uppercase tracking-tighter">
-            {icon} {label}
-        </label>
-        <span className="font-bold text-[#1B2B48] text-xs truncate">
-            {value || '-'}
-        </span>
+const Field = ({ label, value, onChange }: any) => (
+    <div className="space-y-1">
+        <label className="text-[10px] text-gray-400 font-black">{label}</label>
+        <input className="w-full p-2.5 bg-gray-50 rounded-xl border outline-none font-bold text-xs focus:border-[#E95D22]" value={value} onChange={e => onChange(e.target.value)} />
+    </div>
+);
+
+const Detail = ({ label, value }: any) => (
+    <div>
+        <label className="text-[9px] text-gray-400 font-black block">{label}</label>
+        <span className="font-bold text-[#1B2B48] text-xs">{value || '-'}</span>
     </div>
 );
 

@@ -1,23 +1,28 @@
 
 import React from 'react';
 import { createRoot } from 'react-dom/client';
-// استخدام MemoryRouter هو الحل النهائي لمشاكل "No routes matched" و "replaceState" في بيئات Sandbox
-// Fix: Use 'react-router' instead of 'react-router-dom' for core components to avoid export errors in this environment.
-import { MemoryRouter } from 'react-router';
+import { BrowserRouter } from 'react-router-dom'; 
 import App from './App';
 import { DataProvider } from './contexts/DataContext';
+import { NotificationProvider } from './context/NotificationContext';
 
 const rootElement = document.getElementById('root');
 if (!rootElement) throw new Error("Failed to find root element");
 
 const root = createRoot(rootElement);
 
+/**
+ * Hard Refactor: Using BrowserRouter for address bar sync.
+ * Order: BrowserRouter -> DataProvider (Auth) -> NotificationProvider (Real-time).
+ */
 root.render(
   <React.StrictMode>
-    <MemoryRouter>
+    <BrowserRouter> 
       <DataProvider>
-        <App />
+        <NotificationProvider>
+          <App />
+        </NotificationProvider>
       </DataProvider>
-    </MemoryRouter>
+    </BrowserRouter>
   </React.StrictMode>
 );

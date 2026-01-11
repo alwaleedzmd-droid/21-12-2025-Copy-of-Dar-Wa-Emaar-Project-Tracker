@@ -1,6 +1,5 @@
 
 import React, { useState } from 'react';
-// استخدام react-router بدلاً من react-router-dom لتجنب أخطاء التصدير
 import { useNavigate, useLocation } from 'react-router';
 import { 
   LayoutDashboard, LogOut, RefreshCw, Building2, 
@@ -9,7 +8,7 @@ import {
 import { useData } from '../contexts/DataContext';
 import { DAR_LOGO } from '../constants';
 import AIAssistant from '../components/AIAssistant';
-import NotificationCenter from '../NotificationCenter';
+import NotificationBell from '../components/NotificationBell';
 
 interface MainLayoutProps {
   children: React.ReactNode;
@@ -18,7 +17,6 @@ interface MainLayoutProps {
 const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   const navigate = useNavigate();
   const location = useLocation();
-  // Fix: Destructure missing projectWorks and pass all required data to AIAssistant
   const { currentUser, logout, refreshData, canAccess, projects, technicalRequests, clearanceRequests, projectWorks } = useData();
 
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => 
@@ -27,7 +25,6 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
 
   if (!currentUser) return <>{children}</>;
 
-  // تصفية صارمة لعناصر القائمة الجانبية بناءً على الأدوار
   const navItems = [
     { label: 'لوحة التحكم', icon: <LayoutDashboard size={20} />, path: '/', roles: ['ADMIN', 'PR_MANAGER', 'PR_OFFICER'] },
     { label: 'المشاريع', icon: <Building2 size={20} />, path: '/projects', roles: ['ADMIN', 'PR_MANAGER', 'PR_OFFICER'] },
@@ -87,7 +84,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
              </div>
           </div>
           <div className="flex items-center gap-6">
-            <NotificationCenter />
+            <NotificationBell />
             <div className="flex items-center gap-3">
               <div className="text-left">
                 <p className="text-sm font-black text-[#1B2B48]">{currentUser.name}</p>
@@ -104,17 +101,6 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
           {children}
         </main>
       </div>
-
-      {canAccess(['ADMIN', 'PR_MANAGER']) && (
-        <AIAssistant 
-          currentUser={currentUser}
-          projects={projects}
-          technicalRequests={technicalRequests}
-          clearanceRequests={clearanceRequests}
-          projectWorks={projectWorks}
-          onNavigate={(type, data) => navigate(type === 'PROJECT' ? `/projects/${data.id}` : '/deeds')}
-        />
-      )}
     </div>
   );
 };

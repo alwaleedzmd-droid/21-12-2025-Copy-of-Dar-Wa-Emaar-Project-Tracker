@@ -4,6 +4,7 @@ import { supabase } from '../supabaseClient';
 import { User, Comment, TechnicalRequest, ClearanceRequest } from '../types';
 import Modal from './Modal';
 import { MessageSquare, Send, CheckCircle2, Activity, Edit3, XCircle, User as UserIcon, Phone, FileText, CreditCard, Landmark, MapPin, UserCheck, Loader2 } from 'lucide-react';
+import { notificationService } from '../services/notificationService';
 
 interface ManageRequestModalProps {
   isOpen: boolean;
@@ -11,7 +12,7 @@ interface ManageRequestModalProps {
   request: TechnicalRequest | ClearanceRequest | null;
   currentUser: User | null;
   usersList: any[];
-  onUpdateStatus: (newStatus: string) => Promise<void>; // Corrected to Promise<void>
+  onUpdateStatus: (newStatus: string) => Promise<void>;
   onUpdateDelegation: (userId: string) => void;
 }
 
@@ -22,7 +23,6 @@ const ManageRequestModal: React.FC<ManageRequestModalProps> = ({
   currentUser, 
   onUpdateStatus
 }) => {
-  // تهيئة التعليقات كمصفوفة فارغة لضمان عدم حدوث خطأ عند استخدام map
   const [comments, setComments] = useState<Comment[]>([]);
   const [newComment, setNewComment] = useState('');
   const [loading, setLoading] = useState(false);
@@ -41,12 +41,9 @@ const ManageRequestModal: React.FC<ManageRequestModalProps> = ({
   }, [isOpen, request]);
 
   const fetchComments = async () => {
-    // التحقق من وجود المعرف قبل المحاولة لتجنب أخطاء null
     if (!request?.id) return;
-    
     setFetchLoading(true);
     try {
-      // استخدام try/catch للتعامل مع أخطاء الجدول أو مشاكل الشبكة بشكل آمن
       const { data, error } = await supabase
         .from('request_comments')
         .select('*')
@@ -55,15 +52,13 @@ const ManageRequestModal: React.FC<ManageRequestModalProps> = ({
         .order('created_at', { ascending: true });
       
       if (error) {
-        console.warn("Table fetch error handled gracefully:", error.message);
-        setComments([]); // ضمان أن الحالة تبقى مصفوفة وليست undefined
+        setComments([]);
       } else {
         setComments(data || []);
         scrollToBottom();
       }
     } catch (err) {
-      console.error("Critical crash prevented during fetchComments:", err);
-      setComments([]); // Fallback to empty array on any failure
+      setComments([]);
     } finally {
       setFetchLoading(false);
     }
@@ -91,11 +86,22 @@ const ManageRequestModal: React.FC<ManageRequestModalProps> = ({
       
       if (error) throw error;
 
+      // تنبيه الجهات المعنية عند إضافة تعليق
+      const targetRole = requestType === 'technical' ? 'TECHNICAL' : 'PR_MANAGER';
+      const requestTitle = isClearance ? (request as ClearanceRequest).client_name : (request as TechnicalRequest).service_type;
+      const link = requestType === 'technical' ? '/technical' : '/deeds';
+
+      notificationService.send(
+        targetRole,
+        `💬 ملاحظة فنية جديدة على: ${requestTitle}`,
+        link,
+        currentUser?.name
+      );
+
       setNewComment(''); 
       await fetchComments(); 
     } catch (err: any) {
       console.error("Failed to post comment:", err);
-      alert("فشل إضافة الملاحظة: " + (err?.message || "خطأ في قاعدة البيانات"));
     } finally {
       setLoading(false);
     }
@@ -103,17 +109,12 @@ const ManageRequestModal: React.FC<ManageRequestModalProps> = ({
 
   const changeStatus = async (newStatus: string) => {
     if (!request?.id) return;
-    
-    // تحديث الحالة محلياً أولاً لضمان سرعة الاستجابة في واجهة المستخدم
     const previousStatus = currentStatus;
     setCurrentStatus(newStatus);
-    
     try {
-      // تمرير الطلب للدالة الأب للتعامل مع التحديث في قاعدة البيانات
       await onUpdateStatus(newStatus);
     } catch (err) {
-      console.error("Failed to update status in modal:", err);
-      setCurrentStatus(previousStatus); // التراجع في حال الفشل
+      setCurrentStatus(previousStatus);
     }
   };
 
@@ -185,7 +186,6 @@ const ManageRequestModal: React.FC<ManageRequestModalProps> = ({
                <div>
                  <label className="text-[10px] text-gray-400 font-bold block">قيمة الصفقة</label>
                  <p className="font-bold text-green-600 text-sm flex items-center gap-1 justify-end">
-                   {/* Fix: Property 'deal_value' does not exist on type 'ClearanceRequest'. Use 'sale_price' as defined in types.ts */}
                    {(request as ClearanceRequest)?.sale_price ? parseFloat((request as ClearanceRequest)?.sale_price || '0').toLocaleString() : '-'} ر.س 
                    <CreditCard size={12}/>
                  </p>
