@@ -7,7 +7,7 @@ import {
   ChevronDown, User as UserIcon, 
   MessageSquare, Send, Loader2, XCircle, Activity,
   Sparkles, FileSpreadsheet, Calendar, CreditCard,
-  Building2, Phone, MapPin, FileText
+  Building2, Phone, MapPin, FileText, Landmark
 } from 'lucide-react';
 import { ActivityLog, useData } from '../contexts/DataContext';
 import { notificationService } from '../services/notificationService';
@@ -43,7 +43,6 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
     const [isCommentLoading, setIsCommentLoading] = useState(false);
     const [isAutoFilling, setIsAutoFilling] = useState(false);
     const [autoFillSuccess, setAutoFillSuccess] = useState(false);
-    const [isImporting, setIsImporting] = useState(false);
 
     const fileInputRef = useRef<HTMLInputElement>(null);
     const commentsEndRef = useRef<HTMLDivElement>(null);
@@ -56,17 +55,17 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
         unit_number: '',
         old_deed_number: '',
         deed_date: '',
-        client_name: '', // Maps to customer_name in DB
-        id_number: '',   // Maps to identity_number in DB
-        mobile: '',      // Maps to customer_mobile in DB
-        dob_hijri: '',   // Maps to birth_date in DB
-        unit_value: '',  // Maps to unit_price in DB
+        client_name: '', // customer_name
+        id_number: '',   // identity_number
+        mobile: '',      // customer_mobile
+        dob_hijri: '',   // birth_date
+        unit_value: '',  // unit_price
         tax_number: '',
         bank_name: '',
         contract_type: 'تمويل عقاري',
         new_deed_number: '',
         new_deed_date: '',
-        sakani_support_number: '', // Maps to support_contract_number in DB
+        sakani_support_number: '', // support_contract_number
         status: 'جديد'
     });
 
@@ -96,15 +95,11 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
         setAutoFillSuccess(false);
 
         try {
-            console.log("🔍 Auto-fill Triggered for ID:", id);
-            
             const { data, error } = await supabase
                 .from('client_archive')
                 .select('*')
                 .eq('id_number', id)
                 .maybeSingle();
-
-            console.log("DB Response from archive:", data);
 
             if (data) {
                 setNewDeedForm((prev: any) => ({
@@ -196,11 +191,12 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
                 plan_number: newDeedForm.plan_number,
                 unit_number: newDeedForm.unit_number,
                 old_deed_number: newDeedForm.old_deed_number,
+                // Sending exact string for Hijri support
                 deed_date: newDeedForm.deed_date || null,
                 customer_name: newDeedForm.client_name,
                 identity_number: newDeedForm.id_number,
                 customer_mobile: newDeedForm.mobile,
-                birth_date: newDeedForm.dob_hijri,
+                birth_date: newDeedForm.dob_hijri || null,
                 unit_price: parseFloat(newDeedForm.unit_value) || 0,
                 tax_number: newDeedForm.tax_number,
                 bank_name: newDeedForm.bank_name,
@@ -342,13 +338,39 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
                         <Field label="اسم المشروع" value={newDeedForm.project_name} onChange={(v: string) => setNewDeedForm({...newDeedForm, project_name: v})} icon={<Building2 size={14}/>} />
                         <Field label="رقم الوحدة" value={newDeedForm.unit_number} onChange={(v: string) => setNewDeedForm({...newDeedForm, unit_number: v})} icon={<Building2 size={14}/>} />
                         <Field label="رقم الصك القديم" value={newDeedForm.old_deed_number} onChange={(v: string) => setNewDeedForm({...newDeedForm, old_deed_number: v})} icon={<FileText size={14}/>} />
-                        <Field label="تاريخ الصك" value={newDeedForm.deed_date} onChange={(v: string) => setNewDeedForm({...newDeedForm, deed_date: v})} type="date" />
-                        <Field label="تاريخ الميلاد" value={newDeedForm.dob_hijri} onChange={(v: string) => setNewDeedForm({...newDeedForm, dob_hijri: v})} />
+                        
+                        {/* Modified Date Fields: Type Text with Placeholder for Hijri/Any String Support */}
+                        <Field 
+                            label="تاريخ الصك" 
+                            value={newDeedForm.deed_date} 
+                            onChange={(v: string) => setNewDeedForm({...newDeedForm, deed_date: v})} 
+                            type="text" 
+                            placeholder="مثال: 1403/01/01"
+                            icon={<Calendar size={14}/>}
+                        />
+                        <Field 
+                            label="تاريخ الميلاد" 
+                            value={newDeedForm.dob_hijri} 
+                            onChange={(v: string) => setNewDeedForm({...newDeedForm, dob_hijri: v})} 
+                            type="text" 
+                            placeholder="مثال: 1403/01/01"
+                            icon={<Calendar size={14}/>}
+                        />
+                        
                         <Field label="قيمة الوحدة" value={newDeedForm.unit_value} onChange={(v: string) => setNewDeedForm({...newDeedForm, unit_value: v})} icon={<CreditCard size={14}/>} />
                         <Field label="الرقم الضريبي" value={newDeedForm.tax_number} onChange={(v: string) => setNewDeedForm({...newDeedForm, tax_number: v})} />
                         <Field label="الجهة التمويلية" value={newDeedForm.bank_name} onChange={(v: string) => setNewDeedForm({...newDeedForm, bank_name: v})} icon={<Landmark size={14}/>} />
                         <Field label="رقم الصك الجديد" value={newDeedForm.new_deed_number} onChange={(v: string) => setNewDeedForm({...newDeedForm, new_deed_number: v})} icon={<FileText size={14}/>} />
-                        <Field label="تاريخ الصك الجديد" value={newDeedForm.new_deed_date} onChange={(v: string) => setNewDeedForm({...newDeedForm, new_deed_date: v})} type="date" />
+                        
+                        <Field 
+                            label="تاريخ الصك الجديد" 
+                            value={newDeedForm.new_deed_date} 
+                            onChange={(v: string) => setNewDeedForm({...newDeedForm, new_deed_date: v})} 
+                            type="text" 
+                            placeholder="مثال: 1446/01/01"
+                            icon={<Calendar size={14}/>}
+                        />
+                        
                         <Field label="رقم عقد الدعم" value={newDeedForm.sakani_support_number} onChange={(v: string) => setNewDeedForm({...newDeedForm, sakani_support_number: v})} />
                     </div>
                     <button onClick={handleSaveNewDeed} disabled={isSaving} className="w-full bg-[#1B2B48] text-white py-4 rounded-xl font-black mt-4 shadow-lg flex items-center justify-center gap-2">
@@ -431,13 +453,14 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
     );
 };
 
-const Field = ({ label, value, onChange, icon, type = "text" }: any) => (
+const Field = ({ label, value, onChange, icon, type = "text", placeholder }: any) => (
     <div className="space-y-1">
         <label className="text-[10px] text-gray-400 font-black">{label}</label>
         <div className="relative">
             {icon && <div className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-300">{icon}</div>}
             <input 
                 type={type}
+                placeholder={placeholder}
                 className={`w-full ${icon ? 'pr-9' : 'px-4'} py-2.5 bg-gray-50 rounded-xl border border-gray-100 outline-none font-bold text-xs focus:border-[#E95D22] transition-all`} 
                 value={value} 
                 onChange={e => onChange(e.target.value)} 
@@ -454,28 +477,6 @@ const Detail = ({ label, value, icon }: any) => (
         </div>
         <span className="font-black text-[#1B2B48] text-sm leading-tight pr-5">{value || '-'}</span>
     </div>
-);
-
-const Landmark = ({ size, className }: any) => (
-  <svg 
-    xmlns="http://www.w3.org/2000/svg" 
-    width={size} 
-    height={size} 
-    viewBox="0 0 24 24" 
-    fill="none" 
-    stroke="currentColor" 
-    strokeWidth="2" 
-    strokeLinecap="round" 
-    strokeLinejoin="round" 
-    className={className}
-  >
-    <line x1="3" y1="22" x2="21" y2="22"></line>
-    <line x1="6" y1="18" x2="6" y2="11"></line>
-    <line x1="10" y1="18" x2="10" y2="11"></line>
-    <line x1="14" y1="18" x2="14" y2="11"></line>
-    <line x1="18" y1="18" x2="18" y2="11"></line>
-    <polygon points="12 2 20 7 4 7 12 2"></polygon>
-  </svg>
 );
 
 export default DeedsDashboard;
