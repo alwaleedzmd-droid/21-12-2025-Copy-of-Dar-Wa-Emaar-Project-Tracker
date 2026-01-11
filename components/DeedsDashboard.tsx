@@ -157,7 +157,7 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
             const { error } = await supabase.from('deed_comments').insert([{
                 request_id: selectedDeed.id,
                 user_name: currentUserName || 'مستخدم',
-                content: newComment.trim()
+                text: newComment.trim() // FIXED: Changed from content to text to match DB
             }]);
             if (error) throw error;
             setNewComment('');
@@ -196,7 +196,7 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
                 client_name: newDeedForm.client_name, 
                 id_number: newDeedForm.id_number,     
                 mobile: newDeedForm.mobile,           
-                birth_date: newDeedForm.dob_hijri || null, // FIXED: Changed from dob_hijri to birth_date to match DB
+                birth_date: newDeedForm.dob_hijri || null, 
                 unit_value: parseFloat(newDeedForm.unit_value) || 0,
                 tax_number: newDeedForm.tax_number,
                 bank_name: newDeedForm.bank_name,
@@ -425,7 +425,7 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
                                                 <span className="font-black text-[9px] opacity-70">{c.user_name}</span>
                                                 <span className="text-[8px] opacity-50" dir="ltr">{new Date(c.created_at).toLocaleTimeString('ar-SA', {hour: '2-digit', minute:'2-digit'})}</span>
                                             </div>
-                                            <p className="text-xs font-bold leading-relaxed">{c.content}</p>
+                                            <p className="text-xs font-bold leading-relaxed">{c.text}</p>
                                         </div>
                                     ))
                                 )}
