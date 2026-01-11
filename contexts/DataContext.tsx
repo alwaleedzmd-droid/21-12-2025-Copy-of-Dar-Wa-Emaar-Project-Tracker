@@ -58,58 +58,44 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   /**
    * REWRITTEN: 100% FAIL-SAFE PROFILE FETCH
-   * Ensures the loading spinner stops no matter what happens in the DB.
+   * Prevents the app from getting stuck on the loading spinner.
    */
   const fetchProfile = async (userId: string, email: string) => {
     try {
       console.log("[AUTH] Verifying Identity for UID:", userId);
       
-      /**
-       * DEVELOPER CHECK: 
-       * If this query fails or times out, check if "Row Level Security (RLS)" is enabled.
-       * Ensure there is a "Select" policy for Authenticated users on the 'profiles' table.
-       */
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', userId)
         .maybeSingle();
 
-      if (error) {
-        console.error("[AUTH] Profile fetch error (Database level):", error);
-        // Fallback to allow entry if DB is acting up
-        return {
-          id: userId,
-          email: email,
-          name: email.split('@')[0] + ' (طوارئ)',
-          role: 'ADMIN' as UserRole, // Fallback to ADMIN so user can debug Users Module
-          department: 'الدعم الفني (طوارئ)'
-        } as User;
-      }
+      console.log("Profile search result:", data, error);
 
-      if (!data) {
-        console.warn("[AUTH] No profile record found for this UID. Using Admin fallback.");
+      if (error || !data) {
+        console.warn("[AUTH] Profile fetch failed or missing. Using GUEST fallback.");
+        // Fallback user: allows access to the app even if profile record is missing
         return {
           id: userId,
           email: email,
-          name: email.split('@')[0],
-          role: 'ADMIN' as UserRole, 
+          name: email ? email.split('@')[0] : 'User (No Profile)',
+          role: 'GUEST' as UserRole, 
           department: 'غير محدد'
         } as User;
       }
 
-      console.log("[AUTH] Profile successfully mapped. Role:", data.role);
       return data as User;
     } catch (err) {
-      console.error("[AUTH] Fatal catch-all error in fetchProfile logic:", err);
+      console.error("[AUTH] Fatal error in fetchProfile logic:", err);
       return { 
         id: userId, 
         email, 
-        name: 'Fallback User', 
-        role: 'ADMIN' as UserRole 
+        name: 'Guest/Fallback', 
+        role: 'GUEST' as UserRole 
       } as User;
     } finally {
-      // CRITICAL: Force the loader to stop regardless of result
+      // CRITICAL: Force the loader to stop regardless of the result.
+      // This is inside finally to guarantee execution.
       setIsAuthLoading(false);
     }
   };
@@ -128,7 +114,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           setIsAuthLoading(false);
         }
       } catch (e) {
-        console.error("[AUTH_INIT] Error getting session:", e);
+        console.error("[AUTH_INIT] Session fetch error:", e);
         setIsAuthLoading(false);
       }
     };
@@ -171,8 +157,8 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setProjectWorks(worksRes.data || []);
       setErrorState(null);
     } catch (e) {
-      console.warn("[DB_REFRESH] Data load failed. Possible connection issue.");
-      setErrorState("تنبيه: تعذر تحديث بعض البيانات من قاعدة البيانات");
+      console.warn("[DB_REFRESH] Load failed. Data may be incomplete.");
+      setErrorState("تنبيه: تعذر تحديث البيانات من قاعدة البيانات");
     } finally {
       setIsDbLoading(false);
     }
@@ -194,10 +180,10 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     try {
       await supabase.auth.signOut();
       setCurrentUser(null);
+      // Reload avoids stale state across different logins
       window.location.href = '/'; 
     } catch (err) {
       console.error("SignOut error:", err);
-    } finally {
       setIsAuthLoading(false);
     }
   };
