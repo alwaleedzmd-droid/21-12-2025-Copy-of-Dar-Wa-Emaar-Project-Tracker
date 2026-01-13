@@ -57,53 +57,79 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, [currentUser]);
 
   /**
-   * SAFETY VALVE: Forced app entry after 3 seconds.
-   * Ensures the loading spinner stops if DB/Auth hangs.
-   * Does NOT set a fake user, allowing proper redirection to Login if null.
-   */
-  useEffect(() => {
-    if (isAuthLoading) {
-      const safetyTimer = setTimeout(() => {
-        console.warn("Safety Valve: Loading timed out. Forcing UI unlock.");
-        setIsAuthLoading(false);
-      }, 3000);
-      return () => clearTimeout(safetyTimer);
-    }
-  }, [isAuthLoading]);
-
-  /**
-   * fetchProfile: Fetches user metadata from the 'profiles' table.
+   * ROBUST Profile Fetcher:
+   * Ensures the loading spinner stops and provides a guest fallback if no profile exists.
    */
   const fetchProfile = async (userId: string, email: string) => {
+    setIsAuthLoading(true);
+    console.log("[AUTH_DEBUG] Initiating profile fetch for UID:", userId);
+    
     try {
-      console.log("[AUTH] Fetching Profile for:", userId);
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', userId)
         .maybeSingle();
 
-      console.log("[AUTH] Profile search result:", data, error);
-
-      if (error || !data) {
-        // Fallback profile if record doesn't exist yet but user is authenticated
-        return {
-          id: userId,
-          email: email,
-          name: email ? email.split('@')[0] : 'User',
-          role: 'GUEST' as UserRole, // Default to GUEST if no profile record found
-          department: 'غير محدد'
-        } as User;
+      if (error) {
+        console.error("[AUTH_DEBUG] Supabase Profile Query Error:", error);
+        throw error;
       }
 
-      return data as User;
+      console.log("[AUTH_DEBUG] Profile Data Received:", data);
+
+      if (!data) {
+        console.warn("[AUTH_DEBUG] No profile record found. Using GUEST fallback.");
+        const guestUser: User = {
+          id: userId,
+          email: email,
+          name: email ? email.split('@')[0] : 'ضيف',
+          role: 'GUEST' as UserRole,
+          department: 'غير محدد'
+        };
+        setCurrentUser(guestUser);
+        return guestUser;
+      }
+
+      const user = data as User;
+      setCurrentUser(user);
+      return user;
+
     } catch (err) {
-      console.error("[AUTH] fetchProfile Exception:", err);
-      return null;
+      console.error("[AUTH_DEBUG] Fatal exception in fetchProfile:", err);
+      // Fallback user to allow app entry even on DB failure
+      const fallbackUser: User = {
+        id: userId,
+        email: email,
+        name: 'Guest (Error Fallback)',
+        role: 'GUEST' as UserRole,
+        department: 'Unknown'
+      };
+      setCurrentUser(fallbackUser);
+      return fallbackUser;
     } finally {
+      // CRITICAL: Ensure the spinner ALWAYS stops
+      console.log("[AUTH_DEBUG] Authentication loading complete.");
       setIsAuthLoading(false);
     }
   };
+
+  /**
+   * Safety Valve Refinement:
+   * Still keep a timeout to unlock the UI if the entire auth sequence hangs for > 5 seconds,
+   * but don't set a fake admin anymore.
+   */
+  useEffect(() => {
+    if (isAuthLoading) {
+      const timer = setTimeout(() => {
+        if (isAuthLoading) {
+          console.warn("[AUTH_DEBUG] Load timeout reached (5s). Unlocking UI.");
+          setIsAuthLoading(false);
+        }
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [isAuthLoading]);
 
   /**
    * Auth Initialization & Subscription
@@ -111,15 +137,18 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   useEffect(() => {
     const initializeAuth = async () => {
       try {
+        console.log("[AUTH_DEBUG] Initializing Auth state...");
         const { data: { session } } = await supabase.auth.getSession();
+        
         if (session?.user) {
-          const user = await fetchProfile(session.user.id, session.user.email || '');
-          if (user) setCurrentUser(user);
+          console.log("[AUTH_DEBUG] Session found for:", session.user.email);
+          await fetchProfile(session.user.id, session.user.email || '');
         } else {
+          console.log("[AUTH_DEBUG] No active session found.");
           setIsAuthLoading(false);
         }
       } catch (e) {
-        console.error("[AUTH_INIT] Error:", e);
+        console.error("[AUTH_DEBUG] Initialization Error:", e);
         setIsAuthLoading(false);
       }
     };
@@ -127,15 +156,14 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     initializeAuth();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log(`[AUTH_EVENT] ${event}`);
+      console.log(`[AUTH_DEBUG] Event Triggered: ${event}`);
       
       if (session?.user) {
         if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-          const user = await fetchProfile(session.user.id, session.user.email || '');
-          if (user) setCurrentUser(user);
+          await fetchProfile(session.user.id, session.user.email || '');
         }
       } else {
-        // Handle explicit sign out or missing session
+        console.log("[AUTH_DEBUG] User state cleared (Signed Out or Null Session)");
         setCurrentUser(null);
         setIsAuthLoading(false);
       }
@@ -148,6 +176,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     if (!currentUser) return;
     setIsDbLoading(true);
     try {
+      console.log("[DB_DEBUG] Refreshing application data...");
       const [pRes, trRes, profilesRes, deedsRes, worksRes] = await Promise.all([
         supabase.from('projects').select('*').order('id', { ascending: true }),
         supabase.from('technical_requests').select('*').order('created_at', { ascending: false }),
@@ -162,8 +191,9 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setClearanceRequests(deedsRes.data || []);
       setProjectWorks(worksRes.data || []);
       setErrorState(null);
+      console.log("[DB_DEBUG] Data refresh complete.");
     } catch (e) {
-      console.error("[DB_REFRESH] Error:", e);
+      console.error("[DB_DEBUG] Data refresh failed:", e);
       setErrorState("تنبيه: تعذر تحديث بعض البيانات من قاعدة البيانات");
     } finally {
       setIsDbLoading(false);
@@ -187,9 +217,8 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
       setCurrentUser(null);
-      // Local state is cleared, Router will handle redirection
     } catch (err) {
-      console.error("Logout Error:", err);
+      console.error("[AUTH_DEBUG] Logout Error:", err);
     } finally {
       setIsAuthLoading(false);
     }
