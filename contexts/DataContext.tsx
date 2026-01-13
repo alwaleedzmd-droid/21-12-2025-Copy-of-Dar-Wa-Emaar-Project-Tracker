@@ -58,28 +58,18 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   /**
    * SAFETY VALVE: Forced app entry after 3 seconds.
-   * If the database or auth takes too long, we force the loading state to false
-   * and set an Emergency Admin to allow the developer to debug the UI.
+   * Ensures the loading spinner stops if DB/Auth hangs.
+   * Does NOT set a fake user, allowing proper redirection to Login if null.
    */
   useEffect(() => {
     if (isAuthLoading) {
       const safetyTimer = setTimeout(() => {
-        console.warn("CRITICAL: Auth/Profile loading timed out after 3 seconds. Forcing entry.");
+        console.warn("Safety Valve: Loading timed out. Forcing UI unlock.");
         setIsAuthLoading(false);
-        if (!currentUser) {
-          console.warn("Setting Emergency Admin for debugging purposes.");
-          setCurrentUser({
-            id: 'emergency-temp-id',
-            email: 'admin@emergency.com',
-            name: 'Emergency Admin (Safe Mode)',
-            role: 'ADMIN',
-            department: 'System Recovery'
-          });
-        }
       }, 3000);
       return () => clearTimeout(safetyTimer);
     }
-  }, [isAuthLoading, currentUser]);
+  }, [isAuthLoading]);
 
   /**
    * fetchProfile: Fetches user metadata from the 'profiles' table.
@@ -96,13 +86,13 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       console.log("[AUTH] Profile search result:", data, error);
 
       if (error || !data) {
-        // Fallback profile if record doesn't exist yet
+        // Fallback profile if record doesn't exist yet but user is authenticated
         return {
           id: userId,
           email: email,
           name: email ? email.split('@')[0] : 'User',
-          role: 'ADMIN' as UserRole, // Set to ADMIN by default to allow first user setup
-          department: 'IT'
+          role: 'GUEST' as UserRole, // Default to GUEST if no profile record found
+          department: 'غير محدد'
         } as User;
       }
 
@@ -116,7 +106,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   /**
-   * Auth Initialization
+   * Auth Initialization & Subscription
    */
   useEffect(() => {
     const initializeAuth = async () => {
@@ -138,12 +128,14 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       console.log(`[AUTH_EVENT] ${event}`);
+      
       if (session?.user) {
         if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
           const user = await fetchProfile(session.user.id, session.user.email || '');
           if (user) setCurrentUser(user);
         }
       } else {
+        // Handle explicit sign out or missing session
         setCurrentUser(null);
         setIsAuthLoading(false);
       }
@@ -192,11 +184,13 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const logout = async () => {
     setIsAuthLoading(true);
     try {
-      await supabase.auth.signOut();
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
       setCurrentUser(null);
-      window.location.href = '/'; 
+      // Local state is cleared, Router will handle redirection
     } catch (err) {
       console.error("Logout Error:", err);
+    } finally {
       setIsAuthLoading(false);
     }
   };

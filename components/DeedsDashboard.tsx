@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useLocation } from 'react-router';
 import { supabase } from '../supabaseClient'; 
@@ -69,6 +70,20 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
     });
 
     const isAuthorizedToManage = ['ADMIN', 'PR_MANAGER', 'PR_EMPLOYEE', 'DEEDS_OFFICER', 'CONVEYANCE'].includes(currentUserRole || '');
+
+    /**
+     * Helper function to trigger notifications across the system
+     */
+    const sendAppNotification = async (title: string, message: string) => {
+        // We use the centralized notificationService which targets the PR_MANAGER role by default for deeds
+        // The recipient will see the notification in their Bell component
+        await notificationService.send(
+            'PR_MANAGER',
+            `📢 ${title}: ${message}`,
+            '/deeds',
+            currentUserName || 'نظام الإفراغات'
+        );
+    };
 
     const fetchDeeds = async () => {
         setIsLoading(true);
@@ -156,12 +171,15 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
             const { error } = await supabase.from('deed_comments').insert([{
                 request_id: selectedDeed.id,
                 user_name: currentUserName || 'مستخدم',
-                text: newComment.trim() // FIXED: Changed from content to text to match DB
+                text: newComment.trim()
             }]);
             if (error) throw error;
+
+            // Trigger notification for New Comment
+            await sendAppNotification('تعليق جديد', `تم إضافة ملاحظة على طلب العميل ${selectedDeed.client_name}`);
+
             setNewComment('');
             fetchComments(selectedDeed.id);
-            notificationService.send('PR_MANAGER', `💬 ملاحظة جديدة على إفراغ: ${selectedDeed.client_name}`, '/deeds', currentUserName);
         } catch (err: any) {
             alert("فشل إضافة التعليق: " + err.message);
         } finally { setIsCommentLoading(false); }
@@ -172,6 +190,10 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
         try {
             const { error } = await supabase.from('deeds_requests').update({ status }).eq('id', selectedDeed.id);
             if (error) throw error;
+            
+            // Trigger notification for Status Update
+            await sendAppNotification('تحديث حالة إفراغ', `تم تغيير حالة طلب ${selectedDeed.client_name} إلى (${status})`);
+            
             setSelectedDeed({ ...selectedDeed, status });
             fetchDeeds();
             logActivity?.('تحديث حالة إفراغ', `${selectedDeed.client_name} -> ${status}`, 'text-blue-500');
@@ -207,13 +229,13 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
                 submitted_by: currentUserName
             };
 
-            console.log("Final Payload for DB:", payload);
-
             const { error } = await supabase.from('deeds_requests').insert([payload]);
             if (error) throw error;
             
+            // Trigger notification for New Deed Request
+            await sendAppNotification('طلب إفراغ جديد', `تم تسجيل طلب جديد للمستفيد ${payload.client_name}`);
+
             logActivity?.('تسجيل إفراغ جديد', payload.client_name, 'text-green-500');
-            notificationService.send('PR_MANAGER', `🆕 طلب إفراغ جديد للمستفيد: ${payload.client_name}`, '/deeds', currentUserName);
 
             setIsRegModalOpen(false);
             fetchDeeds();
