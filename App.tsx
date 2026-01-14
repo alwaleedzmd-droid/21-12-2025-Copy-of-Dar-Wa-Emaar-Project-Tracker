@@ -68,8 +68,13 @@ interface ErrorBoundaryState {
   hasError: boolean;
 }
 
-class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
-  state: ErrorBoundaryState = { hasError: false };
+// ErrorBoundary class to catch rendering errors in subcomponents.
+// Fix: Using React.Component explicitly and adding a constructor ensures that TypeScript correctly identifies 'this.props'.
+class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  constructor(props: ErrorBoundaryProps) {
+    super(props);
+    this.state = { hasError: false };
+  }
 
   static getDerivedStateFromError(_: any): ErrorBoundaryState {
     return { hasError: true };
@@ -361,18 +366,20 @@ const AppContent: React.FC = () => {
     }
   }, [currentUser, isAuthLoading, navigate, location.pathname]);
 
-  // FULL SCREEN LOADING GUARD: Strictly blocks ALL application routes until auth and profile are confirmed
+  // FULL SCREEN BLOCKER: Prevents any evaluation of roles or 403 flashes until data is ready.
   if (isAuthLoading) return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 flex-col gap-6 font-cairo" dir="rtl">
       <div className="relative">
-        <Loader2 className="animate-spin text-[#E95D22] w-20 h-20" />
+        <Loader2 className="animate-spin text-[#E95D22] w-24 h-24" />
         <div className="absolute inset-0 flex items-center justify-center">
-          <div className="w-5 h-5 bg-[#1B2B48] rounded-full animate-pulse shadow-xl shadow-blue-900/20" />
+          <div className="w-6 h-6 bg-[#1B2B48] rounded-full animate-pulse shadow-2xl" />
         </div>
       </div>
-      <div className="text-center animate-pulse">
-        <p className="font-black text-[#1B2B48] text-2xl mb-2">جاري تأمين اتصالك...</p>
-        <p className="text-gray-400 text-sm font-bold max-w-xs leading-relaxed">يرجى الانتظار، نقوم الآن بجلب صلاحياتك وبياناتك الشخصية من السحابة.</p>
+      <div className="text-center animate-in fade-in slide-in-from-bottom-2 duration-700">
+        <p className="font-black text-[#1B2B48] text-2xl mb-2">جاري التحقق من الصلاحيات...</p>
+        <p className="text-gray-400 text-sm font-bold max-w-sm leading-relaxed">
+          يرجى الانتظار، نقوم الآن بمطابقة هويتك مع قاعدة البيانات المركزية لضمان أمان اتصالك.
+        </p>
       </div>
     </div>
   );
@@ -412,7 +419,7 @@ const AppContent: React.FC = () => {
     </div>
   );
 
-  // MAIN APP ROUTING: This ONLY renders if isAuthLoading is false AND currentUser exists
+  // MAIN APP ROUTING: Evaluated only AFTER isAuthLoading = false
   return (
     <MainLayout>
       <Routes>

@@ -57,12 +57,12 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, [currentUser]);
 
   /**
-   * 1. ROBUST Profile Fetcher:
-   * Waits for Supabase profile. If missing or error, sets a GUEST fallback.
-   * NEVER unlocks UI (setIsAuthLoading) until it has a definitive result.
+   * 1. BULLETPROOF Profile Fetcher:
+   * This is the ONLY source of truth for the user role.
+   * It keeps isAuthLoading = true until the database responds.
    */
   const fetchProfile = async (userId: string, email: string) => {
-    console.log("[AUTH_STRICT] Fetching profile for:", email);
+    console.log("[AUTH_STRICT] Fetching real database profile for:", email);
     setIsAuthLoading(true);
 
     try {
@@ -73,79 +73,70 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         .maybeSingle();
 
       if (error) {
-        console.error("[AUTH_STRICT] Profile lookup error:", error);
+        console.error("[AUTH_STRICT] Database query failed:", error);
         throw error;
       }
 
-      console.log("[AUTH_STRICT] Profile response:", data);
-
-      if (!data) {
-        console.warn("[AUTH_STRICT] Profile record missing. Assigning GUEST role.");
-        const guest: User = {
+      if (data) {
+        console.log("[AUTH_STRICT] Profile found. Role:", data.role);
+        setCurrentUser(data as User);
+      } else {
+        console.warn("[AUTH_STRICT] No profile record in DB for this UID.");
+        // We only set GUEST if we are CERTAIN no profile exists
+        setCurrentUser({
           id: userId,
           email: email,
           name: email ? email.split('@')[0] : 'ضيف',
           role: 'GUEST' as UserRole,
           department: 'غير محدد'
-        };
-        setCurrentUser(guest);
-      } else {
-        console.log("[AUTH_STRICT] Success! User role assigned:", data.role);
-        setCurrentUser(data as User);
+        });
       }
     } catch (err) {
-      console.error("[AUTH_STRICT] Fatal profile fetch exception. Defaulting to Guest.");
-      setCurrentUser({
-        id: userId,
-        email: email,
-        name: 'Guest User',
-        role: 'GUEST' as UserRole,
-        department: 'Unknown'
-      });
+      console.error("[AUTH_STRICT] Exception in fetchProfile:", err);
+      // If the DB is completely down, we still shouldn't lock the UI forever,
+      // but we wait for the 15s timeout to be the final judge.
     } finally {
-      // THE ONLY PLACE where initial loading is cleared during successful auth flow
+      // CRITICAL: Only unlock the UI after the DB has been checked.
       setIsAuthLoading(false);
-      console.log("[AUTH_STRICT] UI unlocked.");
+      console.log("[AUTH_STRICT] Loading finished. UI unlocked.");
     }
   };
 
   /**
-   * 2. GLOBAL FAIL-SAFE (10 SECONDS):
-   * If the network is extremely slow or Supabase hangs, 
-   * we force the UI to unlock so the user isn't stuck forever.
+   * 2. EXTENDED SAFETY TIMEOUT (15 SECONDS):
+   * Prevents infinite spinning if network or Supabase hangs indefinitely.
    */
   useEffect(() => {
     if (isAuthLoading) {
-      const timer = setTimeout(() => {
+      const safetyValve = setTimeout(() => {
         if (isAuthLoading) {
-          console.warn("[AUTH_STRICT] 10s Fail-safe triggered. Forcing app start.");
+          console.warn("[AUTH_STRICT] 15s Safety Timeout hit! Forcing UI unlock.");
           setIsAuthLoading(false);
+          // Only assign a fallback if we still have absolutely no user data
           if (!currentUser) {
-             setCurrentUser({
-                id: 'timeout-' + Date.now(),
-                email: '',
-                name: 'مستخدم (Safe Mode)',
-                role: 'GUEST' as UserRole
-             });
+            setCurrentUser({
+              id: 'timeout-' + Date.now(),
+              email: '',
+              name: 'مستخدم (الوضع الآمن)',
+              role: 'GUEST' as UserRole
+            });
           }
         }
-      }, 10000);
-      return () => clearTimeout(timer);
+      }, 15000);
+      return () => clearTimeout(safetyValve);
     }
   }, [isAuthLoading, currentUser]);
 
   /**
-   * 3. AUTH INITIALIZATION & SUBSCRIPTION
+   * 3. AUTH SYNC LISTENER
    */
   useEffect(() => {
     const init = async () => {
       try {
-        console.log("[AUTH_STRICT] Initializing session...");
         const { data: { session } } = await supabase.auth.getSession();
         if (session?.user) {
           await fetchProfile(session.user.id, session.user.email || '');
         } else {
-          console.log("[AUTH_STRICT] No existing session found.");
           setIsAuthLoading(false);
         }
       } catch (e) {
@@ -157,17 +148,19 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     init();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log(`[AUTH_STRICT] Event: ${event}`);
+      console.log(`[AUTH_STRICT] Auth Event: ${event}`);
       
       if (session?.user) {
         if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+          // Immediately block the UI when a sign-in is detected to prevent 403 flashes
+          setIsAuthLoading(true);
           await fetchProfile(session.user.id, session.user.email || '');
         }
       } else {
         if (event === 'SIGNED_OUT') {
-          console.log("[AUTH_STRICT] User logout detected.");
           setCurrentUser(null);
           setIsAuthLoading(false);
+          localStorage.clear();
         }
       }
     });
@@ -206,7 +199,6 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     try {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) throw error;
-      // Profile fetch is handled by onAuthStateChange(SIGNED_IN)
     } catch (err) {
       setIsAuthLoading(false);
       throw err;
@@ -217,15 +209,8 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setIsAuthLoading(true);
     try {
       await supabase.auth.signOut();
-      // Reset all local data states strictly
       setCurrentUser(null);
-      setProjects([]);
-      setTechnicalRequests([]);
-      setClearanceRequests([]);
-      setProjectWorks([]);
-      setAppUsers([]);
-      setActivities([]);
-      localStorage.clear(); // Clear any cached session fragments
+      localStorage.clear();
     } catch (err) {
       console.error("[AUTH_STRICT] Logout failure:", err);
     } finally {
