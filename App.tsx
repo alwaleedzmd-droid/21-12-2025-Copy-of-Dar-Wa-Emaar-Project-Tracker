@@ -32,8 +32,10 @@ interface ProtectedRouteProps {
 }
 
 const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowedRoles, currentUser }) => {
+  // If the user isn't logged in, redirect to login page
   if (!currentUser) return <Navigate to="/" replace />;
   
+  // If the user is logged in but doesn't have the required role
   if (!allowedRoles.includes(currentUser.role)) {
     return (
       <div className="min-h-[60vh] flex flex-col items-center justify-center p-12 text-center animate-in fade-in duration-500 font-cairo">
@@ -309,14 +311,14 @@ const AppContent: React.FC = () => {
   const location = useLocation();
   const { 
     currentUser, isAuthLoading, login, logout,
-    projects = [], technicalRequests = [], clearanceRequests = [], projectWorks = [], appUsers = [], activities = [], refreshData, logActivity 
+    projects = [], technicalRequests = [], clearanceRequests = [], projectWorks = [], appUsers = [], refreshData, logActivity 
   } = useData();
 
   const [loginData, setLoginData] = useState({ email: 'adaldawsari@darwaemaar.com', password: '' });
   const [loginError, setLoginError] = useState<string | null>(null);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
 
-  // منطق التوجيه الافتراضي بناءً على الدور لضمان الوصول للواجهة المناسبة فوراً
+  // Default path logic based on role
   const getDefaultPath = (role: UserRole) => {
     switch (role) {
       case 'ADMIN':
@@ -353,18 +355,29 @@ const AppContent: React.FC = () => {
   };
 
   useEffect(() => {
-    if (currentUser && location.pathname === '/') {
+    // Navigate away from login ONLY if user profile and loading is 100% complete
+    if (currentUser && !isAuthLoading && location.pathname === '/') {
       navigate(getDefaultPath(currentUser.role), { replace: true });
     }
-  }, [currentUser, navigate, location.pathname]);
+  }, [currentUser, isAuthLoading, navigate, location.pathname]);
 
+  // FULL SCREEN LOADING GUARD: Strictly blocks ALL application routes until auth and profile are confirmed
   if (isAuthLoading) return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 flex-col gap-4">
-      <Loader2 className="animate-spin text-[#E95D22] w-12 h-12" />
-      <p className="font-bold text-[#1B2B48] animate-pulse" dir="rtl">جاري التحقق من الهوية...</p>
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 flex-col gap-6 font-cairo" dir="rtl">
+      <div className="relative">
+        <Loader2 className="animate-spin text-[#E95D22] w-20 h-20" />
+        <div className="absolute inset-0 flex items-center justify-center">
+          <div className="w-5 h-5 bg-[#1B2B48] rounded-full animate-pulse shadow-xl shadow-blue-900/20" />
+        </div>
+      </div>
+      <div className="text-center animate-pulse">
+        <p className="font-black text-[#1B2B48] text-2xl mb-2">جاري تأمين اتصالك...</p>
+        <p className="text-gray-400 text-sm font-bold max-w-xs leading-relaxed">يرجى الانتظار، نقوم الآن بجلب صلاحياتك وبياناتك الشخصية من السحابة.</p>
+      </div>
     </div>
   );
 
+  // LOGIN SCREEN
   if (!currentUser) return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6 font-cairo" dir="rtl">
       <div className="bg-[#1B2B48] w-full max-w-md rounded-[50px] shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-300">
@@ -399,19 +412,20 @@ const AppContent: React.FC = () => {
     </div>
   );
 
+  // MAIN APP ROUTING: This ONLY renders if isAuthLoading is false AND currentUser exists
   return (
     <MainLayout>
       <Routes>
         <Route path="/" element={<Navigate to={getDefaultPath(currentUser.role)} replace />} />
 
-        {/* مسار لوحة التحكم الرئيسية - متاح للأدمن وللعلاقات العامة */}
+        {/* Dashbaord Route */}
         <Route path="/dashboard" element={
           <ProtectedRoute allowedRoles={['ADMIN', 'PR_MANAGER', 'PR_EMPLOYEE']} currentUser={currentUser}>
             <AppMapDashboard currentUser={currentUser} onLogout={logout} />
           </ProtectedRoute>
         } />
         
-        {/* مسارات المشاريع - متاحة للأدمن وللعلاقات العامة وللمهندسين الفنيين */}
+        {/* Projects Routes */}
         <Route path="/projects" element={
           <ProtectedRoute allowedRoles={['ADMIN', 'PR_MANAGER', 'PR_EMPLOYEE', 'TECHNICAL']} currentUser={currentUser}>
             <ProjectsModule projects={projects} stats={{ projects: projects.length, techRequests: technicalRequests.length, clearRequests: clearanceRequests.length }} currentUser={currentUser} onProjectClick={(p) => navigate(`/projects/${p?.id}`)} onRefresh={refreshData} />
@@ -424,31 +438,32 @@ const AppContent: React.FC = () => {
           </ProtectedRoute>
         } />
         
-        {/* مسارات الطلبات الفنية - متاحة للأدمن والمهندسين وللعلاقات العامة */}
+        {/* Technical Requests Route */}
         <Route path="/technical" element={
           <ProtectedRoute allowedRoles={['ADMIN', 'TECHNICAL', 'PR_MANAGER', 'PR_EMPLOYEE']} currentUser={currentUser}>
             <TechnicalModule requests={technicalRequests} projects={projects} currentUser={currentUser} usersList={appUsers} onRefresh={refreshData} logActivity={logActivity} />
           </ProtectedRoute>
         } />
 
-        {/* مسارات الإفراغات - متاحة للأدمن وفريق الإفراغ وللعلاقات العامة */}
+        {/* Deeds/Clearance Route */}
         <Route path="/deeds" element={
           <ProtectedRoute allowedRoles={['ADMIN', 'CONVEYANCE', 'DEEDS_OFFICER', 'PR_MANAGER', 'PR_EMPLOYEE']} currentUser={currentUser}>
             <DeedsDashboard currentUserRole={currentUser.role} currentUserName={currentUser.name} logActivity={logActivity} />
           </ProtectedRoute>
         } />
         
-        {/* إدارة المستخدمين - حصرية للمدير فقط */}
+        {/* User Management Route */}
         <Route path="/users" element={ 
           <ProtectedRoute allowedRoles={['ADMIN']} currentUser={currentUser}>
             <UserManagement />
           </ProtectedRoute>
         } />
         
-        {/* أي مسار غير مطابق يتم تحويله للرئيسية المسموحة */}
+        {/* Fallback */}
         <Route path="*" element={<Navigate to={getDefaultPath(currentUser.role)} replace />} />
       </Routes>
       
+      {/* AI Assistant - Only for privileged users */}
       {['ADMIN', 'PR_MANAGER', 'PR_EMPLOYEE'].includes(currentUser?.role || '') && (
         <AIAssistant currentUser={currentUser} projects={projects} technicalRequests={technicalRequests} clearanceRequests={clearanceRequests} projectWorks={projectWorks} onNavigate={(type, data) => navigate(type === 'PROJECT' ? `/projects/${data.id}` : '/deeds')} />
       )}

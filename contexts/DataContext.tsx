@@ -58,11 +58,11 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   /**
    * 1. ROBUST Profile Fetcher:
-   * Uses try...catch...finally to ensure the loading state is ALWAYS updated.
-   * Provides a GUEST fallback if no database record is found.
+   * Waits for Supabase profile. If missing or error, sets a GUEST fallback.
+   * NEVER unlocks UI (setIsAuthLoading) until it has a definitive result.
    */
   const fetchProfile = async (userId: string, email: string) => {
-    console.log("[AUTH_SYNC] Fetching profile for:", email);
+    console.log("[AUTH_STRICT] Fetching profile for:", email);
     setIsAuthLoading(true);
 
     try {
@@ -73,96 +73,91 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         .maybeSingle();
 
       if (error) {
-        console.error("[AUTH_SYNC] Profile query error:", error);
+        console.error("[AUTH_STRICT] Profile lookup error:", error);
         throw error;
       }
 
-      console.log("[AUTH_SYNC] Profile Data:", data);
+      console.log("[AUTH_STRICT] Profile response:", data);
 
       if (!data) {
-        console.warn("[AUTH_SYNC] No profile record found. Setting GUEST fallback.");
-        const guestUser: User = {
+        console.warn("[AUTH_STRICT] Profile record missing. Assigning GUEST role.");
+        const guest: User = {
           id: userId,
           email: email,
           name: email ? email.split('@')[0] : 'ضيف',
           role: 'GUEST' as UserRole,
           department: 'غير محدد'
         };
-        setCurrentUser(guestUser);
-        return guestUser;
+        setCurrentUser(guest);
+      } else {
+        console.log("[AUTH_STRICT] Success! User role assigned:", data.role);
+        setCurrentUser(data as User);
       }
-
-      const user = data as User;
-      setCurrentUser(user);
-      return user;
-
     } catch (err) {
-      console.error("[AUTH_SYNC] Profile fetch failed. Using GUEST fallback.");
-      const fallback: User = {
+      console.error("[AUTH_STRICT] Fatal profile fetch exception. Defaulting to Guest.");
+      setCurrentUser({
         id: userId,
         email: email,
-        name: email ? email.split('@')[0] : 'مستخدم',
+        name: 'Guest User',
         role: 'GUEST' as UserRole,
         department: 'Unknown'
-      };
-      setCurrentUser(fallback);
-      return fallback;
+      });
     } finally {
-      // NON-NEGOTIABLE: Stop the spinner no matter what.
+      // THE ONLY PLACE where initial loading is cleared during successful auth flow
       setIsAuthLoading(false);
-      console.log("[AUTH_SYNC] Spinner stopped via finally block.");
+      console.log("[AUTH_STRICT] UI unlocked.");
     }
   };
 
   /**
-   * 2. GLOBAL FAIL-SAFE TIMER:
-   * Forces the app to unlock after 4 seconds to prevent infinite spinning.
+   * 2. GLOBAL FAIL-SAFE (10 SECONDS):
+   * If the network is extremely slow or Supabase hangs, 
+   * we force the UI to unlock so the user isn't stuck forever.
    */
   useEffect(() => {
     if (isAuthLoading) {
-      const safetyValve = setTimeout(() => {
+      const timer = setTimeout(() => {
         if (isAuthLoading) {
-          console.warn("[BULLETPROOF] 4s Timeout Reached! Forcing UI Unlock.");
+          console.warn("[AUTH_STRICT] 10s Fail-safe triggered. Forcing app start.");
           setIsAuthLoading(false);
-          // If after 4 seconds we have no user, but auth might have succeeded, set guest
           if (!currentUser) {
-            console.warn("[BULLETPROOF] Setting emergency Guest session.");
-            setCurrentUser({
-              id: 'fallback-' + Date.now(),
-              email: '',
-              name: 'مستخدم (Safe Mode)',
-              role: 'GUEST' as UserRole
-            });
+             setCurrentUser({
+                id: 'timeout-' + Date.now(),
+                email: '',
+                name: 'مستخدم (Safe Mode)',
+                role: 'GUEST' as UserRole
+             });
           }
         }
-      }, 4000);
-      return () => clearTimeout(safetyValve);
+      }, 10000);
+      return () => clearTimeout(timer);
     }
   }, [isAuthLoading, currentUser]);
 
   /**
-   * 3. AUTH STATE LISTENER SYNC
+   * 3. AUTH INITIALIZATION & SUBSCRIPTION
    */
   useEffect(() => {
-    const initSession = async () => {
+    const init = async () => {
       try {
+        console.log("[AUTH_STRICT] Initializing session...");
         const { data: { session } } = await supabase.auth.getSession();
-        console.log("[AUTH_SYNC] Initial Session Check:", !!session);
         if (session?.user) {
           await fetchProfile(session.user.id, session.user.email || '');
         } else {
+          console.log("[AUTH_STRICT] No existing session found.");
           setIsAuthLoading(false);
         }
       } catch (e) {
-        console.error("[AUTH_SYNC] Session Init Error:", e);
+        console.error("[AUTH_STRICT] Init error:", e);
         setIsAuthLoading(false);
       }
     };
 
-    initSession();
+    init();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log(`[AUTH_SYNC] Event: ${event} | Session: ${!!session}`);
+      console.log(`[AUTH_STRICT] Event: ${event}`);
       
       if (session?.user) {
         if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
@@ -170,7 +165,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }
       } else {
         if (event === 'SIGNED_OUT') {
-          console.log("[AUTH_SYNC] Signed out. Clearing state.");
+          console.log("[AUTH_STRICT] User logout detected.");
           setCurrentUser(null);
           setIsAuthLoading(false);
         }
@@ -211,6 +206,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     try {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) throw error;
+      // Profile fetch is handled by onAuthStateChange(SIGNED_IN)
     } catch (err) {
       setIsAuthLoading(false);
       throw err;
@@ -221,9 +217,17 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setIsAuthLoading(true);
     try {
       await supabase.auth.signOut();
+      // Reset all local data states strictly
       setCurrentUser(null);
+      setProjects([]);
+      setTechnicalRequests([]);
+      setClearanceRequests([]);
+      setProjectWorks([]);
+      setAppUsers([]);
+      setActivities([]);
+      localStorage.clear(); // Clear any cached session fragments
     } catch (err) {
-      console.error("[AUTH_SYNC] Logout Error:", err);
+      console.error("[AUTH_STRICT] Logout failure:", err);
     } finally {
       setIsAuthLoading(false);
     }
