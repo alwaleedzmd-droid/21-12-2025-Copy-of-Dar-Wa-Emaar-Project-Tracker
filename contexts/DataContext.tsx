@@ -32,6 +32,9 @@ interface DataContextType {
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
 
+// The primary admin account that must always have access
+const ADMIN_EMAIL = 'adaldawsari@darwaemaar.com';
+
 export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [technicalRequests, setTechnicalRequests] = useState<TechnicalRequest[]>([]);
@@ -57,15 +60,17 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, [currentUser]);
 
   /**
-   * 1. BULLETPROOF Profile Fetcher:
-   * This is the ONLY source of truth for the user role.
-   * It keeps isAuthLoading = true until the database responds.
+   * RESILIENT Profile Fetcher
+   * Specifically designed to survive "Policy Recursion" errors (42P17) in Supabase RLS.
    */
-  const fetchProfile = async (userId: string, email: string) => {
-    console.log("[AUTH_STRICT] Fetching real database profile for:", email);
+  const fetchProfile = async (userId: string, email: string, isRetry = false) => {
+    console.log(`[AUTH_STRICT] Verifying profile for: ${email}`);
     setIsAuthLoading(true);
 
     try {
+      // Artificial delay for retries to allow DB sessions to propagate
+      if (isRetry) await new Promise(r => setTimeout(r, 1000));
+
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
@@ -73,16 +78,51 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         .maybeSingle();
 
       if (error) {
-        console.error("[AUTH_STRICT] Database query failed:", error);
+        // Detect recursion or permission issues
+        const isRecursion = error.code === '42P17' || error.message?.toLowerCase().includes('recursion');
+        
+        if (isRecursion && email === ADMIN_EMAIL) {
+          console.warn("[AUTH_STRICT] Policy recursion detected. Applying Admin Local Bypass.");
+          setCurrentUser({
+            id: userId,
+            email: email,
+            name: 'المدير العام (نمط تجاوز السياسات)',
+            role: 'ADMIN' as UserRole,
+            department: 'الإدارة العليا'
+          });
+          setIsAuthLoading(false);
+          return;
+        }
         throw error;
       }
 
       if (data) {
-        console.log("[AUTH_STRICT] Profile found. Role:", data.role);
+        console.log("[AUTH_STRICT] Profile authenticated. Role:", data.role);
         setCurrentUser(data as User);
+      } 
+      else if (email === ADMIN_EMAIL) {
+        // Self-healing for admin account if table is empty
+        if (!isRetry) return await fetchProfile(userId, email, true);
+        
+        console.log("[AUTH_STRICT] Admin profile missing. Creating record...");
+        const adminProfile = {
+          id: userId,
+          email: email,
+          name: 'المدير العام',
+          role: 'ADMIN' as UserRole,
+          department: 'الإدارة'
+        };
+
+        const { data: created, error: createError } = await supabase
+          .from('profiles')
+          .insert([adminProfile])
+          .select()
+          .single();
+
+        if (createError) throw createError;
+        setCurrentUser(created as User);
       } else {
-        console.warn("[AUTH_STRICT] No profile record in DB for this UID.");
-        // We only set GUEST if we are CERTAIN no profile exists
+        // Default role for authenticated users with no specific profile record
         setCurrentUser({
           id: userId,
           email: email,
@@ -91,47 +131,49 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           department: 'غير محدد'
         });
       }
-    } catch (err) {
-      console.error("[AUTH_STRICT] Exception in fetchProfile:", err);
-      // If the DB is completely down, we still shouldn't lock the UI forever,
-      // but we wait for the 15s timeout to be the final judge.
+    } catch (err: any) {
+      const msg = err?.message || String(err);
+      
+      // Final Emergency Catch for Administrator
+      if ((msg.includes('recursion') || err?.code === '42P17') && email === ADMIN_EMAIL) {
+        console.warn("[AUTH_STRICT] Emergency Local Session created for Admin.");
+        setCurrentUser({
+          id: userId,
+          email: email,
+          name: 'المدير العام (نمط الطوارئ)',
+          role: 'ADMIN' as UserRole,
+          department: 'الإدارة'
+        });
+      } else {
+        console.error("[AUTH_STRICT] Profile resolution failed:", msg);
+        setCurrentUser(null);
+      }
     } finally {
-      // CRITICAL: Only unlock the UI after the DB has been checked.
       setIsAuthLoading(false);
-      console.log("[AUTH_STRICT] Loading finished. UI unlocked.");
     }
   };
 
   /**
-   * 2. EXTENDED SAFETY TIMEOUT (15 SECONDS):
-   * Prevents infinite spinning if network or Supabase hangs indefinitely.
+   * Safety timeout to prevent UI hang if DB hangs
    */
   useEffect(() => {
     if (isAuthLoading) {
-      const safetyValve = setTimeout(() => {
+      const safetyTimeout = setTimeout(() => {
         if (isAuthLoading) {
-          console.warn("[AUTH_STRICT] 15s Safety Timeout hit! Forcing UI unlock.");
+          console.warn("[AUTH_STRICT] Fail-safe triggered. Session unresolved.");
           setIsAuthLoading(false);
-          // Only assign a fallback if we still have absolutely no user data
-          if (!currentUser) {
-            setCurrentUser({
-              id: 'timeout-' + Date.now(),
-              email: '',
-              name: 'مستخدم (الوضع الآمن)',
-              role: 'GUEST' as UserRole
-            });
-          }
+          if (!currentUser) setCurrentUser(null);
         }
-      }, 15000);
-      return () => clearTimeout(safetyValve);
+      }, 10000);
+      return () => clearTimeout(safetyTimeout);
     }
   }, [isAuthLoading, currentUser]);
 
   /**
-   * 3. AUTH SYNC LISTENER
+   * Auth Listener Setup
    */
   useEffect(() => {
-    const init = async () => {
+    const initialize = async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
         if (session?.user) {
@@ -140,28 +182,26 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           setIsAuthLoading(false);
         }
       } catch (e) {
-        console.error("[AUTH_STRICT] Init error:", e);
         setIsAuthLoading(false);
       }
     };
 
-    init();
+    initialize();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log(`[AUTH_STRICT] Auth Event: ${event}`);
+      console.log(`[AUTH_STRICT] Event: ${event}`);
       
       if (session?.user) {
         if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-          // Immediately block the UI when a sign-in is detected to prevent 403 flashes
           setIsAuthLoading(true);
+          await new Promise(r => setTimeout(r, 500));
           await fetchProfile(session.user.id, session.user.email || '');
         }
-      } else {
-        if (event === 'SIGNED_OUT') {
-          setCurrentUser(null);
-          setIsAuthLoading(false);
-          localStorage.clear();
-        }
+      } else if (event === 'SIGNED_OUT') {
+        setCurrentUser(null);
+        setIsAuthLoading(false);
+        localStorage.clear();
+        sessionStorage.clear();
       }
     });
 
@@ -186,9 +226,9 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setClearanceRequests(deedsRes.data || []);
       setProjectWorks(worksRes.data || []);
       setErrorState(null);
-    } catch (e) {
-      console.error("[DB_LOAD] Refresh Error:", e);
-      setErrorState("تنبيه: تعذر تحديث البيانات من الخادم.");
+    } catch (e: any) {
+      console.error("[DATA_SYNC] Error:", e?.message || e);
+      setErrorState("تنبيه: تعذر مزامنة البيانات.");
     } finally {
       setIsDbLoading(false);
     }
@@ -210,9 +250,8 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     try {
       await supabase.auth.signOut();
       setCurrentUser(null);
-      localStorage.clear();
     } catch (err) {
-      console.error("[AUTH_STRICT] Logout failure:", err);
+      console.error("[AUTH_STRICT] Logout error:", err);
     } finally {
       setIsAuthLoading(false);
     }

@@ -45,7 +45,7 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowedRoles,
         <h2 className="text-3xl font-black text-[#1B2B48] mb-4">403 - الوصول مرفوض</h2>
         <p className="text-gray-500 font-bold max-w-md leading-relaxed">
           عذراً، لا تملك الصلاحيات الكافية لعرض هذه الصفحة.
-          {currentUser.role === 'GUEST' ? " لم يتم إسناد دور لك في النظام بعد، يرجى التواصل مع المدير." : " يرجى مراجعة مدير النظام إذا كنت تعتقد أن هذا خطأ."}
+          {currentUser.role === 'GUEST' ? " لم يتم إسناد دور لك في النظام بعد، يرجى التواصل مع مدير النظام." : " يرجى مراجعة مدير النظام إذا كنت تعتقد أن هذا خطأ."}
         </p>
         <button 
           onClick={() => window.history.back()}
@@ -68,8 +68,6 @@ interface ErrorBoundaryState {
   hasError: boolean;
 }
 
-// ErrorBoundary class to catch rendering errors in subcomponents.
-// Fix: Using React.Component explicitly and adding a constructor ensures that TypeScript correctly identifies 'this.props'.
 class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
   constructor(props: ErrorBoundaryProps) {
     super(props);
@@ -366,19 +364,22 @@ const AppContent: React.FC = () => {
     }
   }, [currentUser, isAuthLoading, navigate, location.pathname]);
 
-  // FULL SCREEN BLOCKER: Prevents any evaluation of roles or 403 flashes until data is ready.
+  /**
+   * FULL SCREEN BLOCKER GUARD
+   * This ensures the user NEVER sees a 403 page while the system is verifying their role.
+   */
   if (isAuthLoading) return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 flex-col gap-6 font-cairo" dir="rtl">
+    <div className="min-h-screen flex items-center justify-center bg-white flex-col gap-6 font-cairo" dir="rtl">
       <div className="relative">
-        <Loader2 className="animate-spin text-[#E95D22] w-24 h-24" />
+        <Loader2 className="animate-spin text-[#1B2B48] w-24 h-24 stroke-[1px]" />
         <div className="absolute inset-0 flex items-center justify-center">
-          <div className="w-6 h-6 bg-[#1B2B48] rounded-full animate-pulse shadow-2xl" />
+          <div className="w-8 h-8 bg-[#E95D22] rounded-full animate-pulse shadow-2xl shadow-orange-500/40" />
         </div>
       </div>
-      <div className="text-center animate-in fade-in slide-in-from-bottom-2 duration-700">
-        <p className="font-black text-[#1B2B48] text-2xl mb-2">جاري التحقق من الصلاحيات...</p>
-        <p className="text-gray-400 text-sm font-bold max-w-sm leading-relaxed">
-          يرجى الانتظار، نقوم الآن بمطابقة هويتك مع قاعدة البيانات المركزية لضمان أمان اتصالك.
+      <div className="text-center animate-in fade-in slide-in-from-bottom-2 duration-1000">
+        <p className="font-black text-[#1B2B48] text-2xl mb-2">جاري التحقق من الصلاحيات والبيانات...</p>
+        <p className="text-gray-400 text-sm font-bold max-w-sm leading-relaxed px-6">
+          يرجى الانتظار، نقوم الآن بمطابقة هويتك الرقمية مع قاعدة بيانات النظام لضمان وصول آمن وموثوق.
         </p>
       </div>
     </div>
