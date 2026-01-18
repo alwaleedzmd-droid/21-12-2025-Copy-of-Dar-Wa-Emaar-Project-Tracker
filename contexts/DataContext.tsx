@@ -33,7 +33,7 @@ interface DataContextType {
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
 
-// الحساب المدير الأساسي للتعافي في حالات الطوارئ
+// The primary admin account that must always have access
 const ADMIN_EMAIL = 'adaldawsari@darwaemaar.com';
 
 export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
@@ -60,43 +60,51 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setActivities(prev => [newLog, ...prev].slice(0, 50));
   }, [currentUser]);
 
-  const fetchProfile = useCallback(async (userId: string, email: string, isRetry = false) => {
+  /**
+   * RECURSION-PROOF Profile Fetcher (The Brain)
+   * Immediately assigns ADMIN role for the master email to bypass RLS policy loops and prevent 403 flashes.
+   */
+  const fetchProfile = useCallback(async (userId: string, email: string) => {
     console.log(`[AUTH_STRICT] Profile Syncing... UID: ${userId} | EMAIL: ${email}`);
     setIsAuthLoading(true);
 
-    try {
-      if (isRetry) await new Promise(r => setTimeout(r, 1500));
+    // 1. INSTANT ADMIN BYPASS: 
+    // We don't wait for the DB if it's the master email. This kills the "403 flash" instantly.
+    if (email === ADMIN_EMAIL) {
+      console.log("[AUTH_STRICT] Master Admin detected. applying instant bypass.");
+      setCurrentUser({
+        id: userId,
+        email: email,
+        name: 'الوليد الدوسري',
+        role: 'ADMIN' as UserRole,
+        department: 'الإدارة العليا'
+      });
+      setIsAuthLoading(false);
+      
+      // We still try to sync in background, but the UI is already unlocked.
+      try {
+        const { data } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle();
+        if (data) setCurrentUser(prev => ({ ...prev, ...data } as User));
+      } catch (err) {
+        console.warn("[AUTH_STRICT] Background sync failed (likely recursion), keeping local bypass state.");
+      }
+      return;
+    }
 
+    try {
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', userId)
         .maybeSingle();
 
-      if (error) {
-        // معالجة خطأ الـ Recursion (42P17) للمدير العام
-        const isPolicyIssue = error.code === '42P17' || error.status === 403 || error.message?.includes('recursion');
-        
-        if (isPolicyIssue && email === ADMIN_EMAIL) {
-          console.warn("[AUTH_STRICT] DB Policy Loop detected for Admin. Activating Emergency Local Identity.");
-          setCurrentUser({
-            id: userId,
-            email: email,
-            name: 'المدير العام (تجاوز السياسات)',
-            role: 'ADMIN' as UserRole,
-            department: 'الإدارة العليا'
-          });
-          return;
-        }
-        throw error;
-      }
+      if (error) throw error;
 
       if (data) {
         console.log("[AUTH_STRICT] Profile resolved successfully. Role:", data.role);
         setCurrentUser(data as User);
-      } else if (email === ADMIN_EMAIL && !isRetry) {
-        return await fetchProfile(userId, email, true);
       } else {
+        // Fallback for new auth users
         setCurrentUser({
           id: userId,
           email: email,
@@ -107,17 +115,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
     } catch (err: any) {
       console.error("[AUTH_STRICT] Sync Error:", err?.message || err);
-      if (email === ADMIN_EMAIL) {
-        setCurrentUser({
-          id: userId,
-          email: email,
-          name: 'المدير العام (نمط التعافي)',
-          role: 'ADMIN' as UserRole,
-          department: 'الإدارة'
-        });
-      } else {
-        setCurrentUser(null);
-      }
+      setCurrentUser(null);
     } finally {
       setIsAuthLoading(false);
     }
@@ -131,6 +129,21 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setIsAuthLoading(false);
     }
   };
+
+  /**
+   * SAFETY TIMEOUT (15 Seconds)
+   */
+  useEffect(() => {
+    if (isAuthLoading) {
+      const timer = setTimeout(() => {
+        if (isAuthLoading) {
+          console.warn("[AUTH_STRICT] Safety timeout (15s) reached.");
+          setIsAuthLoading(false);
+        }
+      }, 15000);
+      return () => clearTimeout(timer);
+    }
+  }, [isAuthLoading]);
 
   useEffect(() => {
     const sync = async () => {
@@ -179,7 +192,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setProjectWorks(worksRes.data || []);
       setErrorState(null);
     } catch (e: any) {
-      console.error("[DATA_SYNC] Refresh failed:", e?.message);
+      console.error("[DATA_SYNC] Global refresh failed:", e?.message);
       setErrorState("تنبيه: تعذر مزامنة بيانات النظام.");
     } finally {
       setIsDbLoading(false);

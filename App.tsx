@@ -31,48 +31,40 @@ interface ProtectedRouteProps {
 }
 
 /**
- * ProtectedRoute Component
- * ينتظر اكتمال التحقق من الهوية (isAuthLoading) قبل تقييم الصلاحيات.
+ * REFACTORED ProtectedRoute
+ * Waits for the user profile to be fully loaded before making a decision.
+ * Prevents the "403 flash" by staying in a silent loading state.
  */
 const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowedRoles }) => {
-  const { currentUser, isAuthLoading, forceRefreshProfile } = useData();
+  const { currentUser, isAuthLoading } = useData();
 
+  // 1. If syncing or verifying identity, show a clean loading state or blank screen.
   if (isAuthLoading) {
     return <LoadingState />;
   }
 
+  // 2. If no user after sync is complete, redirect to login.
   if (!currentUser) {
     return <Navigate to="/" replace />;
   }
   
+  // 3. Strict Role Evaluation
   const hasAccess = allowedRoles.includes(currentUser.role);
+
   if (!hasAccess) {
     return (
-      <div className="min-h-[60vh] flex flex-col items-center justify-center p-12 text-center animate-in fade-in duration-500 font-cairo" dir="rtl">
-        <div className="bg-red-50 p-6 rounded-3xl text-red-500 mb-6 border border-red-100 shadow-sm">
-          <ShieldAlert size={64} />
-        </div>
-        <h2 className="text-3xl font-black text-[#1B2B48] mb-4">403 - الوصول مرفوض</h2>
+      <div className="min-h-screen flex flex-col items-center justify-center p-12 text-center font-cairo" dir="rtl">
+        <ShieldAlert size={64} className="text-red-500 mb-6" />
+        <h2 className="text-3xl font-black text-[#1B2B48] mb-4">عذراً، لا تملك الصلاحية</h2>
         <p className="text-gray-500 font-bold max-w-md leading-relaxed">
-          عذراً، لا تملك الصلاحيات الكافية لعرض هذه الصفحة.
-          {currentUser.role === 'GUEST' 
-            ? " جاري مزامنة صلاحياتك مع قاعدة البيانات، يرجى الانتظار ثوانٍ أو تحديث الصفحة." 
-            : " يرجى مراجعة مدير النظام إذا كنت تعتقد أن هذا خطأ."}
+          هذا القسم يتطلب صلاحيات إدارية إضافية. إذا كنت تعتقد أن هناك خطأ في حسابك، يرجى التواصل مع الدعم الفني.
         </p>
-        <div className="flex gap-4 mt-8">
-          <button 
-            onClick={() => window.history.back()}
-            className="flex items-center gap-2 px-8 py-4 bg-gray-100 text-[#1B2B48] rounded-2xl font-black transition-all hover:bg-gray-200"
-          >
-            <ArrowLeft size={20} /> العودة للخلف
-          </button>
-          <button 
-            onClick={() => forceRefreshProfile()}
-            className="flex items-center gap-2 px-8 py-4 bg-[#1B2B48] text-white rounded-2xl font-black transition-all shadow-xl active:scale-95"
-          >
-            <RefreshCcw size={20} /> تحديث المزامنة
-          </button>
-        </div>
+        <button 
+          onClick={() => window.location.href = '/'} 
+          className="mt-8 px-10 py-4 bg-[#1B2B48] text-white rounded-2xl font-black shadow-lg hover:scale-105 transition-all"
+        >
+          العودة للرئيسية
+        </button>
       </div>
     );
   }
