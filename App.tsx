@@ -32,7 +32,7 @@ interface ProtectedRouteProps {
 
 /**
  * ProtectedRoute (بوابة الحماية الصامتة)
- * لا تظهر أي رسائل تقنية أثناء التحميل لمنع "الومضات" المزعجة.
+ * لا تظهر أي رسائل تقنية أثناء التحميل وتكتفي بشاشة بيضاء.
  */
 const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowedRoles }) => {
   const { currentUser, isAuthLoading } = useData();
@@ -48,8 +48,13 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowedRoles 
       <div className="min-h-screen flex flex-col items-center justify-center p-12 text-center font-cairo" dir="rtl">
         <ShieldAlert size={64} className="text-red-500 mb-6" />
         <h2 className="text-3xl font-black text-[#1B2B48] mb-4">عذراً، لا تملك الصلاحية</h2>
-        <p className="text-gray-500 font-bold max-w-md mb-8">هذا القسم مخصص لفئات وظيفية محددة. يرجى مراجعة الإدارة.</p>
-        <button onClick={() => window.location.href = '/'} className="px-10 py-4 bg-[#1B2B48] text-white rounded-2xl font-black shadow-lg">العودة للرئيسية</button>
+        <p className="text-gray-500 font-bold max-w-md mb-8">هذا القسم يتطلب صلاحيات إدارية إضافية للوصول.</p>
+        <button 
+          onClick={() => window.location.href = '/'} 
+          className="px-10 py-4 bg-[#1B2B48] text-white rounded-2xl font-black shadow-lg"
+        >
+          العودة للرئيسية
+        </button>
       </div>
     );
   }
@@ -354,7 +359,7 @@ const AppContent: React.FC = () => {
     }
   }, [currentUser, isAuthLoading, navigate, location.pathname]);
 
-  // صمت تام أثناء المصادقة الأولية
+  // صمت تام أثناء المصادقة الأولية - شاشة بيضاء فقط
   if (isAuthLoading) return <div className="min-h-screen bg-white" />;
 
   if (!currentUser) return (

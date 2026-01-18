@@ -33,7 +33,7 @@ interface DataContextType {
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
 
-// الحساب المدير الأساسي لتجاوز كافة السياسات
+// الحساب المدير الأساسي لتجاوز كافة السياسات والدخول الصامت
 const ADMIN_EMAIL = 'adaldawsari@darwaemaar.com';
 
 export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
@@ -61,36 +61,36 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, [currentUser]);
 
   const refreshData = useCallback(async () => {
-    // لا جلب للبيانات إذا لم يكن هناك مستخدم مسجل
     if (!currentUser || currentUser.role === 'GUEST') return;
     setIsDbLoading(true);
     try {
-      const [pRes, trRes, profilesRes, deedsRes, worksRes] = await Promise.all([
+      const [pRes, trRes, drRes, pwRes, prRes] = await Promise.all([
         supabase.from('projects').select('*').order('id', { ascending: true }),
         supabase.from('technical_requests').select('*').order('created_at', { ascending: false }),
-        supabase.from('profiles').select('*'),
         supabase.from('deeds_requests').select('*').order('created_at', { ascending: false }),
-        supabase.from('project_works').select('*').order('created_at', { ascending: false })
+        supabase.from('project_works').select('*').order('created_at', { ascending: false }),
+        supabase.from('profiles').select('*')
       ]);
 
       setProjects(pRes.data?.map(p => ({ ...p, name: p.title || p.name })) || []);
       setTechnicalRequests(trRes.data || []);
-      setAppUsers(profilesRes.data || []);
-      setClearanceRequests(deedsRes.data || []);
-      setProjectWorks(worksRes.data || []);
+      setClearanceRequests(drRes.data || []);
+      setProjectWorks(pwRes.data || []);
+      setAppUsers(prRes.data || []);
       setErrorState(null);
     } catch (e: any) {
-      console.warn("[DATA_SYNC] Refresh incomplete:", e?.message);
+      console.warn("[SILENT_DATA] Refresh incomplete:", e?.message);
     } finally {
       setIsDbLoading(false);
     }
   }, [currentUser]);
 
   /**
-   * RECURSION-PROOF Profile Fetcher
-   * ميزة الدخول اللحظي للمدير: لا ننتظر قاعدة البيانات إذا كان الإيميل هو إيميلك
+   * SILENT AUTH FETCH
+   * Immediately sets Admin for specific email to unlock UI instantly.
    */
   const fetchProfile = useCallback(async (userId: string, email: string) => {
+    // 1. Instant Admin Bypass
     if (email === ADMIN_EMAIL) {
       setCurrentUser({
         id: userId,
@@ -99,9 +99,9 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         role: 'ADMIN' as UserRole,
         department: 'الإدارة العليا'
       });
-      setIsAuthLoading(false); // الواجهة تفتح فوراً
+      setIsAuthLoading(false);
       
-      // مزامنة التفاصيل في الخلفية دون تعطيل المستخدم
+      // Secondary background sync
       supabase.from('profiles').select('*').eq('id', userId).maybeSingle().then(({ data }) => {
         if (data) setCurrentUser(prev => ({ ...prev, ...data } as User));
       });
@@ -123,7 +123,6 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         });
       }
     } catch (err) {
-      console.error("[AUTH] Profile sync error:", err);
       setCurrentUser(null);
     } finally {
       setIsAuthLoading(false);
@@ -154,7 +153,6 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     return () => subscription.unsubscribe();
   }, [fetchProfile]);
 
-  // جلب البيانات فور تغير المستخدم
   useEffect(() => {
     if (currentUser) refreshData();
   }, [currentUser, refreshData]);
@@ -170,11 +168,11 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       logout: async () => { 
         setIsAuthLoading(true);
         await supabase.auth.signOut();
-        setCurrentUser(null);
         localStorage.clear();
         sessionStorage.clear();
+        setCurrentUser(null);
         setIsAuthLoading(false);
-        window.location.href = '/'; // توجيه قطعي للرئيسية
+        window.location.href = '/'; // Forced immediate redirect
       },
       refreshData,
       forceRefreshProfile: async () => {
