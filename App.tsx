@@ -31,63 +31,31 @@ interface ProtectedRouteProps {
 }
 
 /**
- * REFACTORED ProtectedRoute
- * Waits for the user profile to be fully loaded before making a decision.
- * Prevents the "403 flash" by staying in a silent loading state.
+ * ProtectedRoute (بوابة الحماية الصامتة)
+ * لا تظهر أي رسائل تقنية أثناء التحميل لمنع "الومضات" المزعجة.
  */
 const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowedRoles }) => {
   const { currentUser, isAuthLoading } = useData();
 
-  // 1. If syncing or verifying identity, show a clean loading state or blank screen.
-  if (isAuthLoading) {
-    return <LoadingState />;
-  }
-
-  // 2. If no user after sync is complete, redirect to login.
-  if (!currentUser) {
-    return <Navigate to="/" replace />;
+  // صمت تام أثناء التحميل
+  if (isAuthLoading || !currentUser) {
+    return <div className="min-h-screen bg-white" />;
   }
   
-  // 3. Strict Role Evaluation
-  const hasAccess = allowedRoles.includes(currentUser.role);
-
-  if (!hasAccess) {
+  // فحص الصلاحيات
+  if (!allowedRoles.includes(currentUser.role)) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center p-12 text-center font-cairo" dir="rtl">
         <ShieldAlert size={64} className="text-red-500 mb-6" />
         <h2 className="text-3xl font-black text-[#1B2B48] mb-4">عذراً، لا تملك الصلاحية</h2>
-        <p className="text-gray-500 font-bold max-w-md leading-relaxed">
-          هذا القسم يتطلب صلاحيات إدارية إضافية. إذا كنت تعتقد أن هناك خطأ في حسابك، يرجى التواصل مع الدعم الفني.
-        </p>
-        <button 
-          onClick={() => window.location.href = '/'} 
-          className="mt-8 px-10 py-4 bg-[#1B2B48] text-white rounded-2xl font-black shadow-lg hover:scale-105 transition-all"
-        >
-          العودة للرئيسية
-        </button>
+        <p className="text-gray-500 font-bold max-w-md mb-8">هذا القسم مخصص لفئات وظيفية محددة. يرجى مراجعة الإدارة.</p>
+        <button onClick={() => window.location.href = '/'} className="px-10 py-4 bg-[#1B2B48] text-white rounded-2xl font-black shadow-lg">العودة للرئيسية</button>
       </div>
     );
   }
 
   return <>{children}</>;
 };
-
-const LoadingState: React.FC = () => (
-  <div className="min-h-screen flex items-center justify-center bg-white flex-col gap-6 font-cairo" dir="rtl">
-    <div className="relative">
-      <Loader2 className="animate-spin text-[#1B2B48] w-24 h-24 stroke-[1px]" />
-      <div className="absolute inset-0 flex items-center justify-center">
-        <div className="w-8 h-8 bg-[#E95D22] rounded-full animate-pulse shadow-2xl shadow-orange-500/40" />
-      </div>
-    </div>
-    <div className="text-center animate-in fade-in slide-in-from-bottom-2 duration-1000">
-      <p className="font-black text-[#1B2B48] text-2xl mb-2">جاري التحقق من الهوية الرقمية...</p>
-      <p className="text-gray-400 text-sm font-bold max-w-sm leading-relaxed px-6">
-        نقوم الآن بمطابقة بياناتك مع قاعدة البيانات المركزية لضمان وصول آمن.
-      </p>
-    </div>
-  </div>
-);
 
 interface ErrorBoundaryProps {
   children?: React.ReactNode;
@@ -376,7 +344,6 @@ const AppContent: React.FC = () => {
       await login(loginData.email, loginData.password);
     } catch (err: any) {
       setLoginError(err.message || "خطأ في تسجيل الدخول");
-    } finally {
       setIsLoggingIn(false);
     }
   };
@@ -387,7 +354,8 @@ const AppContent: React.FC = () => {
     }
   }, [currentUser, isAuthLoading, navigate, location.pathname]);
 
-  if (isAuthLoading) return <LoadingState />;
+  // صمت تام أثناء المصادقة الأولية
+  if (isAuthLoading) return <div className="min-h-screen bg-white" />;
 
   if (!currentUser) return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6 font-cairo" dir="rtl">
@@ -400,8 +368,8 @@ const AppContent: React.FC = () => {
           {loginError && <p className="text-red-500 text-xs font-bold text-center">{loginError}</p>}
           <input type="email" required placeholder="البريد الإلكتروني" className="w-full p-4 bg-gray-50 rounded-2xl border outline-none font-bold" value={loginData.email} onChange={e => setLoginData({...loginData, email: e.target.value})} />
           <input type="password" required placeholder="كلمة المرور" className="w-full p-4 bg-gray-50 rounded-2xl border outline-none font-bold" value={loginData.password} onChange={e => setLoginData({...loginData, password: e.target.value})} />
-          <button type="submit" disabled={isLoggingIn} className="w-full bg-[#E95D22] text-white py-5 rounded-[30px] font-black shadow-lg">
-            {isLoggingIn ? <Loader2 className="animate-spin mx-auto" size={24} /> : 'تسجيل الدخول'}
+          <button type="submit" disabled={isLoggingIn} className="w-full bg-[#E95D22] text-white py-5 rounded-[30px] font-black shadow-lg flex items-center justify-center gap-3">
+            {isLoggingIn ? <Loader2 className="animate-spin" size={24} /> : 'تسجيل الدخول'}
           </button>
         </form>
       </div>

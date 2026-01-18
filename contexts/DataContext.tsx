@@ -33,7 +33,7 @@ interface DataContextType {
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
 
-// The primary admin account that must always have access
+// الحساب المدير الأساسي لتجاوز كافة السياسات
 const ADMIN_EMAIL = 'adaldawsari@darwaemaar.com';
 
 export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
@@ -60,120 +60,8 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setActivities(prev => [newLog, ...prev].slice(0, 50));
   }, [currentUser]);
 
-  /**
-   * RECURSION-PROOF Profile Fetcher (The Brain)
-   * Immediately assigns ADMIN role for the master email to bypass RLS policy loops and prevent 403 flashes.
-   */
-  const fetchProfile = useCallback(async (userId: string, email: string) => {
-    console.log(`[AUTH_STRICT] Profile Syncing... UID: ${userId} | EMAIL: ${email}`);
-    setIsAuthLoading(true);
-
-    // 1. INSTANT ADMIN BYPASS: 
-    // We don't wait for the DB if it's the master email. This kills the "403 flash" instantly.
-    if (email === ADMIN_EMAIL) {
-      console.log("[AUTH_STRICT] Master Admin detected. applying instant bypass.");
-      setCurrentUser({
-        id: userId,
-        email: email,
-        name: 'الوليد الدوسري',
-        role: 'ADMIN' as UserRole,
-        department: 'الإدارة العليا'
-      });
-      setIsAuthLoading(false);
-      
-      // We still try to sync in background, but the UI is already unlocked.
-      try {
-        const { data } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle();
-        if (data) setCurrentUser(prev => ({ ...prev, ...data } as User));
-      } catch (err) {
-        console.warn("[AUTH_STRICT] Background sync failed (likely recursion), keeping local bypass state.");
-      }
-      return;
-    }
-
-    try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .maybeSingle();
-
-      if (error) throw error;
-
-      if (data) {
-        console.log("[AUTH_STRICT] Profile resolved successfully. Role:", data.role);
-        setCurrentUser(data as User);
-      } else {
-        // Fallback for new auth users
-        setCurrentUser({
-          id: userId,
-          email: email,
-          name: email ? email.split('@')[0] : 'ضيف',
-          role: 'GUEST' as UserRole,
-          department: 'غير محدد'
-        });
-      }
-    } catch (err: any) {
-      console.error("[AUTH_STRICT] Sync Error:", err?.message || err);
-      setCurrentUser(null);
-    } finally {
-      setIsAuthLoading(false);
-    }
-  }, []);
-
-  const forceRefreshProfile = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (session?.user) {
-      await fetchProfile(session.user.id, session.user.email || '');
-    } else {
-      setIsAuthLoading(false);
-    }
-  };
-
-  /**
-   * SAFETY TIMEOUT (15 Seconds)
-   */
-  useEffect(() => {
-    if (isAuthLoading) {
-      const timer = setTimeout(() => {
-        if (isAuthLoading) {
-          console.warn("[AUTH_STRICT] Safety timeout (15s) reached.");
-          setIsAuthLoading(false);
-        }
-      }, 15000);
-      return () => clearTimeout(timer);
-    }
-  }, [isAuthLoading]);
-
-  useEffect(() => {
-    const sync = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.user) {
-        await fetchProfile(session.user.id, session.user.email || '');
-      } else {
-        setIsAuthLoading(false);
-      }
-    };
-
-    sync();
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (session?.user) {
-        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-          setIsAuthLoading(true);
-          await fetchProfile(session.user.id, session.user.email || '');
-        }
-      } else if (event === 'SIGNED_OUT') {
-        setCurrentUser(null);
-        setIsAuthLoading(false);
-        localStorage.clear();
-      }
-    });
-
-    return () => subscription.unsubscribe();
-  }, [fetchProfile]);
-
   const refreshData = useCallback(async () => {
+    // لا جلب للبيانات إذا لم يكن هناك مستخدم مسجل
     if (!currentUser || currentUser.role === 'GUEST') return;
     setIsDbLoading(true);
     try {
@@ -192,13 +80,81 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setProjectWorks(worksRes.data || []);
       setErrorState(null);
     } catch (e: any) {
-      console.error("[DATA_SYNC] Global refresh failed:", e?.message);
-      setErrorState("تنبيه: تعذر مزامنة بيانات النظام.");
+      console.warn("[DATA_SYNC] Refresh incomplete:", e?.message);
     } finally {
       setIsDbLoading(false);
     }
   }, [currentUser]);
 
+  /**
+   * RECURSION-PROOF Profile Fetcher
+   * ميزة الدخول اللحظي للمدير: لا ننتظر قاعدة البيانات إذا كان الإيميل هو إيميلك
+   */
+  const fetchProfile = useCallback(async (userId: string, email: string) => {
+    if (email === ADMIN_EMAIL) {
+      setCurrentUser({
+        id: userId,
+        email: email,
+        name: 'الوليد الدوسري',
+        role: 'ADMIN' as UserRole,
+        department: 'الإدارة العليا'
+      });
+      setIsAuthLoading(false); // الواجهة تفتح فوراً
+      
+      // مزامنة التفاصيل في الخلفية دون تعطيل المستخدم
+      supabase.from('profiles').select('*').eq('id', userId).maybeSingle().then(({ data }) => {
+        if (data) setCurrentUser(prev => ({ ...prev, ...data } as User));
+      });
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle();
+      if (error) throw error;
+      if (data) {
+        setCurrentUser(data as User);
+      } else {
+        setCurrentUser({
+          id: userId,
+          email: email,
+          name: email.split('@')[0],
+          role: 'GUEST' as UserRole,
+          department: 'غير محدد'
+        });
+      }
+    } catch (err) {
+      console.error("[AUTH] Profile sync error:", err);
+      setCurrentUser(null);
+    } finally {
+      setIsAuthLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const initAuth = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) {
+        await fetchProfile(session.user.id, session.user.email || '');
+      } else {
+        setIsAuthLoading(false);
+      }
+    };
+    initAuth();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_IN' && session?.user) {
+        setIsAuthLoading(true);
+        await fetchProfile(session.user.id, session.user.email || '');
+      } else if (event === 'SIGNED_OUT') {
+        setCurrentUser(null);
+        setIsAuthLoading(false);
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, [fetchProfile]);
+
+  // جلب البيانات فور تغير المستخدم
   useEffect(() => {
     if (currentUser) refreshData();
   }, [currentUser, refreshData]);
@@ -208,18 +164,23 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       projects, technicalRequests, clearanceRequests, projectWorks, appUsers, activities, 
       currentUser, isDbLoading, isAuthLoading, errorState,
       login: async (email, password) => {
-        setIsAuthLoading(true);
         const { error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) { setIsAuthLoading(false); throw error; }
+        if (error) throw error;
       },
       logout: async () => { 
-        setIsAuthLoading(true); 
-        await supabase.auth.signOut(); 
+        setIsAuthLoading(true);
+        await supabase.auth.signOut();
         setCurrentUser(null);
+        localStorage.clear();
+        sessionStorage.clear();
         setIsAuthLoading(false);
+        window.location.href = '/'; // توجيه قطعي للرئيسية
       },
       refreshData,
-      forceRefreshProfile,
+      forceRefreshProfile: async () => {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user) await fetchProfile(session.user.id, session.user.email || '');
+      },
       logActivity,
       canAccess: (allowedRoles) => !!currentUser && allowedRoles.includes(currentUser.role)
     }}>
