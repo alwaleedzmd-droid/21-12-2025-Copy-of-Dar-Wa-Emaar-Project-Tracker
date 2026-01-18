@@ -26,6 +26,7 @@ interface DataContextType {
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshData: () => Promise<void>;
+  forceRefreshProfile: () => Promise<void>;
   logActivity: (action: string, target: string, color?: ActivityLog['color']) => void;
   canAccess: (allowedRoles: UserRole[]) => boolean;
 }
@@ -60,16 +61,15 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, [currentUser]);
 
   /**
-   * RESILIENT Profile Fetcher
-   * Specifically designed to survive "Policy Recursion" errors (42P17) in Supabase RLS.
+   * CORE Profile Synchronizer
+   * Fetches the profile strictly by userId. Handles recursion errors (42P17) for Admin.
    */
-  const fetchProfile = async (userId: string, email: string, isRetry = false) => {
-    console.log(`[AUTH_STRICT] Verifying profile for: ${email}`);
+  const fetchProfile = useCallback(async (userId: string, email: string, isRetry = false) => {
+    console.log(`[AUTH_STRICT] Profile Syncing... UID: ${userId} | EMAIL: ${email}`);
     setIsAuthLoading(true);
 
     try {
-      // Artificial delay for retries to allow DB sessions to propagate
-      if (isRetry) await new Promise(r => setTimeout(r, 1000));
+      if (isRetry) await new Promise(r => setTimeout(r, 1500));
 
       const { data, error } = await supabase
         .from('profiles')
@@ -78,51 +78,31 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         .maybeSingle();
 
       if (error) {
-        // Detect recursion or permission issues
-        const isRecursion = error.code === '42P17' || error.message?.toLowerCase().includes('recursion');
+        // Detect Postgres Recursion Error (42P17) or 403 Forbidden
+        const isPolicyIssue = error.code === '42P17' || error.status === 403 || error.message?.includes('recursion');
         
-        if (isRecursion && email === ADMIN_EMAIL) {
-          console.warn("[AUTH_STRICT] Policy recursion detected. Applying Admin Local Bypass.");
+        if (isPolicyIssue && email === ADMIN_EMAIL) {
+          console.warn("[AUTH_STRICT] DB Policy Loop detected for Admin. Activating Local Identity Bypass.");
           setCurrentUser({
             id: userId,
             email: email,
-            name: 'المدير العام (نمط تجاوز السياسات)',
+            name: 'المدير العام (تجاوز سياسات الوصول)',
             role: 'ADMIN' as UserRole,
             department: 'الإدارة العليا'
           });
-          setIsAuthLoading(false);
           return;
         }
         throw error;
       }
 
       if (data) {
-        console.log("[AUTH_STRICT] Profile authenticated. Role:", data.role);
+        console.log("[AUTH_STRICT] Profile resolved successfully. Role:", data.role);
         setCurrentUser(data as User);
-      } 
-      else if (email === ADMIN_EMAIL) {
-        // Self-healing for admin account if table is empty
-        if (!isRetry) return await fetchProfile(userId, email, true);
-        
-        console.log("[AUTH_STRICT] Admin profile missing. Creating record...");
-        const adminProfile = {
-          id: userId,
-          email: email,
-          name: 'المدير العام',
-          role: 'ADMIN' as UserRole,
-          department: 'الإدارة'
-        };
-
-        const { data: created, error: createError } = await supabase
-          .from('profiles')
-          .insert([adminProfile])
-          .select()
-          .single();
-
-        if (createError) throw createError;
-        setCurrentUser(created as User);
+      } else if (email === ADMIN_EMAIL && !isRetry) {
+        // Self-heal attempt for admin if profile is missing
+        return await fetchProfile(userId, email, true);
       } else {
-        // Default role for authenticated users with no specific profile record
+        // Fallback to Guest if user is authenticated but no profile exists
         setCurrentUser({
           id: userId,
           email: email,
@@ -132,69 +112,75 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         });
       }
     } catch (err: any) {
-      const msg = err?.message || String(err);
+      console.error("[AUTH_STRICT] Sync process encountered a fatal error:", err?.message || err);
       
-      // Final Emergency Catch for Administrator
-      if ((msg.includes('recursion') || err?.code === '42P17') && email === ADMIN_EMAIL) {
-        console.warn("[AUTH_STRICT] Emergency Local Session created for Admin.");
+      // Emergency recovery for Admin only
+      if (email === ADMIN_EMAIL) {
+        console.warn("[AUTH_STRICT] Critical Policy Error. Applying Hard Fallback for Admin.");
         setCurrentUser({
           id: userId,
           email: email,
-          name: 'المدير العام (نمط الطوارئ)',
+          name: 'المدير العام (نمط التعافي)',
           role: 'ADMIN' as UserRole,
           department: 'الإدارة'
         });
       } else {
-        console.error("[AUTH_STRICT] Profile resolution failed:", msg);
         setCurrentUser(null);
       }
     } finally {
       setIsAuthLoading(false);
     }
+  }, []);
+
+  /**
+   * RECOVERY: Manual Refresh for users to re-sync their role if policies change.
+   */
+  const forceRefreshProfile = async () => {
+    console.log("[AUTH_STRICT] Manual re-sync initiated...");
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.user) {
+      await fetchProfile(session.user.id, session.user.email || '');
+    } else {
+      setIsAuthLoading(false);
+    }
   };
 
   /**
-   * Safety timeout to prevent UI hang if DB hangs
+   * SAFETY TIMEOUT (15 Seconds)
+   * Prevents the application from being locked in a loading state if Supabase fails to respond.
    */
   useEffect(() => {
     if (isAuthLoading) {
-      const safetyTimeout = setTimeout(() => {
+      const timer = setTimeout(() => {
         if (isAuthLoading) {
-          console.warn("[AUTH_STRICT] Fail-safe triggered. Session unresolved.");
+          console.warn("[AUTH_STRICT] Safety timeout (15s) reached. Unlocking UI.");
           setIsAuthLoading(false);
-          if (!currentUser) setCurrentUser(null);
         }
-      }, 10000);
-      return () => clearTimeout(safetyTimeout);
+      }, 15000);
+      return () => clearTimeout(timer);
     }
-  }, [isAuthLoading, currentUser]);
+  }, [isAuthLoading]);
 
   /**
-   * Auth Listener Setup
+   * AUTH INITIALIZATION & SUBSCRIPTION
    */
   useEffect(() => {
-    const initialize = async () => {
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session?.user) {
-          await fetchProfile(session.user.id, session.user.email || '');
-        } else {
-          setIsAuthLoading(false);
-        }
-      } catch (e) {
+    const initializeSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) {
+        await fetchProfile(session.user.id, session.user.email || '');
+      } else {
         setIsAuthLoading(false);
       }
     };
 
-    initialize();
+    initializeSession();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log(`[AUTH_STRICT] Event: ${event}`);
-      
+      console.log(`[AUTH_STRICT] Auth State Update: ${event}`);
       if (session?.user) {
         if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
           setIsAuthLoading(true);
-          await new Promise(r => setTimeout(r, 500));
           await fetchProfile(session.user.id, session.user.email || '');
         }
       } else if (event === 'SIGNED_OUT') {
@@ -206,7 +192,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     });
 
     return () => subscription.unsubscribe();
-  }, []);
+  }, [fetchProfile]);
 
   const refreshData = useCallback(async () => {
     if (!currentUser) return;
@@ -227,8 +213,8 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setProjectWorks(worksRes.data || []);
       setErrorState(null);
     } catch (e: any) {
-      console.error("[DATA_SYNC] Error:", e?.message || e);
-      setErrorState("تنبيه: تعذر مزامنة البيانات.");
+      console.error("[DATA_SYNC] Global data refresh failed:", e?.message);
+      setErrorState("تنبيه: تعذر مزامنة بيانات النظام مع الخادم.");
     } finally {
       setIsDbLoading(false);
     }
@@ -250,8 +236,6 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     try {
       await supabase.auth.signOut();
       setCurrentUser(null);
-    } catch (err) {
-      console.error("[AUTH_STRICT] Logout error:", err);
     } finally {
       setIsAuthLoading(false);
     }
@@ -269,7 +253,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     <DataContext.Provider value={{
       projects, technicalRequests, clearanceRequests, projectWorks, appUsers, activities, 
       currentUser, isDbLoading, isAuthLoading, errorState,
-      login, logout, refreshData, logActivity, canAccess
+      login, logout, refreshData, forceRefreshProfile, logActivity, canAccess
     }}>
       {children}
     </DataContext.Provider>

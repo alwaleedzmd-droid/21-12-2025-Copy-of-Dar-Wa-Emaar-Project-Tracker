@@ -5,7 +5,7 @@ import {
   AlertTriangle, Loader2, Plus, 
   CheckCircle2, Clock, Info, Lock,
   ChevronLeft, ShieldAlert,
-  MessageSquare, Send, ArrowLeft
+  MessageSquare, Send, ArrowLeft, RefreshCcw
 } from 'lucide-react';
 import { supabase } from './supabaseClient';
 import { ProjectWork, UserRole, User } from './types';
@@ -28,37 +28,78 @@ import AppMapDashboard from './components/AppMapDashboard';
 interface ProtectedRouteProps {
   children: React.ReactNode;
   allowedRoles: UserRole[];
-  currentUser: User | null;
 }
 
-const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowedRoles, currentUser }) => {
-  // If the user isn't logged in, redirect to login page
-  if (!currentUser) return <Navigate to="/" replace />;
+/**
+ * ProtectedRoute Component
+ * This is the primary gatekeeper. It strictly waits for isAuthLoading to be false
+ * before checking for a valid user and valid role.
+ */
+const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowedRoles }) => {
+  const { currentUser, isAuthLoading, forceRefreshProfile } = useData();
+
+  // 1. If we are currently syncing with Supabase/Postgres, stay in loading state.
+  if (isAuthLoading) {
+    return <LoadingState />;
+  }
+
+  // 2. If sync is done but no user is logged in, send them to the login screen.
+  if (!currentUser) {
+    return <Navigate to="/" replace />;
+  }
   
-  // If the user is logged in but doesn't have the required role
-  if (!allowedRoles.includes(currentUser.role)) {
+  // 3. If the user exists but their role isn't authorized for this path, show 403 screen.
+  const hasAccess = allowedRoles.includes(currentUser.role);
+  if (!hasAccess) {
     return (
-      <div className="min-h-[60vh] flex flex-col items-center justify-center p-12 text-center animate-in fade-in duration-500 font-cairo">
+      <div className="min-h-[60vh] flex flex-col items-center justify-center p-12 text-center animate-in fade-in duration-500 font-cairo" dir="rtl">
         <div className="bg-red-50 p-6 rounded-3xl text-red-500 mb-6 border border-red-100 shadow-sm">
           <ShieldAlert size={64} />
         </div>
         <h2 className="text-3xl font-black text-[#1B2B48] mb-4">403 - الوصول مرفوض</h2>
         <p className="text-gray-500 font-bold max-w-md leading-relaxed">
           عذراً، لا تملك الصلاحيات الكافية لعرض هذه الصفحة.
-          {currentUser.role === 'GUEST' ? " لم يتم إسناد دور لك في النظام بعد، يرجى التواصل مع مدير النظام." : " يرجى مراجعة مدير النظام إذا كنت تعتقد أن هذا خطأ."}
+          {currentUser.role === 'GUEST' 
+            ? " جاري مزامنة صلاحياتك مع قاعدة البيانات، يرجى الانتظار ثوانٍ أو تحديث الصفحة." 
+            : " يرجى مراجعة مدير النظام إذا كنت تعتقد أن هذا خطأ."}
         </p>
-        <button 
-          onClick={() => window.history.back()}
-          className="mt-8 flex items-center gap-2 px-8 py-4 bg-[#1B2B48] text-white rounded-2xl font-black transition-all hover:scale-105 active:scale-95 shadow-xl"
-        >
-          <ArrowLeft size={20} /> العودة للخلف
-        </button>
+        <div className="flex gap-4 mt-8">
+          <button 
+            onClick={() => window.history.back()}
+            className="flex items-center gap-2 px-8 py-4 bg-gray-100 text-[#1B2B48] rounded-2xl font-black transition-all hover:bg-gray-200"
+          >
+            <ArrowLeft size={20} /> العودة للخلف
+          </button>
+          <button 
+            onClick={() => forceRefreshProfile()}
+            className="flex items-center gap-2 px-8 py-4 bg-[#1B2B48] text-white rounded-2xl font-black transition-all shadow-xl active:scale-95"
+          >
+            <RefreshCcw size={20} /> تحديث المزامنة
+          </button>
+        </div>
       </div>
     );
   }
 
   return <>{children}</>;
 };
+
+const LoadingState: React.FC = () => (
+  <div className="min-h-screen flex items-center justify-center bg-white flex-col gap-6 font-cairo" dir="rtl">
+    <div className="relative">
+      <Loader2 className="animate-spin text-[#1B2B48] w-24 h-24 stroke-[1px]" />
+      <div className="absolute inset-0 flex items-center justify-center">
+        <div className="w-8 h-8 bg-[#E95D22] rounded-full animate-pulse shadow-2xl shadow-orange-500/40" />
+      </div>
+    </div>
+    <div className="text-center animate-in fade-in slide-in-from-bottom-2 duration-1000">
+      <p className="font-black text-[#1B2B48] text-2xl mb-2">جاري التحقق من الهوية الرقمية...</p>
+      <p className="text-gray-400 text-sm font-bold max-w-sm leading-relaxed px-6">
+        نقوم الآن بمطابقة بياناتك مع قاعدة البيانات المركزية لضمان وصول آمن.
+      </p>
+    </div>
+  </div>
+);
 
 interface ErrorBoundaryProps {
   children?: React.ReactNode;
@@ -358,7 +399,7 @@ const AppContent: React.FC = () => {
   };
 
   useEffect(() => {
-    // Navigate away from login ONLY if user profile and loading is 100% complete
+    // Navigate away from login ONLY if sync is 100% complete
     if (currentUser && !isAuthLoading && location.pathname === '/') {
       navigate(getDefaultPath(currentUser.role), { replace: true });
     }
@@ -366,24 +407,9 @@ const AppContent: React.FC = () => {
 
   /**
    * FULL SCREEN BLOCKER GUARD
-   * This ensures the user NEVER sees a 403 page while the system is verifying their role.
+   * This ensures the user NEVER sees a 403 page or login screen while the system is verifying their role.
    */
-  if (isAuthLoading) return (
-    <div className="min-h-screen flex items-center justify-center bg-white flex-col gap-6 font-cairo" dir="rtl">
-      <div className="relative">
-        <Loader2 className="animate-spin text-[#1B2B48] w-24 h-24 stroke-[1px]" />
-        <div className="absolute inset-0 flex items-center justify-center">
-          <div className="w-8 h-8 bg-[#E95D22] rounded-full animate-pulse shadow-2xl shadow-orange-500/40" />
-        </div>
-      </div>
-      <div className="text-center animate-in fade-in slide-in-from-bottom-2 duration-1000">
-        <p className="font-black text-[#1B2B48] text-2xl mb-2">جاري التحقق من الصلاحيات والبيانات...</p>
-        <p className="text-gray-400 text-sm font-bold max-w-sm leading-relaxed px-6">
-          يرجى الانتظار، نقوم الآن بمطابقة هويتك الرقمية مع قاعدة بيانات النظام لضمان وصول آمن وموثوق.
-        </p>
-      </div>
-    </div>
-  );
+  if (isAuthLoading) return <LoadingState />;
 
   // LOGIN SCREEN
   if (!currentUser) return (
@@ -420,49 +446,49 @@ const AppContent: React.FC = () => {
     </div>
   );
 
-  // MAIN APP ROUTING: Evaluated only AFTER isAuthLoading = false
+  // MAIN APP ROUTING
   return (
     <MainLayout>
       <Routes>
         <Route path="/" element={<Navigate to={getDefaultPath(currentUser.role)} replace />} />
 
-        {/* Dashbaord Route */}
+        {/* Dashboard Route */}
         <Route path="/dashboard" element={
-          <ProtectedRoute allowedRoles={['ADMIN', 'PR_MANAGER', 'PR_EMPLOYEE']} currentUser={currentUser}>
+          <ProtectedRoute allowedRoles={['ADMIN', 'PR_MANAGER', 'PR_EMPLOYEE']}>
             <AppMapDashboard currentUser={currentUser} onLogout={logout} />
           </ProtectedRoute>
         } />
         
         {/* Projects Routes */}
         <Route path="/projects" element={
-          <ProtectedRoute allowedRoles={['ADMIN', 'PR_MANAGER', 'PR_EMPLOYEE', 'TECHNICAL']} currentUser={currentUser}>
+          <ProtectedRoute allowedRoles={['ADMIN', 'PR_MANAGER', 'PR_EMPLOYEE', 'TECHNICAL']}>
             <ProjectsModule projects={projects} stats={{ projects: projects.length, techRequests: technicalRequests.length, clearRequests: clearanceRequests.length }} currentUser={currentUser} onProjectClick={(p) => navigate(`/projects/${p?.id}`)} onRefresh={refreshData} />
           </ProtectedRoute>
         } />
 
         <Route path="/projects/:id" element={
-          <ProtectedRoute allowedRoles={['ADMIN', 'PR_MANAGER', 'PR_EMPLOYEE', 'TECHNICAL']} currentUser={currentUser}>
+          <ProtectedRoute allowedRoles={['ADMIN', 'PR_MANAGER', 'PR_EMPLOYEE', 'TECHNICAL']}>
             <ProjectDetailWrapper projects={projects} onRefresh={refreshData} currentUser={currentUser} />
           </ProtectedRoute>
         } />
         
         {/* Technical Requests Route */}
         <Route path="/technical" element={
-          <ProtectedRoute allowedRoles={['ADMIN', 'TECHNICAL', 'PR_MANAGER', 'PR_EMPLOYEE']} currentUser={currentUser}>
+          <ProtectedRoute allowedRoles={['ADMIN', 'TECHNICAL', 'PR_MANAGER', 'PR_EMPLOYEE']}>
             <TechnicalModule requests={technicalRequests} projects={projects} currentUser={currentUser} usersList={appUsers} onRefresh={refreshData} logActivity={logActivity} />
           </ProtectedRoute>
         } />
 
         {/* Deeds/Clearance Route */}
         <Route path="/deeds" element={
-          <ProtectedRoute allowedRoles={['ADMIN', 'CONVEYANCE', 'DEEDS_OFFICER', 'PR_MANAGER', 'PR_EMPLOYEE']} currentUser={currentUser}>
+          <ProtectedRoute allowedRoles={['ADMIN', 'CONVEYANCE', 'DEEDS_OFFICER', 'PR_MANAGER', 'PR_EMPLOYEE']}>
             <DeedsDashboard currentUserRole={currentUser.role} currentUserName={currentUser.name} logActivity={logActivity} />
           </ProtectedRoute>
         } />
         
         {/* User Management Route */}
         <Route path="/users" element={ 
-          <ProtectedRoute allowedRoles={['ADMIN']} currentUser={currentUser}>
+          <ProtectedRoute allowedRoles={['ADMIN']}>
             <UserManagement />
           </ProtectedRoute>
         } />
