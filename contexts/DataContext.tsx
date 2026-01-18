@@ -33,7 +33,7 @@ interface DataContextType {
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
 
-// The primary admin account that must always have access
+// الحساب المدير الأساسي للتعافي في حالات الطوارئ
 const ADMIN_EMAIL = 'adaldawsari@darwaemaar.com';
 
 export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
@@ -60,10 +60,6 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setActivities(prev => [newLog, ...prev].slice(0, 50));
   }, [currentUser]);
 
-  /**
-   * CORE Profile Synchronizer
-   * Fetches the profile strictly by userId. Handles recursion errors (42P17) for Admin.
-   */
   const fetchProfile = useCallback(async (userId: string, email: string, isRetry = false) => {
     console.log(`[AUTH_STRICT] Profile Syncing... UID: ${userId} | EMAIL: ${email}`);
     setIsAuthLoading(true);
@@ -78,15 +74,15 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         .maybeSingle();
 
       if (error) {
-        // Detect Postgres Recursion Error (42P17) or 403 Forbidden
+        // معالجة خطأ الـ Recursion (42P17) للمدير العام
         const isPolicyIssue = error.code === '42P17' || error.status === 403 || error.message?.includes('recursion');
         
         if (isPolicyIssue && email === ADMIN_EMAIL) {
-          console.warn("[AUTH_STRICT] DB Policy Loop detected for Admin. Activating Local Identity Bypass.");
+          console.warn("[AUTH_STRICT] DB Policy Loop detected for Admin. Activating Emergency Local Identity.");
           setCurrentUser({
             id: userId,
             email: email,
-            name: 'المدير العام (تجاوز سياسات الوصول)',
+            name: 'المدير العام (تجاوز السياسات)',
             role: 'ADMIN' as UserRole,
             department: 'الإدارة العليا'
           });
@@ -99,10 +95,8 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         console.log("[AUTH_STRICT] Profile resolved successfully. Role:", data.role);
         setCurrentUser(data as User);
       } else if (email === ADMIN_EMAIL && !isRetry) {
-        // Self-heal attempt for admin if profile is missing
         return await fetchProfile(userId, email, true);
       } else {
-        // Fallback to Guest if user is authenticated but no profile exists
         setCurrentUser({
           id: userId,
           email: email,
@@ -112,11 +106,8 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         });
       }
     } catch (err: any) {
-      console.error("[AUTH_STRICT] Sync process encountered a fatal error:", err?.message || err);
-      
-      // Emergency recovery for Admin only
+      console.error("[AUTH_STRICT] Sync Error:", err?.message || err);
       if (email === ADMIN_EMAIL) {
-        console.warn("[AUTH_STRICT] Critical Policy Error. Applying Hard Fallback for Admin.");
         setCurrentUser({
           id: userId,
           email: email,
@@ -132,11 +123,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   }, []);
 
-  /**
-   * RECOVERY: Manual Refresh for users to re-sync their role if policies change.
-   */
   const forceRefreshProfile = async () => {
-    console.log("[AUTH_STRICT] Manual re-sync initiated...");
     const { data: { session } } = await supabase.auth.getSession();
     if (session?.user) {
       await fetchProfile(session.user.id, session.user.email || '');
@@ -145,27 +132,8 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
-  /**
-   * SAFETY TIMEOUT (15 Seconds)
-   * Prevents the application from being locked in a loading state if Supabase fails to respond.
-   */
   useEffect(() => {
-    if (isAuthLoading) {
-      const timer = setTimeout(() => {
-        if (isAuthLoading) {
-          console.warn("[AUTH_STRICT] Safety timeout (15s) reached. Unlocking UI.");
-          setIsAuthLoading(false);
-        }
-      }, 15000);
-      return () => clearTimeout(timer);
-    }
-  }, [isAuthLoading]);
-
-  /**
-   * AUTH INITIALIZATION & SUBSCRIPTION
-   */
-  useEffect(() => {
-    const initializeSession = async () => {
+    const sync = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.user) {
         await fetchProfile(session.user.id, session.user.email || '');
@@ -174,10 +142,9 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
     };
 
-    initializeSession();
+    sync();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log(`[AUTH_STRICT] Auth State Update: ${event}`);
       if (session?.user) {
         if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
           setIsAuthLoading(true);
@@ -187,7 +154,6 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         setCurrentUser(null);
         setIsAuthLoading(false);
         localStorage.clear();
-        sessionStorage.clear();
       }
     });
 
@@ -195,7 +161,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, [fetchProfile]);
 
   const refreshData = useCallback(async () => {
-    if (!currentUser) return;
+    if (!currentUser || currentUser.role === 'GUEST') return;
     setIsDbLoading(true);
     try {
       const [pRes, trRes, profilesRes, deedsRes, worksRes] = await Promise.all([
@@ -213,37 +179,12 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setProjectWorks(worksRes.data || []);
       setErrorState(null);
     } catch (e: any) {
-      console.error("[DATA_SYNC] Global data refresh failed:", e?.message);
-      setErrorState("تنبيه: تعذر مزامنة بيانات النظام مع الخادم.");
+      console.error("[DATA_SYNC] Refresh failed:", e?.message);
+      setErrorState("تنبيه: تعذر مزامنة بيانات النظام.");
     } finally {
       setIsDbLoading(false);
     }
   }, [currentUser]);
-
-  const login = async (email: string, password: string) => {
-    setIsAuthLoading(true);
-    try {
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) throw error;
-    } catch (err) {
-      setIsAuthLoading(false);
-      throw err;
-    }
-  };
-
-  const logout = async () => {
-    setIsAuthLoading(true);
-    try {
-      await supabase.auth.signOut();
-      setCurrentUser(null);
-    } finally {
-      setIsAuthLoading(false);
-    }
-  };
-
-  const canAccess = (allowedRoles: UserRole[]) => {
-    return !!currentUser && allowedRoles.includes(currentUser.role);
-  };
 
   useEffect(() => {
     if (currentUser) refreshData();
@@ -253,7 +194,21 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     <DataContext.Provider value={{
       projects, technicalRequests, clearanceRequests, projectWorks, appUsers, activities, 
       currentUser, isDbLoading, isAuthLoading, errorState,
-      login, logout, refreshData, forceRefreshProfile, logActivity, canAccess
+      login: async (email, password) => {
+        setIsAuthLoading(true);
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) { setIsAuthLoading(false); throw error; }
+      },
+      logout: async () => { 
+        setIsAuthLoading(true); 
+        await supabase.auth.signOut(); 
+        setCurrentUser(null);
+        setIsAuthLoading(false);
+      },
+      refreshData,
+      forceRefreshProfile,
+      logActivity,
+      canAccess: (allowedRoles) => !!currentUser && allowedRoles.includes(currentUser.role)
     }}>
       {children}
     </DataContext.Provider>
@@ -262,6 +217,6 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
 export const useData = () => {
   const context = useContext(DataContext);
-  if (context === undefined) throw new Error('useData must be used within a DataProvider');
+  if (context === undefined) throw new Error('useData must be used within DataProvider');
   return context;
 };

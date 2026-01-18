@@ -32,23 +32,19 @@ interface ProtectedRouteProps {
 
 /**
  * ProtectedRoute Component
- * This is the primary gatekeeper. It strictly waits for isAuthLoading to be false
- * before checking for a valid user and valid role.
+ * ينتظر اكتمال التحقق من الهوية (isAuthLoading) قبل تقييم الصلاحيات.
  */
 const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowedRoles }) => {
   const { currentUser, isAuthLoading, forceRefreshProfile } = useData();
 
-  // 1. If we are currently syncing with Supabase/Postgres, stay in loading state.
   if (isAuthLoading) {
     return <LoadingState />;
   }
 
-  // 2. If sync is done but no user is logged in, send them to the login screen.
   if (!currentUser) {
     return <Navigate to="/" replace />;
   }
   
-  // 3. If the user exists but their role isn't authorized for this path, show 403 screen.
   const hasAccess = allowedRoles.includes(currentUser.role);
   if (!hasAccess) {
     return (
@@ -355,14 +351,13 @@ const AppContent: React.FC = () => {
   const location = useLocation();
   const { 
     currentUser, isAuthLoading, login, logout,
-    projects = [], technicalRequests = [], clearanceRequests = [], projectWorks = [], appUsers = [], refreshData, logActivity 
+    projects, technicalRequests, clearanceRequests, projectWorks, appUsers, refreshData, logActivity 
   } = useData();
 
   const [loginData, setLoginData] = useState({ email: 'adaldawsari@darwaemaar.com', password: '' });
   const [loginError, setLoginError] = useState<string | null>(null);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
 
-  // Default path logic based on role
   const getDefaultPath = (role: UserRole) => {
     switch (role) {
       case 'ADMIN':
@@ -388,127 +383,58 @@ const AppContent: React.FC = () => {
     try {
       await login(loginData.email, loginData.password);
     } catch (err: any) {
-      if (err.message?.includes('Invalid login credentials')) {
-        setLoginError("خطأ في البريد الإلكتروني أو كلمة المرور");
-      } else {
-        setLoginError(err.message || "حدث خطأ أثناء تسجيل الدخول");
-      }
+      setLoginError(err.message || "خطأ في تسجيل الدخول");
     } finally {
       setIsLoggingIn(false);
     }
   };
 
   useEffect(() => {
-    // Navigate away from login ONLY if sync is 100% complete
     if (currentUser && !isAuthLoading && location.pathname === '/') {
       navigate(getDefaultPath(currentUser.role), { replace: true });
     }
   }, [currentUser, isAuthLoading, navigate, location.pathname]);
 
-  /**
-   * FULL SCREEN BLOCKER GUARD
-   * This ensures the user NEVER sees a 403 page or login screen while the system is verifying their role.
-   */
   if (isAuthLoading) return <LoadingState />;
 
-  // LOGIN SCREEN
   if (!currentUser) return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6 font-cairo" dir="rtl">
       <div className="bg-[#1B2B48] w-full max-w-md rounded-[50px] shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-300">
         <div className="p-12 text-center">
           <img src={DAR_LOGO} className="h-32 mx-auto mb-6" alt="Logo" />
           <h1 className="text-white text-3xl font-black tracking-tight">بوابة المتابعة</h1>
-          <p className="text-blue-200/60 text-xs mt-2 font-bold uppercase tracking-widest">نظام إدارة المشاريع المركزي</p>
         </div>
-        <form onSubmit={handleAuthSubmit} className="p-10 bg-white space-y-6 rounded-t-[50px] shadow-inner">
-          {loginError && (
-            <div className="bg-red-50 border border-red-100 p-4 rounded-2xl flex items-center gap-3 text-red-600 text-xs font-bold animate-in slide-in-from-top-2">
-              <ShieldAlert className="shrink-0" size={18} />
-              <p>{loginError}</p>
-            </div>
-          )}
-          <div className="space-y-2">
-            <label className="text-[10px] text-gray-400 font-black mr-2 uppercase tracking-widest">البريد الإلكتروني</label>
-            <input type="email" required placeholder="example@darwaemaar.com" className="w-full p-4 bg-gray-50 rounded-2xl border border-transparent focus:border-[#E95D22] outline-none font-bold transition-all" value={loginData.email} onChange={e => setLoginData({...loginData, email: e.target.value})} />
-          </div>
-          <div className="space-y-2">
-            <label className="text-[10px] text-gray-400 font-black mr-2 uppercase tracking-widest">كلمة المرور</label>
-            <input type="password" required placeholder="••••••••" className="w-full p-4 bg-gray-50 rounded-2xl border border-transparent focus:border-[#E95D22] outline-none font-bold transition-all" value={loginData.password} onChange={e => setLoginData({...loginData, password: e.target.value})} />
-          </div>
-          <button type="submit" disabled={isLoggingIn} className="w-full bg-[#E95D22] text-white py-5 rounded-[30px] font-black text-xl hover:brightness-110 active:scale-95 shadow-lg transition-all flex items-center justify-center gap-3">
-            {isLoggingIn ? <Loader2 className="animate-spin" size={24} /> : 'تسجيل الدخول'}
+        <form onSubmit={handleAuthSubmit} className="p-10 bg-white space-y-6 rounded-t-[50px]">
+          {loginError && <p className="text-red-500 text-xs font-bold text-center">{loginError}</p>}
+          <input type="email" required placeholder="البريد الإلكتروني" className="w-full p-4 bg-gray-50 rounded-2xl border outline-none font-bold" value={loginData.email} onChange={e => setLoginData({...loginData, email: e.target.value})} />
+          <input type="password" required placeholder="كلمة المرور" className="w-full p-4 bg-gray-50 rounded-2xl border outline-none font-bold" value={loginData.password} onChange={e => setLoginData({...loginData, password: e.target.value})} />
+          <button type="submit" disabled={isLoggingIn} className="w-full bg-[#E95D22] text-white py-5 rounded-[30px] font-black shadow-lg">
+            {isLoggingIn ? <Loader2 className="animate-spin mx-auto" size={24} /> : 'تسجيل الدخول'}
           </button>
-          <div className="text-center pt-4">
-            <p className="text-[10px] text-gray-300 font-bold">حقوق الطبع محفوظة لشركة دار وإعمار العقارية © {new Date().getFullYear()}</p>
-          </div>
         </form>
       </div>
     </div>
   );
 
-  // MAIN APP ROUTING
   return (
     <MainLayout>
       <Routes>
         <Route path="/" element={<Navigate to={getDefaultPath(currentUser.role)} replace />} />
-
-        {/* Dashboard Route */}
-        <Route path="/dashboard" element={
-          <ProtectedRoute allowedRoles={['ADMIN', 'PR_MANAGER', 'PR_EMPLOYEE']}>
-            <AppMapDashboard currentUser={currentUser} onLogout={logout} />
-          </ProtectedRoute>
-        } />
-        
-        {/* Projects Routes */}
-        <Route path="/projects" element={
-          <ProtectedRoute allowedRoles={['ADMIN', 'PR_MANAGER', 'PR_EMPLOYEE', 'TECHNICAL']}>
-            <ProjectsModule projects={projects} stats={{ projects: projects.length, techRequests: technicalRequests.length, clearRequests: clearanceRequests.length }} currentUser={currentUser} onProjectClick={(p) => navigate(`/projects/${p?.id}`)} onRefresh={refreshData} />
-          </ProtectedRoute>
-        } />
-
-        <Route path="/projects/:id" element={
-          <ProtectedRoute allowedRoles={['ADMIN', 'PR_MANAGER', 'PR_EMPLOYEE', 'TECHNICAL']}>
-            <ProjectDetailWrapper projects={projects} onRefresh={refreshData} currentUser={currentUser} />
-          </ProtectedRoute>
-        } />
-        
-        {/* Technical Requests Route */}
-        <Route path="/technical" element={
-          <ProtectedRoute allowedRoles={['ADMIN', 'TECHNICAL', 'PR_MANAGER', 'PR_EMPLOYEE']}>
-            <TechnicalModule requests={technicalRequests} projects={projects} currentUser={currentUser} usersList={appUsers} onRefresh={refreshData} logActivity={logActivity} />
-          </ProtectedRoute>
-        } />
-
-        {/* Deeds/Clearance Route */}
-        <Route path="/deeds" element={
-          <ProtectedRoute allowedRoles={['ADMIN', 'CONVEYANCE', 'DEEDS_OFFICER', 'PR_MANAGER', 'PR_EMPLOYEE']}>
-            <DeedsDashboard currentUserRole={currentUser.role} currentUserName={currentUser.name} logActivity={logActivity} />
-          </ProtectedRoute>
-        } />
-        
-        {/* User Management Route */}
-        <Route path="/users" element={ 
-          <ProtectedRoute allowedRoles={['ADMIN']}>
-            <UserManagement />
-          </ProtectedRoute>
-        } />
-        
-        {/* Fallback */}
+        <Route path="/dashboard" element={<ProtectedRoute allowedRoles={['ADMIN', 'PR_MANAGER', 'PR_EMPLOYEE']}><AppMapDashboard currentUser={currentUser} onLogout={logout} /></ProtectedRoute>} />
+        <Route path="/projects" element={<ProtectedRoute allowedRoles={['ADMIN', 'PR_MANAGER', 'PR_EMPLOYEE', 'TECHNICAL']}><ProjectsModule projects={projects} stats={{ projects: projects.length, techRequests: technicalRequests.length, clearRequests: clearanceRequests.length }} currentUser={currentUser} onProjectClick={(p) => navigate(`/projects/${p?.id}`)} onRefresh={refreshData} /></ProtectedRoute>} />
+        <Route path="/projects/:id" element={<ProtectedRoute allowedRoles={['ADMIN', 'PR_MANAGER', 'PR_EMPLOYEE', 'TECHNICAL']}><ProjectDetailWrapper projects={projects} currentUser={currentUser} /></ProtectedRoute>} />
+        <Route path="/technical" element={<ProtectedRoute allowedRoles={['ADMIN', 'TECHNICAL', 'PR_MANAGER', 'PR_EMPLOYEE']}><TechnicalModule requests={technicalRequests} projects={projects} currentUser={currentUser} usersList={appUsers} onRefresh={refreshData} logActivity={logActivity} /></ProtectedRoute>} />
+        <Route path="/deeds" element={<ProtectedRoute allowedRoles={['ADMIN', 'CONVEYANCE', 'DEEDS_OFFICER', 'PR_MANAGER', 'PR_EMPLOYEE']}><DeedsDashboard currentUserRole={currentUser.role} currentUserName={currentUser.name} logActivity={logActivity} /></ProtectedRoute>} />
+        <Route path="/users" element={<ProtectedRoute allowedRoles={['ADMIN']}><UserManagement /></ProtectedRoute>} />
         <Route path="*" element={<Navigate to={getDefaultPath(currentUser.role)} replace />} />
       </Routes>
-      
-      {/* AI Assistant - Only for privileged users */}
-      {['ADMIN', 'PR_MANAGER', 'PR_EMPLOYEE'].includes(currentUser?.role || '') && (
-        <AIAssistant currentUser={currentUser} projects={projects} technicalRequests={technicalRequests} clearanceRequests={clearanceRequests} projectWorks={projectWorks} onNavigate={(type, data) => navigate(type === 'PROJECT' ? `/projects/${data.id}` : '/deeds')} />
-      )}
+      {['ADMIN', 'PR_MANAGER'].includes(currentUser.role) && <AIAssistant currentUser={currentUser} projects={projects} technicalRequests={technicalRequests} clearanceRequests={clearanceRequests} projectWorks={projectWorks} onNavigate={(type, data) => navigate(type === 'PROJECT' ? `/projects/${data.id}` : '/deeds')} />}
     </MainLayout>
   );
 };
 
 const App: React.FC = () => (
-  <ErrorBoundary>
-    <AppContent />
-  </ErrorBoundary>
+  <ErrorBoundary><AppContent /></ErrorBoundary>
 );
 
 export default App;
