@@ -15,12 +15,8 @@ import { useData } from '../contexts/DataContext';
 const ROLE_CONFIG: Record<UserRole, { label: string; color: string; bg: string }> = {
   'ADMIN': { label: 'مدير نظام', color: 'text-purple-700', bg: 'bg-purple-50 border-purple-100' },
   'PR_MANAGER': { label: 'مدير علاقات عامة', color: 'text-blue-700', bg: 'bg-blue-50 border-blue-100' },
-  'CONVEYANCE': { label: 'مسؤول إفراغات', color: 'text-orange-700', bg: 'bg-orange-50 border-orange-100' },
-  'TECHNICAL': { label: 'مهندس فني', color: 'text-emerald-700', bg: 'bg-emerald-50 border-emerald-100' },
-  'FINANCE': { label: 'مالية', color: 'text-rose-700', bg: 'bg-rose-50 border-rose-100' },
-  'PR_EMPLOYEE': { label: 'موظف علاقات', color: 'text-indigo-700', bg: 'bg-indigo-50 border-indigo-100' },
-  'DEEDS_OFFICER': { label: 'موظف صكوك', color: 'text-amber-700', bg: 'bg-amber-50 border-amber-100' },
-  'GUEST': { label: 'زائر', color: 'text-gray-600', bg: 'bg-gray-50 border-gray-100' }
+  'TECHNICAL': { label: 'القسم الفني', color: 'text-emerald-700', bg: 'bg-emerald-50 border-emerald-100' },
+  'CONVEYANCE': { label: 'مسؤول إفراغات CX', color: 'text-orange-700', bg: 'bg-orange-50 border-orange-100' }
 };
 
 const UserManagement: React.FC = () => {
@@ -35,7 +31,7 @@ const UserManagement: React.FC = () => {
     id: '',
     name: '',
     email: '',
-    role: 'PR_EMPLOYEE' as UserRole,
+    role: 'PR_MANAGER' as UserRole,
     department: '',
     password: '' 
   });
@@ -74,7 +70,7 @@ const UserManagement: React.FC = () => {
       id: '',
       name: '',
       email: '',
-      role: 'PR_EMPLOYEE',
+      role: 'PR_MANAGER',
       department: '',
       password: ''
     });
@@ -142,7 +138,6 @@ const UserManagement: React.FC = () => {
       console.error("Submission error:", err);
       alert("فشل العملية: " + (err.message || "خطأ غير معروف"));
     } finally {
-      // CRITICAL: Force stop loader no matter what happens
       setIsSaving(false);
     }
   };
@@ -276,15 +271,20 @@ const UserManagement: React.FC = () => {
           )}
 
           <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="text-xs font-bold text-gray-400 block mb-1">الدور الوظيفي</label>
-              <select className="w-full p-4 bg-gray-50 border rounded-2xl font-bold outline-none cursor-pointer focus:border-[#E95D22]" value={userForm.role} onChange={e => setUserForm({...userForm, role: e.target.value as UserRole})}>
-                {Object.entries(ROLE_CONFIG).map(([key, cfg]) => (
-                  <option key={key} value={key}>{cfg.label}</option>
-                ))}
+            <div className="col-span-2">
+              <label className="text-xs font-bold text-gray-400 block mb-1">الرتبة والصلاحيات</label>
+              <select 
+                className="w-full bg-gray-50 border-none rounded-2xl py-4 px-4 focus:ring-2 focus:ring-[#1B2B48] font-bold text-sm outline-none shadow-sm cursor-pointer"
+                value={userForm.role}
+                onChange={e => setUserForm({...userForm, role: e.target.value as UserRole})}
+              >
+                <option value="ADMIN">مدير نظام (صلاحية كاملة + إضافة مستخدمين)</option>
+                <option value="PR_MANAGER">مدير علاقات عامة (صلاحية كاملة بدون إضافة مستخدمين)</option>
+                <option value="TECHNICAL">موظف القسم الفني (إدارة أعمال المشروع)</option>
+                <option value="CONVEYANCE">مسؤول إفراغات CX (إدارة طلبات الإفراغ)</option>
               </select>
             </div>
-            <div>
+            <div className="col-span-2">
               <label className="text-xs font-bold text-gray-400 block mb-1">القسم</label>
               <input className="w-full p-4 bg-gray-50 border rounded-2xl font-bold outline-none focus:border-[#E95D22]" value={userForm.department} onChange={e => setUserForm({...userForm, department: e.target.value})} />
             </div>

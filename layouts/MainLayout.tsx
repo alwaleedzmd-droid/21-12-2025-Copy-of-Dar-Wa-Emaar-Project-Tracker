@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router';
 import { 
@@ -24,33 +25,32 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   if (!currentUser) return <>{children}</>;
 
   /**
-   * تعريف صلاحيات القائمة الجانبية حسب الأدوار
-   * موظفو العلاقات العامة (Manager & Employee) لديهم وصول شامل باستثناء إدارة المستخدمين
+   * تعريف صلاحيات القائمة الجانبية حسب الأدوار الأربعة الجديدة
    */
   const navItems = [
     { 
       label: 'لوحة التحكم', 
       icon: <LayoutDashboard size={20} />, 
       path: '/dashboard', 
-      roles: ['ADMIN', 'PR_MANAGER', 'PR_EMPLOYEE'] 
+      roles: ['ADMIN', 'PR_MANAGER'] 
     },
     { 
       label: 'إدارة المشاريع', 
       icon: <Building2 size={20} />, 
       path: '/projects', 
-      roles: ['ADMIN', 'PR_MANAGER', 'PR_EMPLOYEE', 'TECHNICAL'] 
+      roles: ['ADMIN', 'PR_MANAGER', 'TECHNICAL'] 
     },
     { 
       label: 'الطلبات الفنية', 
       icon: <Zap size={20} />, 
       path: '/technical', 
-      roles: ['ADMIN', 'TECHNICAL', 'PR_MANAGER', 'PR_EMPLOYEE'] 
+      roles: ['ADMIN', 'TECHNICAL', 'PR_MANAGER'] 
     },
     { 
       label: 'سجل الإفراغ', 
       icon: <FileStack size={20} />, 
       path: '/deeds', 
-      roles: ['ADMIN', 'CONVEYANCE', 'DEEDS_OFFICER', 'PR_MANAGER', 'PR_EMPLOYEE'] 
+      roles: ['ADMIN', 'CONVEYANCE', 'PR_MANAGER'] 
     },
     { 
       label: 'إدارة المستخدمين', 
@@ -119,7 +119,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
             <div className="flex items-center gap-3">
               <div className="text-left">
                 <p className="text-sm font-black text-[#1B2B48]">{currentUser.name}</p>
-                <p className="text-[10px] text-gray-400 font-bold text-right uppercase tracking-tighter">{currentUser.role}</p>
+                <p className="text-[10px] text-gray-400 font-bold text-right uppercase tracking-tighter">{ROLE_CONFIG[currentUser.role]?.label || currentUser.role}</p>
               </div>
               <div className="w-12 h-12 rounded-2xl bg-[#1B2B48] text-white flex items-center justify-center font-black shadow-sm">
                 {currentUser.name[0]}
@@ -134,6 +134,14 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
       </div>
     </div>
   );
+};
+
+// مساعدة لعرض المسميات الجديدة في الهيدر
+const ROLE_CONFIG: Record<string, { label: string }> = {
+  'ADMIN': { label: 'مدير نظام' },
+  'PR_MANAGER': { label: 'مدير علاقات عامة' },
+  'TECHNICAL': { label: 'القسم الفني' },
+  'CONVEYANCE': { label: 'مسؤول إفراغات CX' }
 };
 
 export default MainLayout;

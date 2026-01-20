@@ -110,7 +110,7 @@ const ProjectDetailWrapper = ({ projects = [], currentUser }: any) => {
    const excelInputRef = useRef<HTMLInputElement>(null);
 
    const project = useMemo(() => projects.find((p: any) => p.id === Number(id)), [projects, id]);
-   const isManager = ['ADMIN', 'PR_MANAGER', 'PR_EMPLOYEE'].includes(currentUser?.role || '');
+   const isManager = ['ADMIN', 'PR_MANAGER'].includes(currentUser?.role || '');
    const isAdmin = currentUser?.role === 'ADMIN';
 
    const fetchWorks = async () => {
@@ -360,14 +360,11 @@ const AppContent: React.FC = () => {
     switch (role) {
       case 'ADMIN':
       case 'PR_MANAGER':
-      case 'PR_EMPLOYEE':
         return '/dashboard';
       case 'TECHNICAL':
         return '/technical';
       case 'CONVEYANCE':
-      case 'DEEDS_OFFICER':
         return '/deeds';
-      case 'GUEST':
       default:
         return '/dashboard';
     }
@@ -425,11 +422,11 @@ const AppContent: React.FC = () => {
     <MainLayout>
       <Routes>
         <Route path="/" element={<Navigate to={getDefaultPath(currentUser.role)} replace />} />
-        <Route path="/dashboard" element={<ProtectedRoute allowedRoles={['ADMIN', 'PR_MANAGER', 'PR_EMPLOYEE']}><AppMapDashboard currentUser={currentUser} onLogout={logout} /></ProtectedRoute>} />
-        <Route path="/projects" element={<ProtectedRoute allowedRoles={['ADMIN', 'PR_MANAGER', 'PR_EMPLOYEE', 'TECHNICAL']}><ProjectsModule projects={projects} stats={{ projects: projects.length, techRequests: technicalRequests.length, clearRequests: clearanceRequests.length }} currentUser={currentUser} onProjectClick={(p) => navigate(`/projects/${p?.id}`)} onRefresh={refreshData} /></ProtectedRoute>} />
-        <Route path="/projects/:id" element={<ProtectedRoute allowedRoles={['ADMIN', 'PR_MANAGER', 'PR_EMPLOYEE', 'TECHNICAL']}><ProjectDetailWrapper projects={projects} currentUser={currentUser} /></ProtectedRoute>} />
-        <Route path="/technical" element={<ProtectedRoute allowedRoles={['ADMIN', 'TECHNICAL', 'PR_MANAGER', 'PR_EMPLOYEE']}><TechnicalModule requests={technicalRequests} projects={projects} currentUser={currentUser} usersList={appUsers} onRefresh={refreshData} logActivity={logActivity} /></ProtectedRoute>} />
-        <Route path="/deeds" element={<ProtectedRoute allowedRoles={['ADMIN', 'CONVEYANCE', 'DEEDS_OFFICER', 'PR_MANAGER', 'PR_EMPLOYEE']}><DeedsDashboard currentUserRole={currentUser.role} currentUserName={currentUser.name} logActivity={logActivity} /></ProtectedRoute>} />
+        <Route path="/dashboard" element={<ProtectedRoute allowedRoles={['ADMIN', 'PR_MANAGER']}><AppMapDashboard currentUser={currentUser} onLogout={logout} /></ProtectedRoute>} />
+        <Route path="/projects" element={<ProtectedRoute allowedRoles={['ADMIN', 'PR_MANAGER', 'TECHNICAL']}><ProjectsModule projects={projects} stats={{ projects: projects.length, techRequests: technicalRequests.length, clearRequests: clearanceRequests.length }} currentUser={currentUser} onProjectClick={(p) => navigate(`/projects/${p?.id}`)} onRefresh={refreshData} /></ProtectedRoute>} />
+        <Route path="/projects/:id" element={<ProtectedRoute allowedRoles={['ADMIN', 'PR_MANAGER', 'TECHNICAL']}><ProjectDetailWrapper projects={projects} currentUser={currentUser} /></ProtectedRoute>} />
+        <Route path="/technical" element={<ProtectedRoute allowedRoles={['ADMIN', 'TECHNICAL', 'PR_MANAGER']}><TechnicalModule requests={technicalRequests} projects={projects} currentUser={currentUser} usersList={appUsers} onRefresh={refreshData} logActivity={logActivity} /></ProtectedRoute>} />
+        <Route path="/deeds" element={<ProtectedRoute allowedRoles={['ADMIN', 'CONVEYANCE', 'PR_MANAGER']}><DeedsDashboard currentUserRole={currentUser.role} currentUserName={currentUser.name} logActivity={logActivity} /></ProtectedRoute>} />
         <Route path="/users" element={<ProtectedRoute allowedRoles={['ADMIN']}><UserManagement /></ProtectedRoute>} />
         <Route path="*" element={<Navigate to={getDefaultPath(currentUser.role)} replace />} />
       </Routes>
