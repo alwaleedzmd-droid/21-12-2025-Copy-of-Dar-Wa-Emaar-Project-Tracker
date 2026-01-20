@@ -106,7 +106,6 @@ const UserManagement: React.FC = () => {
     setIsSaving(true);
     try {
       if (userForm.id) {
-        // Update existing profile metadata
         const { error } = await supabase.from('profiles').update({
           name: userForm.name,
           role: userForm.role,
@@ -115,7 +114,6 @@ const UserManagement: React.FC = () => {
         if (error) throw error;
         logActivity?.('تحديث بيانات مستخدم', userForm.name, 'text-blue-500');
       } else {
-        // Create NEW user using RPC (Handles Auth + Profile record)
         if (!userForm.password || userForm.password.length < 6) {
           throw new Error("كلمة المرور يجب أن لا تقل عن 6 خانات");
         }

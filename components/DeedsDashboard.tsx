@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useLocation } from 'react-router';
 import { supabase } from '../supabaseClient'; 
@@ -70,7 +71,7 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
         status: 'جديد'
     });
 
-    // Fix: Cleaned up invalid role strings (e.g., PR_EMPLOYEE, DEEDS_OFFICER) from the authorization check.
+    // إزالة الرتب القديمة وحصر الصلاحية في الرتب المطلوبة
     const isAuthorizedToManage = ['ADMIN', 'PR_MANAGER', 'CONVEYANCE'].includes(currentUserRole || '');
 
     const sendAppNotification = async (title: string, message: string) => {

@@ -72,8 +72,6 @@ const UsersModule: React.FC = () => {
       const isNew = !selectedUser.id;
       
       if (isNew) {
-        // ملاحظة: إنشاء مستخدمي Auth فعليين يتطلب Admin API، 
-        // هنا نقوم بالإدراج في جدول profiles كما هو متبع في منطق واجهة الإدارة.
         const { error } = await supabase.from('profiles').insert([{
           name: selectedUser.name,
           email: selectedUser.email,
@@ -116,7 +114,6 @@ const UsersModule: React.FC = () => {
   return (
     <div className="space-y-8 animate-in fade-in duration-500 font-cairo">
       
-      {/* Header Section */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-6 rounded-[35px] border border-gray-100 shadow-sm">
         <div className="flex items-center gap-5">
           <div className="p-4 bg-blue-50 text-blue-600 rounded-2xl shadow-sm">
@@ -135,7 +132,6 @@ const UsersModule: React.FC = () => {
         </button>
       </div>
 
-      {/* Filter Bar */}
       <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
         <div className="relative">
           <Search className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-300" size={20} />
@@ -149,7 +145,6 @@ const UsersModule: React.FC = () => {
         </div>
       </div>
 
-      {/* Users Table */}
       <div className="bg-white rounded-[40px] border border-gray-100 shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-right">
@@ -230,7 +225,6 @@ const UsersModule: React.FC = () => {
         </div>
       </div>
 
-      {/* Add/Edit Modal */}
       <Modal 
         isOpen={isModalOpen} 
         onClose={() => setIsModalOpen(false)} 
