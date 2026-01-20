@@ -73,7 +73,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         supabase.from('profiles').select('*')
       ]);
 
-      setProjects(pRes.data?.map(p => ({ ...p, name: p.title || p.name })) || []);
+      setProjects(pRes.data?.map(p => ({ ...p, name: p.name || p.title })) || []);
       setTechnicalRequests(trRes.data || []);
       setClearanceRequests(drRes.data || []);
       setProjectWorks(pwRes.data || []);
