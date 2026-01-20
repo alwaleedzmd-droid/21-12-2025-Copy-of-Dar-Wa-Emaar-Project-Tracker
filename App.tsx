@@ -31,24 +31,22 @@ interface ProtectedRouteProps {
 }
 
 /**
- * ProtectedRoute (بوابة الحماية الصامتة)
- * لا تظهر أي رسائل تقنية أثناء التحميل وتكتفي بشاشة بيضاء.
+ * Silent ProtectedRoute
+ * Returns a blank white screen during auth verification to provide a smooth transition.
  */
 const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowedRoles }) => {
   const { currentUser, isAuthLoading } = useData();
 
-  // صمت تام أثناء التحميل
   if (isAuthLoading || !currentUser) {
     return <div className="min-h-screen bg-white" />;
   }
   
-  // فحص الصلاحيات
   if (!allowedRoles.includes(currentUser.role)) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center p-12 text-center font-cairo" dir="rtl">
         <ShieldAlert size={64} className="text-red-500 mb-6" />
-        <h2 className="text-3xl font-black text-[#1B2B48] mb-4">عذراً، لا تملك الصلاحية</h2>
-        <p className="text-gray-500 font-bold max-w-md mb-8">هذا القسم يتطلب صلاحيات إدارية إضافية للوصول.</p>
+        <h2 className="text-3xl font-black text-[#1B2B48] mb-4">الوصول مرفوض</h2>
+        <p className="text-gray-500 font-bold max-w-md mb-8">عذراً، لا تملك الصلاحيات الكافية لعرض هذا القسم.</p>
         <button 
           onClick={() => window.location.href = '/'} 
           className="px-10 py-4 bg-[#1B2B48] text-white rounded-2xl font-black shadow-lg"
@@ -84,8 +82,8 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
     if (this.state.hasError) return (
       <div className="min-h-screen flex items-center justify-center text-red-500 font-bold bg-[#f8f9fa] p-10 text-center flex-col gap-4" dir="rtl">
         <AlertTriangle size={48} />
-        <h2 className="text-2xl font-black text-[#1B2B48]">حدث خطأ في عرض الصفحة</h2>
-        <button onClick={() => window.location.reload()} className="bg-[#1B2B48] text-white px-8 py-3 rounded-2xl font-bold shadow-lg">تحديث الواجهة</button>
+        <h2 className="text-2xl font-black text-[#1B2B48]">حدث خطأ غير متوقع</h2>
+        <button onClick={() => window.location.reload()} className="bg-[#1B2B48] text-white px-8 py-3 rounded-2xl font-bold shadow-lg">إعادة تحميل النظام</button>
       </div>
     );
     return this.props.children;
@@ -349,7 +347,7 @@ const AppContent: React.FC = () => {
       await login(loginData.email, loginData.password);
     } catch (err: any) {
       setLoginError(err.message || "خطأ في تسجيل الدخول");
-      setIsLoggingIn(false);
+      setIsLoggingIn(false); 
     }
   };
 
@@ -359,7 +357,7 @@ const AppContent: React.FC = () => {
     }
   }, [currentUser, isAuthLoading, navigate, location.pathname]);
 
-  // صمت تام أثناء المصادقة الأولية - شاشة بيضاء فقط
+  // PROFESSIONAL SILENT LOADING: Absolute blank screen or tiny center spinner
   if (isAuthLoading) return <div className="min-h-screen bg-white" />;
 
   if (!currentUser) return (

@@ -33,7 +33,7 @@ interface DataContextType {
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
 
-// الحساب المدير الأساسي لتجاوز كافة السياسات والدخول الصامت
+// Admin Bypass Email for instant access
 const ADMIN_EMAIL = 'adaldawsari@darwaemaar.com';
 
 export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
@@ -64,6 +64,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     if (!currentUser || currentUser.role === 'GUEST') return;
     setIsDbLoading(true);
     try {
+      // Sync all critical tables for immediate visibility
       const [pRes, trRes, drRes, pwRes, prRes] = await Promise.all([
         supabase.from('projects').select('*').order('id', { ascending: true }),
         supabase.from('technical_requests').select('*').order('created_at', { ascending: false }),
@@ -79,18 +80,14 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setAppUsers(prRes.data || []);
       setErrorState(null);
     } catch (e: any) {
-      console.warn("[SILENT_DATA] Refresh incomplete:", e?.message);
+      console.warn("[SILENT_DATA] Initial fetch warning:", e?.message);
     } finally {
       setIsDbLoading(false);
     }
   }, [currentUser]);
 
-  /**
-   * SILENT AUTH FETCH
-   * Immediately sets Admin for specific email to unlock UI instantly.
-   */
   const fetchProfile = useCallback(async (userId: string, email: string) => {
-    // 1. Instant Admin Bypass
+    // 1. SILENT ADMIN BYPASS: Unlock UI immediately for the specified email
     if (email === ADMIN_EMAIL) {
       setCurrentUser({
         id: userId,
@@ -101,7 +98,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       });
       setIsAuthLoading(false);
       
-      // Secondary background sync
+      // Update details in background to ensure local state matches DB
       supabase.from('profiles').select('*').eq('id', userId).maybeSingle().then(({ data }) => {
         if (data) setCurrentUser(prev => ({ ...prev, ...data } as User));
       });
@@ -123,6 +120,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         });
       }
     } catch (err) {
+      console.error("[AUTH] Profile sync error:", err);
       setCurrentUser(null);
     } finally {
       setIsAuthLoading(false);
@@ -167,12 +165,16 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       },
       logout: async () => { 
         setIsAuthLoading(true);
+        // Step 1: Force clear Supabase session
         await supabase.auth.signOut();
+        // Step 2: Wipe all browser storage to kill any residual tokens/flags
         localStorage.clear();
         sessionStorage.clear();
+        // Step 3: Reset state
         setCurrentUser(null);
         setIsAuthLoading(false);
-        window.location.href = '/'; // Forced immediate redirect
+        // Step 4: Definitive hard refresh to the login screen
+        window.location.href = '/'; 
       },
       refreshData,
       forceRefreshProfile: async () => {
