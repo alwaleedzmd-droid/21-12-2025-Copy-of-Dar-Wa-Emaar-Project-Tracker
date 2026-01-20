@@ -357,8 +357,15 @@ const AppContent: React.FC = () => {
     }
   }, [currentUser, isAuthLoading, navigate, location.pathname]);
 
-  // PROFESSIONAL SILENT LOADING: Absolute blank screen or tiny center spinner
-  if (isAuthLoading) return <div className="min-h-screen bg-white" />;
+  // PROFESSIONAL SILENT LOADING: Subtle visual indicator instead of empty screen
+  if (isAuthLoading) return (
+    <div className="min-h-screen flex items-center justify-center bg-white">
+      <div className="flex flex-col items-center gap-4">
+        <Loader2 className="animate-spin text-[#1B2B48] opacity-20 w-12 h-12" />
+        <p className="text-[#1B2B48]/30 font-bold text-sm">جاري مزامنة البيانات...</p>
+      </div>
+    </div>
+  );
 
   if (!currentUser) return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6 font-cairo" dir="rtl">
