@@ -7,7 +7,7 @@ import {
   ChevronDown, User as UserIcon, 
   MessageSquare, Send, Loader2, XCircle, Activity,
   Sparkles, FileSpreadsheet, Calendar, CreditCard,
-  Building2, Phone, MapPin, FileText, Landmark
+  Building2, Phone, MapPin, FileText, Landmark, Sheet
 } from 'lucide-react';
 import { ActivityLog, useData } from '../contexts/DataContext';
 import { notificationService } from '../services/notificationService';
@@ -30,7 +30,7 @@ interface DeedsDashboardProps {
 
 const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, currentUserName, filteredProjectName, logActivity }) => {
     const location = useLocation();
-    const { refreshData } = useData();
+    const { refreshData, currentUser } = useData();
     const [searchQuery, setSearchQuery] = useState('');
     const [isRegModalOpen, setIsRegModalOpen] = useState(false);
     const [isManageModalOpen, setIsManageModalOpen] = useState(false);
@@ -40,11 +40,13 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
     const [newComment, setNewComment] = useState('');
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
+    const [isBulkLoading, setIsBulkLoading] = useState(false);
     const [isCommentLoading, setIsCommentLoading] = useState(false);
     const [isAutoFilling, setIsAutoFilling] = useState(false);
     const [autoFillSuccess, setAutoFillSuccess] = useState(false);
 
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const excelInputRef = useRef<HTMLInputElement>(null);
     const commentsEndRef = useRef<HTMLDivElement>(null);
 
     const [newDeedForm, setNewDeedForm] = useState<any>({
@@ -71,12 +73,7 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
 
     const isAuthorizedToManage = ['ADMIN', 'PR_MANAGER', 'PR_EMPLOYEE', 'DEEDS_OFFICER', 'CONVEYANCE'].includes(currentUserRole || '');
 
-    /**
-     * Helper function to trigger notifications across the system
-     */
     const sendAppNotification = async (title: string, message: string) => {
-        // We use the centralized notificationService which targets the PR_MANAGER role by default for deeds
-        // The recipient will see the notification in their Bell component
         await notificationService.send(
             'PR_MANAGER',
             `📢 ${title}: ${message}`,
@@ -101,6 +98,28 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
         } catch (error) {
             console.error("Critical: Deeds fetch error", error);
         } finally { setIsLoading(false); }
+    };
+
+    const handleExcelImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+
+      setIsBulkLoading(true);
+      try {
+        const data = await parseClearanceExcel(file, null, currentUser);
+        const { error } = await supabase.from('deeds_requests').insert(data);
+        if (error) throw error;
+
+        await sendAppNotification('استيراد إكسل', `تم إضافة ${data.length} سجل إفراغ جديد عبر إكسل`);
+        logActivity?.('استيراد إكسل إفراغات', `تم إضافة ${data.length} سجل`, 'text-blue-500');
+        fetchDeeds();
+        alert(`تم استيراد ${data.length} سجل بنجاح ✅`);
+      } catch (err: any) {
+        alert("فشل الاستيراد: " + err.message);
+      } finally {
+        setIsBulkLoading(false);
+        e.target.value = '';
+      }
     };
 
     const fetchClientDetails = async (id: string) => {
@@ -175,7 +194,6 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
             }]);
             if (error) throw error;
 
-            // Trigger notification for New Comment
             await sendAppNotification('تعليق جديد', `تم إضافة ملاحظة على طلب العميل ${selectedDeed.client_name}`);
 
             setNewComment('');
@@ -191,7 +209,6 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
             const { error } = await supabase.from('deeds_requests').update({ status }).eq('id', selectedDeed.id);
             if (error) throw error;
             
-            // Trigger notification for Status Update
             await sendAppNotification('تحديث حالة إفراغ', `تم تغيير حالة طلب ${selectedDeed.client_name} إلى (${status})`);
             
             setSelectedDeed({ ...selectedDeed, status });
@@ -232,7 +249,6 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
             const { error } = await supabase.from('deeds_requests').insert([payload]);
             if (error) throw error;
             
-            // Trigger notification for New Deed Request
             await sendAppNotification('طلب إفراغ جديد', `تم تسجيل طلب جديد للمستفيد ${payload.client_name}`);
 
             logActivity?.('تسجيل إفراغ جديد', payload.client_name, 'text-green-500');
@@ -262,6 +278,15 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
                     <p className="text-gray-400 text-xs font-bold mt-1 uppercase tracking-widest">إدارة شاملة لملف الإفراغ والتعليقات</p>
                 </div>
                 <div className="flex items-center gap-3">
+                    <input type="file" ref={excelInputRef} hidden accept=".xlsx, .xls" onChange={handleExcelImport} />
+                    <button 
+                      onClick={() => excelInputRef.current?.click()}
+                      disabled={isBulkLoading}
+                      className="flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 text-gray-600 rounded-xl font-bold text-sm hover:bg-gray-50 transition-all shadow-sm"
+                    >
+                      {isBulkLoading ? <Loader2 size={16} className="animate-spin" /> : <Sheet size={16} className="text-green-600" />}
+                      استيراد إكسل
+                    </button>
                     <button onClick={() => setIsRegModalOpen(true)} className="flex items-center justify-center gap-2 px-6 py-2.5 bg-[#E95D22] text-white rounded-xl font-black text-sm hover:brightness-110 shadow-lg active:scale-95 transition-all">
                         <Plus size={16} /> تسجيل صك جديد
                     </button>

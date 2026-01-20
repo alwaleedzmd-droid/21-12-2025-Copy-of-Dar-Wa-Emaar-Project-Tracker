@@ -1,9 +1,10 @@
+
 import React, { useState, useRef, useEffect } from 'react';
 import { useLocation } from 'react-router';
 import { 
   Plus, MoreHorizontal, Trash2, Edit, FileText, 
   Building2, AlignLeft, CheckCircle2, Paperclip, 
-  FileUp, Sheet, Search, Filter, Zap, ChevronLeft 
+  FileUp, Sheet, Search, Filter, Zap, ChevronLeft, Loader2
 } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import { TechnicalRequest, ProjectSummary, User } from '../types';
@@ -11,6 +12,7 @@ import { notificationService } from '../services/notificationService';
 import Modal from './Modal';
 import ManageRequestModal from './ManageRequestModal';
 import * as XLSX from 'xlsx';
+import { parseTechnicalRequestsExcel } from '../utils/excelHandler';
 
 // --- Constants ---
 const RAW_REVIEW_ENTITIES = [
@@ -55,13 +57,14 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
   const location = useLocation();
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isManageModalOpen, setIsManageModalOpen] = useState(false);
-  const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
   const [activeRequest, setActiveRequest] = useState<TechnicalRequest | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   
   const [isUploading, setIsUploading] = useState(false);
+  const [isBulkLoading, setIsBulkLoading] = useState(false);
   const [attachment, setAttachment] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const excelInputRef = useRef<HTMLInputElement>(null);
 
   const [techForm, setTechForm] = useState({
     id: 0, 
@@ -102,20 +105,28 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
     setIsAddModalOpen(true);
   };
 
-  const openEditModal = (req: TechnicalRequest) => {
-    setTechForm({
-      id: req?.id, 
-      project_id: req?.project_id?.toString() || '', 
-      service_type: req?.service_type || '',
-      reviewing_entity: req?.reviewing_entity || '', 
-      requesting_entity: req?.requesting_entity || '',
-      details: req?.details || '', 
-      status: req?.status || 'new', 
-      progress: req?.progress || 0,
-      attachment_url: req?.attachment_url || '' 
-    });
-    setAttachment(null);
-    setIsAddModalOpen(true);
+  const handleExcelImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsBulkLoading(true);
+    try {
+      const proj = filteredByProject ? projects.find(p => p.name === filteredByProject || p.title === filteredByProject) : null;
+      const data = await parseTechnicalRequestsExcel(file, proj?.id || null, filteredByProject || null);
+      
+      const { error } = await supabase.from('technical_requests').insert(data);
+      if (error) throw error;
+
+      notificationService.send('TECHNICAL', `تم استيراد ${data.length} طلب فني جديد عبر إكسل`, '/technical', currentUser?.name || 'النظام');
+      logActivity?.('استيراد إكسل', `تم إضافة ${data.length} طلب فني`, 'text-blue-500');
+      onRefresh();
+      alert(`تم استيراد ${data.length} سجل بنجاح ✅`);
+    } catch (err: any) {
+      alert("فشل الاستيراد: " + err.message);
+    } finally {
+      setIsBulkLoading(false);
+      e.target.value = '';
+    }
   };
 
   const handleSubmit = async () => {
@@ -158,14 +169,10 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
       if (techForm.id === 0) {
         const { error } = await supabase.from('technical_requests').insert([payload]);
         if (error) throw error;
-        
-        // تنبيه المهندسين الفنيين
         notificationService.send('TECHNICAL', `طلب فني جديد: ${techForm.service_type} لمشروع ${selectedProj?.name}`, '/technical', currentUser?.name || 'الإدارة');
       } else {
         const { error } = await supabase.from('technical_requests').update(payload).eq('id', Number(techForm.id));
         if (error) throw error;
-        
-        // تنبيه الإدارة في حال كان المهندس هو من حدث الطلب
         if (currentUser?.role === 'TECHNICAL') {
             notificationService.send('PR_MANAGER', `تحديث على طلب فني: ${techForm.service_type}`, '/technical', currentUser?.name);
         }
@@ -186,7 +193,6 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
       const { error } = await supabase.from('technical_requests').update(updateData).eq('id', Number(activeRequest?.id));
       if (error) throw error;
       
-      // إرسال تنبيه متبادل حسب الدور
       const targetRole = currentUser?.role === 'TECHNICAL' ? 'PR_MANAGER' : 'TECHNICAL';
       notificationService.send(targetRole, `تغيرت حالة العمل: ${activeRequest.service_type} إلى ${newStatus}`, '/technical', currentUser?.name || 'النظام');
 
@@ -212,9 +218,20 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
         </div>
         <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
           {canEdit && (
-            <button onClick={openAddModal} className="flex items-center gap-2 px-6 py-2.5 bg-[#1B2B48] text-white rounded-xl font-black text-sm hover:brightness-110 shadow-lg transition-all active:scale-95">
-              <Plus size={20} /> إضافة عمل يدوي
-            </button>
+            <>
+              <input type="file" ref={excelInputRef} hidden accept=".xlsx, .xls" onChange={handleExcelImport} />
+              <button 
+                onClick={() => excelInputRef.current?.click()}
+                disabled={isBulkLoading}
+                className="flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 text-gray-600 rounded-xl font-bold text-sm hover:bg-gray-50 transition-all shadow-sm"
+              >
+                {isBulkLoading ? <Loader2 size={18} className="animate-spin" /> : <Sheet size={18} className="text-green-600" />}
+                استيراد إكسل
+              </button>
+              <button onClick={openAddModal} className="flex items-center gap-2 px-6 py-2.5 bg-[#1B2B48] text-white rounded-xl font-black text-sm hover:brightness-110 shadow-lg transition-all active:scale-95">
+                <Plus size={20} /> إضافة عمل يدوي
+              </button>
+            </>
           )}
         </div>
       </div>

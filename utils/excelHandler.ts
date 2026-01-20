@@ -29,9 +29,28 @@ export interface ClearanceImportData {
   project_id?: number;
 }
 
+export interface TechnicalImportData {
+  project_id: number;
+  service_type: string;
+  reviewing_entity: string;
+  details: string;
+  status: string;
+  scope: string;
+  project_name?: string;
+}
+
+export interface ProjectWorkImportData {
+  projectId: number;
+  task_name: string;
+  authority: string;
+  department: string;
+  notes: string;
+  status: string;
+  project_name?: string;
+}
+
 /**
  * معالج ملفات الإكسل الخاص بطلبات الإفراغ
- * يقوم بقراءة الـ 18 عموداً المحددة وتحويلها لتنسيق JSON
  */
 export const parseClearanceExcel = (
   file: File, 
@@ -45,23 +64,19 @@ export const parseClearanceExcel = (
     }
 
     const reader = new FileReader();
-
     reader.onload = (e) => {
       try {
         const bstr = e.target?.result;
         const workbook = XLSX.read(bstr, { type: 'binary' });
         const sheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[sheetName];
-        
-        // تحويل البيانات إلى مصفوفة كائنات
         const rawData: any[] = XLSX.utils.sheet_to_json(worksheet);
 
         if (rawData.length === 0) {
-          reject(new Error("ملف الإكسل فارغ أو يحتوي على تنسيق غير مدعوم."));
+          reject(new Error("ملف الإكسل فارغ."));
           return;
         }
 
-        // تخارط الأعمدة (Mapping) من العربي إلى الإنجليزي (حسب متطلبات الـ 18 عموداً)
         const formattedData: ClearanceImportData[] = rawData.map((row) => ({
           region: row['المنطقة'] || '',
           city: row['مدينة العقار'] || '',
@@ -84,24 +99,85 @@ export const parseClearanceExcel = (
           status: 'جديد',
           submitted_by: currentUser?.name || 'نظام آلي',
           project_id: projectId || undefined
-        })).filter(item => item.client_name && item.id_number); // التحقق من وجود البيانات الأساسية
-
-        if (formattedData.length === 0) {
-          reject(new Error("لم يتم العثور على سجلات صالحة (يجب توفر اسم المستفيد والهوية)."));
-          return;
-        }
+        })).filter(item => item.client_name && item.id_number);
 
         resolve(formattedData);
       } catch (error) {
-        console.error("Excel Parsing Error:", error);
-        reject(new Error("حدث خطأ أثناء معالجة ملف الإكسل. تأكد من سلامة تنسيق الملف."));
+        reject(new Error("حدث خطأ أثناء معالجة ملف الإكسل."));
       }
     };
+    reader.readAsBinaryString(file);
+  });
+};
 
-    reader.onerror = (error) => {
-      reject(error);
+/**
+ * معالج ملفات الإكسل للأعمال الفنية
+ */
+export const parseTechnicalRequestsExcel = (
+  file: File,
+  projectId: number | null,
+  projectName: string | null
+): Promise<TechnicalImportData[]> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const bstr = e.target?.result;
+        const workbook = XLSX.read(bstr, { type: 'binary' });
+        const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+        const rawData: any[] = XLSX.utils.sheet_to_json(worksheet);
+
+        const formattedData: TechnicalImportData[] = rawData.map(row => ({
+          project_id: projectId || parseInt(row['رقم المشروع']),
+          service_type: row['بيان العمل'] || row['نوع الخدمة'],
+          reviewing_entity: row['جهة المراجعة'],
+          details: row['التفاصيل'] || row['الملاحظات'] || '',
+          status: 'new',
+          scope: row['النطاق'] || 'EXTERNAL',
+          project_name: projectName || row['اسم المشروع']
+        })).filter(item => item.project_id && item.service_type);
+
+        resolve(formattedData);
+      } catch (error) {
+        reject(new Error("خطأ في معالجة إكسل الطلبات الفنية"));
+      }
     };
+    reader.readAsBinaryString(file);
+  });
+};
 
+/**
+ * معالج ملفات الإكسل لأعمال المشاريع
+ */
+export const parseProjectWorksExcel = (
+  file: File,
+  projectId: number,
+  projectName: string
+): Promise<ProjectWorkImportData[]> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const bstr = e.target?.result;
+        const workbook = XLSX.read(bstr, { type: 'binary' });
+        const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+        const rawData: any[] = XLSX.utils.sheet_to_json(worksheet);
+
+        const formattedData: ProjectWorkImportData[] = rawData.map(row => ({
+          projectId: projectId,
+          task_name: row['بيان العمل'] || row['المهمة'],
+          authority: row['الجهة'] || row['جهة المراجعة'] || '',
+          department: row['القسم'] || '',
+          notes: row['ملاحظات'] || '',
+          status: 'in_progress',
+          project_name: projectName
+        })).filter(item => item.task_name);
+
+        resolve(formattedData);
+      } catch (error) {
+        reject(new Error("خطأ في معالجة إكسل أعمال المشروع"));
+      }
+    };
     reader.readAsBinaryString(file);
   });
 };

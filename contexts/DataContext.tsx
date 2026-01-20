@@ -64,7 +64,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     if (!currentUser || currentUser.role === 'GUEST') return;
     setIsDbLoading(true);
     try {
-      // جلب كافة الجداول الأساسية لضمان ظهور البيانات فور الدخول
+      // جلب كافة الجداول لضمان ظهور المشاريع والإفراغات فوراً
       const [pRes, trRes, drRes, pwRes, prRes] = await Promise.all([
         supabase.from('projects').select('*').order('id', { ascending: true }),
         supabase.from('technical_requests').select('*').order('created_at', { ascending: false }),
@@ -80,7 +80,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setAppUsers(prRes.data || []);
       setErrorState(null);
     } catch (e: any) {
-      console.warn("[DATA_SYNC] Initial fetch incomplete:", e?.message);
+      console.warn("[DATA_SYNC] Initial fetch warning:", e?.message);
     } finally {
       setIsDbLoading(false);
     }
@@ -161,13 +161,12 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         if (error) throw error;
       },
       logout: async () => { 
-        setIsAuthLoading(true);
+        setIsAuthLoading(true); 
         await supabase.auth.signOut();
-        localStorage.clear();
-        sessionStorage.clear();
         setCurrentUser(null);
-        setIsAuthLoading(false);
-        window.location.href = '/'; // إجبار المتصفح على تصفير الجلسة تماماً
+        localStorage.clear(); // تصفير شامل لمنع الدخول التلقائي
+        sessionStorage.clear();
+        window.location.href = '/'; // إجبار المتصفح على إعادة التحميل من الصفر
       },
       refreshData,
       forceRefreshProfile: async () => {

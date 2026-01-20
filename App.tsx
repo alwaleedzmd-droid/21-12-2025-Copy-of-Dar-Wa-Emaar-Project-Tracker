@@ -5,7 +5,7 @@ import {
   AlertTriangle, Loader2, Plus, 
   CheckCircle2, Clock, Info, Lock,
   ChevronLeft, ShieldAlert,
-  MessageSquare, Send, ArrowLeft, RefreshCcw
+  MessageSquare, Send, ArrowLeft, RefreshCcw, Sheet
 } from 'lucide-react';
 import { supabase } from './supabaseClient';
 import { ProjectWork, UserRole, User } from './types';
@@ -14,6 +14,7 @@ import Modal from './components/Modal';
 import { useData } from './contexts/DataContext';
 import { notificationService } from './services/notificationService';
 import MainLayout from './layouts/MainLayout';
+import { parseProjectWorksExcel } from './utils/excelHandler';
 
 // --- Components ---
 import DashboardModule from './components/DashboardModule';
@@ -32,7 +33,6 @@ interface ProtectedRouteProps {
 
 /**
  * Silent ProtectedRoute
- * Returns a blank white screen during auth verification to provide a smooth transition.
  */
 const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowedRoles }) => {
   const { currentUser, isAuthLoading } = useData();
@@ -103,9 +103,11 @@ const ProjectDetailWrapper = ({ projects = [], currentUser }: any) => {
    const [newComment, setNewComment] = useState('');
    const [loadingComments, setLoadingComments] = useState(false);
    const [isActionLoading, setIsActionLoading] = useState(false);
+   const [isBulkLoading, setIsBulkLoading] = useState(false);
    
    const [newWorkForm, setNewWorkForm] = useState({ task_name: '', authority: '', department: '', notes: '' });
    const commentsEndRef = useRef<HTMLDivElement>(null);
+   const excelInputRef = useRef<HTMLInputElement>(null);
 
    const project = useMemo(() => projects.find((p: any) => p.id === Number(id)), [projects, id]);
    const isManager = ['ADMIN', 'PR_MANAGER', 'PR_EMPLOYEE'].includes(currentUser?.role || '');
@@ -134,6 +136,28 @@ const ProjectDetailWrapper = ({ projects = [], currentUser }: any) => {
      setSelectedWork(work);
      setIsWorkDetailOpen(true);
      fetchWorkComments(work.id);
+   };
+
+   const handleExcelImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !project) return;
+
+    setIsBulkLoading(true);
+    try {
+      const data = await parseProjectWorksExcel(file, project.id, project.name || project.title);
+      const { error } = await supabase.from('project_works').insert(data);
+      if (error) throw error;
+
+      notificationService.send('PR_MANAGER', `تم استيراد ${data.length} عمل لمشروع ${project.name}`, `/projects/${id}`, currentUser?.name);
+      logActivity?.('استيراد إكسل أعمال', `مشروع ${project.name}: ${data.length} عمل`, 'text-blue-500');
+      fetchWorks();
+      alert(`تم استيراد ${data.length} سجل بنجاح ✅`);
+    } catch (err: any) {
+      alert("فشل الاستيراد: " + err.message);
+    } finally {
+      setIsBulkLoading(false);
+      e.target.value = '';
+    }
    };
 
    const handleUpdateWorkStatus = async (status: 'completed' | 'in_progress') => {
@@ -211,9 +235,20 @@ const ProjectDetailWrapper = ({ projects = [], currentUser }: any) => {
                   <p className="text-gray-400 text-xs font-bold mt-1">انقر لعرض التفاصيل والتعليقات</p>
                 </div>
                 {isManager && (
-                  <button onClick={() => setIsAddWorkOpen(true)} className="bg-[#E95D22] text-white px-6 py-3 rounded-2xl font-bold flex items-center gap-2 shadow-lg hover:brightness-110 active:scale-95 transition-all">
-                    <Plus size={20}/> إضافة عمل
-                  </button>
+                  <div className="flex items-center gap-3">
+                    <input type="file" ref={excelInputRef} hidden accept=".xlsx, .xls" onChange={handleExcelImport} />
+                    <button 
+                      onClick={() => excelInputRef.current?.click()}
+                      disabled={isBulkLoading}
+                      className="flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 text-gray-600 rounded-xl font-bold text-sm hover:bg-gray-50 transition-all shadow-sm"
+                    >
+                      {isBulkLoading ? <Loader2 size={18} className="animate-spin" /> : <Sheet size={18} className="text-green-600" />}
+                      استيراد إكسل
+                    </button>
+                    <button onClick={() => setIsAddWorkOpen(true)} className="bg-[#E95D22] text-white px-6 py-3 rounded-2xl font-bold flex items-center gap-2 shadow-lg hover:brightness-110 active:scale-95 transition-all">
+                      <Plus size={20}/> إضافة عمل
+                    </button>
+                  </div>
                 )}
             </div>
             <div className="grid gap-4">
@@ -357,7 +392,7 @@ const AppContent: React.FC = () => {
     }
   }, [currentUser, isAuthLoading, navigate, location.pathname]);
 
-  // PROFESSIONAL SILENT LOADING: Subtle visual indicator instead of empty screen
+  // سطر 358 المحدث: إضافة مؤشر تحميل بدلاً من الشاشة البيضاء الفارغة
   if (isAuthLoading) return (
     <div className="min-h-screen flex items-center justify-center bg-white">
       <div className="flex flex-col items-center gap-4">
