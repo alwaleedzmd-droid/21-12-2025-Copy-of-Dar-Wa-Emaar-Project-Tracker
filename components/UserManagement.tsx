@@ -13,10 +13,10 @@ import Modal from './Modal';
 import { useData } from '../contexts/DataContext';
 
 const ROLE_CONFIG: Record<UserRole, { label: string; color: string; bg: string }> = {
-  'ADMIN': { label: 'مدير نظام', color: 'text-purple-700', bg: 'bg-purple-50 border-purple-100' },
-  'PR_MANAGER': { label: 'مدير علاقات عامة', color: 'text-blue-700', bg: 'bg-blue-50 border-blue-100' },
-  'TECHNICAL': { label: 'القسم الفني', color: 'text-emerald-700', bg: 'bg-emerald-50 border-emerald-100' },
-  'CONVEYANCE': { label: 'مسؤول إفراغات CX', color: 'text-orange-700', bg: 'bg-orange-50 border-orange-100' }
+  'ADMIN': { label: 'مدير نظام', color: 'text-purple-700', bg: 'bg-purple-50' },
+  'PR_MANAGER': { label: 'مدير علاقات عامة', color: 'text-blue-700', bg: 'bg-blue-50' },
+  'TECHNICAL': { label: 'القسم الفني', color: 'text-emerald-700', bg: 'bg-emerald-50' },
+  'CONVEYANCE': { label: 'مسؤول إفراغات CX', color: 'text-orange-700', bg: 'bg-orange-50' }
 };
 
 const UserManagement: React.FC = () => {
@@ -217,7 +217,7 @@ const UserManagement: React.FC = () => {
                       </div>
                     </td>
                     <td className="p-6">
-                      <span className={`inline-flex items-center gap-1.5 px-4 py-1.5 rounded-xl text-[10px] font-black border ${ROLE_CONFIG[user.role as UserRole]?.bg} ${ROLE_CONFIG[user.role as UserRole]?.color}`}>
+                      <span className={`inline-flex items-center gap-1.5 px-4 py-1.5 rounded-xl text-[10px] font-black ${ROLE_CONFIG[user.role as UserRole]?.bg} ${ROLE_CONFIG[user.role as UserRole]?.color}`}>
                         <Shield size={12} />
                         {ROLE_CONFIG[user.role as UserRole]?.label || user.role}
                       </span>
@@ -273,7 +273,7 @@ const UserManagement: React.FC = () => {
               <label className="text-xs font-bold text-gray-400 block mb-1">الرتبة والصلاحيات</label>
               <select 
                 required
-                className="w-full bg-gray-50 border-none rounded-2xl py-4 px-4 focus:ring-2 focus:ring-[#1B2B48] font-bold text-sm outline-none shadow-sm cursor-pointer"
+                className="w-full bg-gray-50 border-none rounded-2xl py-4 px-4 font-bold text-sm outline-none shadow-sm cursor-pointer"
                 value={userForm.role}
                 onChange={e => setUserForm({...userForm, role: e.target.value as UserRole})}
               >

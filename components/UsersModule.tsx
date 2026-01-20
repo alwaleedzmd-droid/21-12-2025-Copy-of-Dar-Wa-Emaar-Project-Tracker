@@ -258,7 +258,7 @@ const UsersModule: React.FC = () => {
               <label className="text-[10px] font-black text-gray-400 mr-1 uppercase">الصلاحية</label>
               <select 
                 required
-                className="w-full p-4 bg-gray-50 border border-gray-100 rounded-[20px] outline-none focus:border-[#E95D22] text-sm font-bold cursor-pointer"
+                className="w-full bg-gray-50 border-none rounded-2xl py-4 px-4"
                 value={selectedUser?.role || 'PR_MANAGER'}
                 onChange={e => setSelectedUser({...selectedUser, role: e.target.value as UserRole})}
               >
