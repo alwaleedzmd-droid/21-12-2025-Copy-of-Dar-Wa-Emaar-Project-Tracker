@@ -274,14 +274,15 @@ const UserManagement: React.FC = () => {
             <div className="col-span-2">
               <label className="text-xs font-bold text-gray-400 block mb-1">الرتبة والصلاحيات</label>
               <select 
+                required
                 className="w-full bg-gray-50 border-none rounded-2xl py-4 px-4 focus:ring-2 focus:ring-[#1B2B48] font-bold text-sm outline-none shadow-sm cursor-pointer"
                 value={userForm.role}
                 onChange={e => setUserForm({...userForm, role: e.target.value as UserRole})}
               >
-                <option value="ADMIN">مدير نظام (صلاحية كاملة + إضافة مستخدمين)</option>
-                <option value="PR_MANAGER">مدير علاقات عامة (صلاحية كاملة بدون إضافة مستخدمين)</option>
+                <option value="PR_MANAGER">مدير علاقات عامة (إشراف كامل)</option>
                 <option value="TECHNICAL">موظف القسم الفني (إدارة أعمال المشروع)</option>
-                <option value="CONVEYANCE">مسؤول إفراغات CX (إدارة طلبات الإفراغ)</option>
+                <option value="CONVEYANCE">مسؤول إفراغات CX (إدارة سجل الإفراغ)</option>
+                {currentUser?.role === 'ADMIN' && <option value="ADMIN">مدير نظام</option>}
               </select>
             </div>
             <div className="col-span-2">

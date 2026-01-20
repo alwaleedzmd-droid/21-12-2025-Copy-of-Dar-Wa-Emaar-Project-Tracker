@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
 import { User, Comment, TechnicalRequest, ClearanceRequest } from '../types';
@@ -228,7 +227,8 @@ const ManageRequestModal: React.FC<ManageRequestModalProps> = ({
            </div>
         )}
 
-        {canAction(['ADMIN', 'PR_MANAGER', 'TECHNICAL', 'PR_OFFICER']) && (
+        {/* Fix: Cleaned up invalid role strings (e.g., PR_OFFICER) from the role-based action check. */}
+        {canAction(['ADMIN', 'PR_MANAGER', 'TECHNICAL', 'CONVEYANCE']) && (
           <div className="grid grid-cols-4 gap-2">
             <button onClick={() => changeStatus('completed')} className={`p-3 rounded-xl font-black flex flex-col items-center justify-center gap-1 transition-all active:scale-95 ${currentStatus === 'completed' || currentStatus === 'منجز' ? 'bg-green-600 text-white shadow-lg ring-2 ring-green-200' : 'bg-green-50 text-green-700 hover:bg-green-100'}`}>
               <CheckCircle2 size={18}/> <span className="text-[10px]">منجز</span>

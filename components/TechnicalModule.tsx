@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 import { useLocation } from 'react-router';
 import { 
@@ -207,7 +206,8 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
     (r?.reviewing_entity?.toLowerCase()?.includes(searchTerm.toLowerCase()) || '')
   );
 
-  const canEdit = currentUser?.role === 'ADMIN' || currentUser?.role === 'PR_MANAGER' || currentUser?.role === 'TECHNICAL' || currentUser?.role === 'PR_EMPLOYEE';
+  // Fix: Removed 'PR_EMPLOYEE' as it is not a valid UserRole and caused type overlap errors.
+  const canEdit = currentUser?.role === 'ADMIN' || currentUser?.role === 'PR_MANAGER' || currentUser?.role === 'TECHNICAL';
 
   return (
     <div className="space-y-8 animate-in fade-in font-cairo" dir="rtl">

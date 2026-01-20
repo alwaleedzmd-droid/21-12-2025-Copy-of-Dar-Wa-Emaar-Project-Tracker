@@ -11,16 +11,11 @@ import { User, UserRole } from '../types';
 import Modal from './Modal';
 import { useData } from '../contexts/DataContext';
 
-// Fix: Corrected 'PR_OFFICER' to 'PR_EMPLOYEE' to match UserRole type defined in types.ts
 const ROLE_LABELS: Record<UserRole, string> = {
   'ADMIN': 'مدير نظام',
   'PR_MANAGER': 'مدير علاقات عامة',
   'CONVEYANCE': 'مسؤول إفراغات',
-  'TECHNICAL': 'مهندس فني',
-  'FINANCE': 'مالية',
-  'PR_EMPLOYEE': 'موظف علاقات',
-  'DEEDS_OFFICER': 'موظف صكوك',
-  'GUEST': 'زائر'
+  'TECHNICAL': 'مهندس فني'
 };
 
 const UsersModule: React.FC = () => {
@@ -42,8 +37,7 @@ const UsersModule: React.FC = () => {
 
   // --- Handlers ---
   const handleOpenAdd = () => {
-    // Fix: Corrected 'PR_OFFICER' to 'PR_EMPLOYEE' to match UserRole type
-    setSelectedUser({ name: '', email: '', role: 'PR_EMPLOYEE', department: '' });
+    setSelectedUser({ name: '', email: '', role: 'PR_MANAGER', department: '' });
     setIsModalOpen(true);
   };
 
@@ -78,8 +72,8 @@ const UsersModule: React.FC = () => {
       const isNew = !selectedUser.id;
       
       if (isNew) {
-        // Note: Creating actual Auth users requires Admin API, 
-        // here we insert into the profiles table as per UI management logic.
+        // ملاحظة: إنشاء مستخدمي Auth فعليين يتطلب Admin API، 
+        // هنا نقوم بالإدراج في جدول profiles كما هو متبع في منطق واجهة الإدارة.
         const { error } = await supabase.from('profiles').insert([{
           name: selectedUser.name,
           email: selectedUser.email,
@@ -269,14 +263,15 @@ const UsersModule: React.FC = () => {
             <div className="space-y-2">
               <label className="text-[10px] font-black text-gray-400 mr-1 uppercase">الصلاحية</label>
               <select 
+                required
                 className="w-full p-4 bg-gray-50 border border-gray-100 rounded-[20px] outline-none focus:border-[#E95D22] text-sm font-bold cursor-pointer"
-                // Fix: Corrected 'PR_OFFICER' to 'PR_EMPLOYEE' to match UserRole type
-                value={selectedUser?.role || 'PR_EMPLOYEE'}
+                value={selectedUser?.role || 'PR_MANAGER'}
                 onChange={e => setSelectedUser({...selectedUser, role: e.target.value as UserRole})}
               >
-                {Object.entries(ROLE_LABELS).map(([val, label]) => (
-                  <option key={val} value={val}>{label}</option>
-                ))}
+                <option value="PR_MANAGER">مدير علاقات عامة (إشراف كامل)</option>
+                <option value="TECHNICAL">موظف القسم الفني (إدارة أعمال المشروع)</option>
+                <option value="CONVEYANCE">مسؤول إفراغات CX (إدارة سجل الإفراغ)</option>
+                {currentUser?.role === 'ADMIN' && <option value="ADMIN">مدير نظام</option>}
               </select>
             </div>
             <div className="space-y-2">

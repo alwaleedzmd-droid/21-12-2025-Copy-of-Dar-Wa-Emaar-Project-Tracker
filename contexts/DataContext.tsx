@@ -61,7 +61,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, [currentUser]);
 
   const refreshData = useCallback(async () => {
-    if (!currentUser || currentUser.role === 'GUEST') return;
+    if (!currentUser) return;
     setIsDbLoading(true);
     try {
       // جلب كافة الجداول لضمان ظهور المشاريع والإفراغات فوراً
@@ -109,13 +109,8 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (data) {
         setCurrentUser(data as User);
       } else {
-        setCurrentUser({
-          id: userId,
-          email: email,
-          name: email.split('@')[0],
-          role: 'GUEST' as UserRole,
-          department: 'غير محدد'
-        });
+        // في حال عدم وجود ملف تعريف، يتم تعيين مستخدم بدون رتبة (يتم التعامل معه كغير مخول)
+        setCurrentUser(null);
       }
     } catch (err) {
       setCurrentUser(null);
