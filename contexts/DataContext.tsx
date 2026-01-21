@@ -73,17 +73,20 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         supabase.from('profiles').select('*')
       ]);
 
+      // التصحيح: مطابقة الحقل name مع قاعدة البيانات لضمان ظهور المشاريع الـ 14
       setProjects(pRes.data?.map(p => ({ 
         ...p, 
         name: p.name || p.title || 'مشروع بدون اسم' 
       })) || []);
+
       setTechnicalRequests(trRes.data || []);
       setClearanceRequests(drRes.data || []);
       setProjectWorks(pwRes.data || []);
       setAppUsers(prRes.data || []);
+      
       setErrorState(null);
     } catch (e: any) {
-      console.warn("[DATA_SYNC] Initial fetch warning:", e?.message);
+      console.error("[DATA_SYNC] Fetch error:", e.message);
     } finally {
       setIsDbLoading(false);
     }
