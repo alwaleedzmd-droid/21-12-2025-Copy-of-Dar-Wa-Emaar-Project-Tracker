@@ -22,7 +22,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [technicalRequests, setTechnicalRequests] = useState<TechnicalRequest[]>([]);
   const [clearanceRequests, setClearanceRequests] = useState<any[]>([]);
-  const [projectWorks, setProjectWorks] = useState<ProjectWork[]>([]);
+  const [projectWorks, setProjectWorks] = useState<ProjectWork[]>([]); // تأكد من الحرف الكبير هنا
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isDbLoading, setIsDbLoading] = useState(false);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
@@ -42,11 +42,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setTechnicalRequests(trRes.data || []);
       setClearanceRequests(drRes.data || []);
       setProjectWorks(pwRes.data || []);
-    } catch (e) { 
-      console.error("Data fetch error:", e); 
-    } finally { 
-      setIsDbLoading(false); 
-    }
+    } catch (e) { console.error(e); } finally { setIsDbLoading(false); }
   }, [currentUser]);
 
   useEffect(() => {
@@ -56,17 +52,10 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         if (session.user.email === ADMIN_EMAIL) {
           setCurrentUser({ id: session.user.id, email: session.user.email, name: 'الوليد الدوسري', role: 'ADMIN' });
         } else {
-          // جلب الملف الشخصي مع معالجة الأخطاء
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('id', session.user.id)
-            .maybeSingle();
-            
+          const { data: profile } = await supabase.from('profiles').select('*').eq('id', session.user.id).maybeSingle();
           if (profile) {
             setCurrentUser(profile);
           } else {
-            // صلاحية افتراضية للموظف الجديد
             setCurrentUser({ id: session.user.id, email: session.user.email, name: 'موظف', role: 'CONVEYANCE' });
           }
         }
@@ -76,9 +65,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     initAuth();
   }, []);
 
-  useEffect(() => { 
-    if (currentUser) refreshData(); 
-  }, [currentUser, refreshData]);
+  useEffect(() => { if (currentUser) refreshData(); }, [currentUser, refreshData]);
 
   const login = async (email: string, password: string) => {
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
@@ -97,7 +84,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       projects,
       technicalRequests,
       clearanceRequests,
-      projectWorks, // تم تصحيح الاسم هنا ليكون camelCase
+      projectWorks, // تصحيح نهائي: الحرف W كبير ليتطابق مع التعريف
       currentUser,
       isDbLoading,
       isAuthLoading,
