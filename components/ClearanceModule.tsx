@@ -1,8 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Plus, CheckCircle, Clock, AlertCircle, FileStack, 
-  FileText, Sheet, Search, Filter, User as UserIcon, 
-  ChevronLeft, MoreHorizontal, Download, Printer, MapPin, Smartphone, Hash, Loader2
+  Search, User as UserIcon, ChevronLeft, MapPin, Smartphone, Hash, Loader2
 } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import { User, ClearanceRequest, ProjectSummary } from '../types';
@@ -19,12 +18,7 @@ interface ClearanceModuleProps {
 }
 
 const ClearanceModule: React.FC<ClearanceModuleProps> = ({ 
-  requests, 
-  projects, 
-  currentUser, 
-  usersList, 
-  onRefresh, 
-  filteredByProject 
+  requests, projects, currentUser, usersList, onRefresh 
 }) => {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isManageModalOpen, setIsManageModalOpen] = useState(false);
@@ -32,7 +26,6 @@ const ClearanceModule: React.FC<ClearanceModuleProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [isSearching, setIsSearching] = useState(false);
 
-  // حالة نموذج إضافة إفراغ جديد
   const [addForm, setAddForm] = useState({
     client_name: '',
     id_number: '',
@@ -44,24 +37,24 @@ const ClearanceModule: React.FC<ClearanceModuleProps> = ({
     city: 'الرياض'
   });
 
-  // --- محرك البحث التلقائي بمجرد كتابة رقم الهوية ---
+  // --- محرك البحث التلقائي (Auto-fill Engine) ---
   useEffect(() => {
     const lookupClient = async () => {
+      // البحث يبدأ فقط عند اكتمال 10 أرقام
       if (addForm.id_number.length === 10) {
         setIsSearching(true);
         try {
-          // البحث في قاعدة البيانات عن بيانات العميل السابقة لضمان "نزول البيانات تلقائياً"
           const { data, error } = await supabase
             .from('deeds_requests')
             .select('*')
-            .eq('id_number', addForm.id_number)
+            .eq('id_number', addForm.id_number) // التأكد من استخدام id_number المعتمد في SQL
+            .order('created_at', { ascending: false })
+            .limit(1)
             .maybeSingle();
 
           if (data) {
-            if (data) {
             setAddForm(prev => ({
               ...prev,
-              // جلب البيانات بالأسماء الدقيقة الموجودة في SQL
               client_name: data.client_name || data.beneficiary_name || '',
               project_name: data.project_name || '',
               mobile: data.mobile || '',
@@ -81,24 +74,10 @@ const ClearanceModule: React.FC<ClearanceModuleProps> = ({
     lookupClient();
   }, [addForm.id_number]);
 
-  const filteredData = useMemo(() => {
-    return requests.filter(r => 
-      (r.client_name?.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (r.id_number?.includes(searchTerm)) ||
-      (r.project_name?.toLowerCase().includes(searchTerm.toLowerCase()))
-    );
-  }, [requests, searchTerm]);
-
-  const kpis = useMemo(() => ({
-    total: requests.length,
-    completed: requests.filter(r => r.status === 'completed' || r.status === 'منجز').length,
-    processing: requests.filter(r => r.status === 'pending' || r.status === 'new').length,
-    alert: requests.filter(r => r.status === 'pending_modification' || r.status === 'rejected').length
-  }), [requests]);
-const handleAddNew = async () => {
+  const handleAddNew = async () => {
     if (!addForm.client_name || !addForm.id_number) return alert("الاسم ورقم الهوية مطلوبان");
     
-    // تأكد من إرسال كافة الحقول ليتمكن النظام من جلبها تلقائياً المرة القادمة
+    // حفظ كافة الحقول لضمان نجاح البحث التلقائي مستقبلاً
     const { error } = await supabase.from('deeds_requests').insert([{
       client_name: addForm.client_name,
       id_number: addForm.id_number,
@@ -115,45 +94,40 @@ const handleAddNew = async () => {
     if (!error) {
       alert("تم تسجيل طلب الإفراغ بنجاح ✅");
       setIsAddModalOpen(false);
+      setAddForm({ client_name: '', id_number: '', project_name: '', mobile: '', building_number: '', unit_number: '', district: 'الرياض', city: 'الرياض' });
       onRefresh();
     } else {
       alert("خطأ في الحفظ: " + error.message);
     }
   };
-      alert("خطأ في الحفظ: " + error.message);
-    }
-  };
 
-  const getStatusStyle = (status: string) => {
-    switch(status) {
-      case 'completed': case 'منجز': return 'bg-green-50 text-green-700 border-green-100';
-      case 'pending_modification': case 'rejected': return 'bg-red-50 text-red-700 border-red-100';
-      default: return 'bg-blue-50 text-blue-700 border-blue-100';
-    }
-  };
+  const filteredData = useMemo(() => {
+    return requests.filter(r => 
+      (r.client_name?.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (r.id_number?.includes(searchTerm)) ||
+      (r.project_name?.toLowerCase().includes(searchTerm.toLowerCase()))
+    );
+  }, [requests, searchTerm]);
 
-  const getStatusLabel = (status: string) => {
-    switch(status) {
-      case 'completed': return 'منجز';
-      case 'new': return 'جديد';
-      default: return 'قيد المعالجة';
-    }
-  };
+  const kpis = useMemo(() => ({
+    total: requests.length,
+    completed: requests.filter(r => r.status === 'completed' || r.status === 'منجز').length,
+    processing: requests.filter(r => r.status === 'pending' || r.status === 'new').length,
+    alert: requests.filter(r => r.status === 'pending_modification' || r.status === 'rejected').length
+  }), [requests]);
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500 font-cairo" dir="rtl">
-      {/* الرأس والأزرار */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h2 className="text-3xl font-black text-[#1B2B48]">سجل الإفراغات</h2>
           <p className="text-gray-400 text-sm mt-1">إدارة وتتبع طلبات إفراغ الوحدات العقارية</p>
         </div>
-        <button onClick={() => setIsAddModalOpen(true)} className="flex items-center gap-2 px-6 py-3 bg-[#E95D22] text-white rounded-xl font-black text-sm hover:brightness-110 shadow-lg shadow-orange-200 transition-all active:scale-95">
+        <button onClick={() => setIsAddModalOpen(true)} className="flex items-center gap-2 px-6 py-3 bg-[#E95D22] text-white rounded-xl font-black text-sm hover:brightness-110 shadow-lg transition-all active:scale-95">
           <Plus size={20} /> تسجيل إفراغ جديد
         </button>
       </div>
 
-      {/* لوحة المؤشرات (KPIs) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         <KPICard title="إجمالي الطلبات" value={kpis.total} icon={<FileStack size={24} />} color="text-[#1B2B48]" bg="bg-gray-50" />
         <KPICard title="منجز" value={kpis.completed} icon={<CheckCircle size={24} />} color="text-green-600" bg="bg-green-50/50" />
@@ -161,15 +135,13 @@ const handleAddNew = async () => {
         <KPICard title="تتطلب إجراء" value={kpis.alert} icon={<AlertCircle size={24} />} color="text-red-600" bg="bg-red-50/50" />
       </div>
 
-      {/* شريط البحث */}
       <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
         <div className="relative">
           <Search className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-300" size={18} />
-          <input type="text" placeholder="البحث باسم العميل، رقم الهوية، أو المشروع..." className="w-full pr-12 pl-4 py-3 bg-gray-50 rounded-xl outline-none font-bold text-sm" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+          <input type="text" placeholder="البحث باسم العميل أو الهوية..." className="w-full pr-12 pl-4 py-3 bg-gray-50 rounded-xl outline-none font-bold text-sm" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
         </div>
       </div>
 
-      {/* الجدول الرئيسي */}
       <div className="bg-white rounded-[30px] border border-gray-100 shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-right">
@@ -189,8 +161,8 @@ const handleAddNew = async () => {
                   <td className="p-6 text-sm font-mono text-gray-500 font-bold">{req.id_number}</td>
                   <td className="p-6 text-sm font-bold text-gray-600">{req.project_name}</td>
                   <td className="p-6">
-                    <span className={`px-4 py-1.5 rounded-full text-[10px] font-black border ${getStatusStyle(req.status)}`}>
-                      {getStatusLabel(req.status)}
+                    <span className={`px-4 py-1.5 rounded-full text-[10px] font-black border ${req.status === 'completed' ? 'bg-green-50 text-green-700' : 'bg-blue-50 text-blue-700'}`}>
+                      {req.status === 'completed' ? 'منجز' : 'قيد المعالجة'}
                     </span>
                   </td>
                   <td className="p-6 text-left"><ChevronLeft size={20} className="text-gray-300" /></td>
@@ -201,7 +173,6 @@ const handleAddNew = async () => {
         </div>
       </div>
 
-      {/* مودال إضافة إفراغ جديد مع ميزة البحث التلقائي */}
       <Modal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} title="تسجيل إفراغ جديد">
         <div className="space-y-4 font-cairo">
           <div className="relative">
@@ -209,13 +180,13 @@ const handleAddNew = async () => {
             <input type="text" maxLength={10} className="w-full p-4 bg-gray-50 rounded-xl border border-gray-200 outline-none font-bold focus:border-[#E95D22]" value={addForm.id_number} onChange={e => setAddForm({...addForm, id_number: e.target.value})} placeholder="أدخل 10 أرقام..." />
             {isSearching && <Loader2 className="absolute left-4 top-10 animate-spin text-orange-500" size={20} />}
           </div>
-          <InputGroup label="اسم العميل" value={addForm.client_name} onChange={v => setAddForm({...addForm, client_name: v})} icon={<UserIcon size={18}/>} />
+          <InputGroup label="اسم العميل" value={addForm.client_name} onChange={(v: string) => setAddForm({...addForm, client_name: v})} icon={<UserIcon size={18}/>} />
           <div className="grid grid-cols-2 gap-4">
-            <InputGroup label="رقم المبنى" value={addForm.building_number} onChange={v => setAddForm({...addForm, building_number: v})} icon={<Hash size={18}/>} />
-            <InputGroup label="رقم الوحدة" value={addForm.unit_number} onChange={v => setAddForm({...addForm, unit_number: v})} icon={<Hash size={18}/>} />
+            <InputGroup label="رقم المبنى" value={addForm.building_number} onChange={(v: string) => setAddForm({...addForm, building_number: v})} icon={<Hash size={18}/>} />
+            <InputGroup label="رقم الوحدة" value={addForm.unit_number} onChange={(v: string) => setAddForm({...addForm, unit_number: v})} icon={<Hash size={18}/>} />
           </div>
-          <InputGroup label="المشروع" value={addForm.project_name} onChange={v => setAddForm({...addForm, project_name: v})} icon={<MapPin size={18}/>} />
-          <InputGroup label="رقم الجوال" value={addForm.mobile} onChange={v => setAddForm({...addForm, mobile: v})} icon={<Smartphone size={18}/>} />
+          <InputGroup label="المشروع" value={addForm.project_name} onChange={(v: string) => setAddForm({...addForm, project_name: v})} icon={<MapPin size={18}/>} />
+          <InputGroup label="رقم الجوال" value={addForm.mobile} onChange={(v: string) => setAddForm({...addForm, mobile: v})} icon={<Smartphone size={18}/>} />
           <button onClick={handleAddNew} className="w-full bg-[#1B2B48] text-white py-4 rounded-xl font-black shadow-lg hover:brightness-110 mt-2 transition">حفظ بيانات الإفراغ</button>
         </div>
       </Modal>
@@ -226,7 +197,7 @@ const handleAddNew = async () => {
 };
 
 const KPICard = ({ title, value, icon, color, bg }: any) => (
-  <div className={`p-6 rounded-[25px] ${bg} border border-white shadow-sm flex items-center justify-between hover:-translate-y-1 transition-all`}>
+  <div className={`p-6 rounded-[25px] ${bg} border border-white shadow-sm flex items-center justify-between`}>
     <div><p className="text-[10px] font-black text-gray-400 uppercase mb-1">{title}</p><h3 className={`text-3xl font-black ${color}`}>{value}</h3></div>
     <div className={`p-4 rounded-2xl bg-white shadow-sm ${color}`}>{icon}</div>
   </div>
