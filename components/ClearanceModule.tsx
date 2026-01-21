@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Plus, CheckCircle, Clock, AlertCircle, FileStack, 
@@ -99,6 +100,24 @@ const ClearanceModule: React.FC<ClearanceModuleProps> = ({
     );
   }, [requests, searchTerm]);
 
+  // Fix: Added handleUpdateStatus to correctly implement the onUpdateStatus prop signature (Async)
+  // and handle database persistence for status changes in deeds_requests.
+  const handleUpdateStatus = async (newStatus: string) => {
+    if (!activeRequest?.id) return;
+    try {
+      const { error } = await supabase
+        .from('deeds_requests')
+        .update({ status: newStatus })
+        .eq('id', activeRequest.id);
+      
+      if (error) throw error;
+      onRefresh();
+    } catch (err: any) {
+      console.error("Status update error:", err);
+      alert("حدث خطأ أثناء تحديث حالة الطلب");
+    }
+  };
+
   return (
     <div className="space-y-8 animate-in fade-in duration-500 font-cairo" dir="rtl">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -166,7 +185,7 @@ const ClearanceModule: React.FC<ClearanceModuleProps> = ({
         request={activeRequest} 
         currentUser={currentUser} 
         usersList={usersList} 
-        onUpdateStatus={onRefresh} 
+        onUpdateStatus={handleUpdateStatus} 
         onUpdateDelegation={() => {}} 
       />
     </div>

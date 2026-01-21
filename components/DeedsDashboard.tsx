@@ -9,7 +9,8 @@ import {
   Sparkles, FileSpreadsheet, Calendar, CreditCard,
   Building2, Phone, MapPin, FileText, Landmark, Sheet
 } from 'lucide-react';
-import { ActivityLog, useData } from '../contexts/DataContext';
+// Fix: Removed ActivityLog import as it is not exported from DataContext
+import { useData } from '../contexts/DataContext';
 import { notificationService } from '../services/notificationService';
 import Modal from './Modal';
 import { parseClearanceExcel } from '../utils/excelHandler';
@@ -25,7 +26,8 @@ interface DeedsDashboardProps {
   currentUserRole?: string;
   currentUserName?: string;
   filteredProjectName?: string;
-  logActivity?: (action: string, target: string, color: ActivityLog['color']) => void;
+  // Fix: Removed reference to non-existent ActivityLog type and used string for color consistency
+  logActivity?: (action: string, target: string, color: 'text-blue-500' | 'text-orange-500' | 'text-green-500' | string) => void;
 }
 
 const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, currentUserName, filteredProjectName, logActivity }) => {
@@ -283,7 +285,7 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
                     <button 
                       onClick={() => excelInputRef.current?.click()}
                       disabled={isBulkLoading}
-                      className="flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 text-gray-600 rounded-xl font-bold text-sm hover:bg-gray-50 transition-all shadow-sm"
+                      className="flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-100 text-gray-600 rounded-xl font-bold text-sm hover:bg-gray-50 transition-all shadow-sm"
                     >
                       {isBulkLoading ? <Loader2 size={16} className="animate-spin" /> : <Sheet size={16} className="text-green-600" />}
                       استيراد إكسل

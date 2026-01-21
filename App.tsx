@@ -1,5 +1,5 @@
 
-import React, { Component, useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Routes, Route, useNavigate, useLocation, useParams, Navigate } from 'react-router-dom';
 import { 
   AlertTriangle, Loader2, Plus, 
@@ -389,7 +389,6 @@ const AppContent: React.FC = () => {
     }
   }, [currentUser, isAuthLoading, navigate, location.pathname]);
 
-  // سطر 358 المحدث: إضافة مؤشر تحميل بدلاً من الشاشة البيضاء الفارغة
   if (isAuthLoading) return (
     <div className="min-h-screen flex items-center justify-center bg-white">
       <div className="flex flex-col items-center gap-4">
