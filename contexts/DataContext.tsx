@@ -41,7 +41,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setTechnicalRequests(trRes.data || []);
       setClearanceRequests(drRes.data || []);
       setProjectWorks(pwRes.data || []);
-    } catch (e) { console.error("Error:", e); } finally { setIsDbLoading(false); }
+    } catch (e) { console.error("Data error:", e); } finally { setIsDbLoading(false); }
   }, [currentUser]);
 
   useEffect(() => {
@@ -51,9 +51,16 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         if (session.user.email === ADMIN_EMAIL) {
           setCurrentUser({ id: session.user.id, email: session.user.email, name: 'الوليد الدوسري', role: 'ADMIN' });
         } else {
+          // جلب الملف الشخصي حصراً لمنع دخول غير المسجلين
           const { data: profile } = await supabase.from('profiles').select('*').eq('id', session.user.id).maybeSingle();
-          if (profile) setCurrentUser(profile);
-          else setCurrentUser({ id: session.user.id, email: session.user.email, name: 'موظف', role: 'CONVEYANCE' });
+          if (profile) {
+            setCurrentUser(profile);
+          } else {
+            // إذا لم يوجد ملف شخصي، يتم تسجيل الخروج فوراً ومنع الدخول
+            await supabase.auth.signOut();
+            setCurrentUser(null);
+            alert("عذراً، هذا الحساب غير مسجل في قائمة الموظفين.");
+          }
         }
       }
       setIsAuthLoading(false);
@@ -77,16 +84,8 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   return (
     <DataContext.Provider value={{
-      projects,
-      technicalRequests,
-      clearanceRequests,
-      projectWorks, // الحرف W كبير ليتطابق مع التعريف
-      currentUser,
-      isDbLoading,
-      isAuthLoading,
-      login,
-      logout,
-      refreshData
+      projects, technicalRequests, clearanceRequests, projectWorks,
+      currentUser, isDbLoading, isAuthLoading, login, logout, refreshData
     }}>
       {children}
     </DataContext.Provider>
