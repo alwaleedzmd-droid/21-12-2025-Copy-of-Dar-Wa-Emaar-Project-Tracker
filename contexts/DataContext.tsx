@@ -41,7 +41,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setTechnicalRequests(trRes.data || []);
       setClearanceRequests(drRes.data || []);
       setProjectWorks(pwRes.data || []);
-    } catch (e) { console.error(e); } finally { setIsDbLoading(false); }
+    } catch (e) { console.error("Error:", e); } finally { setIsDbLoading(false); }
   }, [currentUser]);
 
   useEffect(() => {
@@ -77,8 +77,16 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   return (
     <DataContext.Provider value={{
-      projects, technicalRequests, clearanceRequests, projectWorks,
-      currentUser, isDbLoading, isAuthLoading, login, logout, refreshData
+      projects,
+      technicalRequests,
+      clearanceRequests,
+      projectWorks, // الحرف W كبير ليتطابق مع التعريف
+      currentUser,
+      isDbLoading,
+      isAuthLoading,
+      login,
+      logout,
+      refreshData
     }}>
       {children}
     </DataContext.Provider>
