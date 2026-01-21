@@ -45,23 +45,30 @@ const ClearanceModule: React.FC<ClearanceModuleProps> = ({
         setIsSearching(true);
         try {
           const { data, error } = await supabase
-            .from('deeds_requests')
+            // --- محرك البحث المحدث للربط مع جدول الأرشيف الصحيح ---
+  useEffect(() => {
+    const lookupClient = async () => {
+      if (addForm.id_number.length === 10) {
+        setIsSearching(true);
+        try {
+          // البحث في جدول الأرشيف (client_archive) بدلاً من جدول الطلبات
+          const { data, error } = await supabase
+            .from('client_archive') 
             .select('*')
-            .eq('id_number', addForm.id_number) // التأكد من استخدام id_number المعتمد في SQL
-            .order('created_at', { ascending: false })
-            .limit(1)
+            .eq('id_number', addForm.id_number)
             .maybeSingle();
 
           if (data) {
             setAddForm(prev => ({
               ...prev,
-              client_name: data.client_name || data.beneficiary_name || '',
+              // مطابقة المسميات مع أعمدة جدول الأرشيف
+              client_name: data.customer_name || '', 
               project_name: data.project_name || '',
-              mobile: data.mobile || '',
-              building_number: data.building_number || '',
+              mobile: data.mobile_number || '',
               unit_number: data.unit_number || '',
-              district: data.district || 'الرياض',
-              city: data.city || 'الرياض'
+              // ملاحظة: حقل 'building_number' غير موجود في الأرشيف لذا سيظل يدوياً
+              district: 'الرياض',
+              city: 'الرياض'
             }));
           }
         } catch (err) {
@@ -73,12 +80,6 @@ const ClearanceModule: React.FC<ClearanceModuleProps> = ({
     };
     lookupClient();
   }, [addForm.id_number]);
-
-  const handleAddNew = async () => {
-    if (!addForm.client_name || !addForm.id_number) return alert("الاسم ورقم الهوية مطلوبان");
-    
-    // حفظ كافة الحقول لضمان نجاح البحث التلقائي مستقبلاً
-    const { error } = await supabase.from('deeds_requests').insert([{
       client_name: addForm.client_name,
       id_number: addForm.id_number,
       project_name: addForm.project_name,
