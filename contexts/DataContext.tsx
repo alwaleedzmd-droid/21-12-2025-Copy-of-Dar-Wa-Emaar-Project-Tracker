@@ -47,7 +47,6 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         supabase.from('profiles').select('*') 
       ]);
       
-      // تحديث السطر 70 لضمان قراءة الاسم بشكل صحيح حتى لو كان الحقل في قاعدة البيانات يسمى title أو name
       setProjects(pRes.data?.map(p => ({ 
         ...p, 
         name: p.name || p.title || 'مشروع بدون اسم' 
