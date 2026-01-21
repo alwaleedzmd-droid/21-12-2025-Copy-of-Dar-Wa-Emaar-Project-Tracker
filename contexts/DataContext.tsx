@@ -10,7 +10,7 @@ interface DataContextType {
   currentUser: User | null;
   isDbLoading: boolean;
   isAuthLoading: boolean;
-  login: (email: string, password: string) => Promise<void>; // تأكد من وجود هذا السطر
+  login: (email: string, password: string) => Promise<any>;
   logout: () => Promise<void>;
   refreshData: () => Promise<void>;
 }
@@ -38,7 +38,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         supabase.from('project_works').select('*').order('created_at', { ascending: false })
       ]);
 
-      // ضمان مطابقة name و title لظهور المشاريع الـ 14
+      // ضمان مطابقة المسميات لظهور المشاريع الـ 14
       setProjects(pRes.data?.map(p => ({ 
         ...p, 
         name: p.name || p.title || 'مشروع بدون اسم' 
@@ -58,7 +58,6 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const initAuth = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.user) {
-        // تعيين بياناتك كمدير فوراً لفتح القفل
         if (session.user.email === ADMIN_EMAIL) {
           setCurrentUser({ 
             id: session.user.id, 
@@ -77,21 +76,29 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     if (currentUser) refreshData();
   }, [currentUser, refreshData]);
 
+  const login = async (email: string, password: string) => {
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) throw error;
+    return data;
+  };
+
+  const logout = async () => {
+    await supabase.auth.signOut();
+    setCurrentUser(null);
+    window.location.href = '/';
+  };
+
   return (
     <DataContext.Provider value={{
-      projects, technicalRequests, clearanceRequests, projectWorks,
-      currentUser, isDbLoading, isAuthLoading,
-      login: async (email, password) => {
-  // تصحيح: استقبال الـ data والـ error معاً لضمان اكتمال العملية
-  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-  if (error) throw error;
-  return data; 
-},
-      logout: async () => {
-        await supabase.auth.signOut();
-        setCurrentUser(null);
-        window.location.href = '/';
-      },
+      projects,
+      technicalRequests,
+      clearanceRequests,
+      projectWorks,
+      currentUser,
+      isDbLoading,
+      isAuthLoading,
+      login,
+      logout,
       refreshData
     }}>
       {children}

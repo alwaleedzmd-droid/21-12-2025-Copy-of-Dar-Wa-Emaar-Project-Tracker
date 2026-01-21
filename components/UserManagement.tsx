@@ -77,7 +77,7 @@ const UserManagement: React.FC = () => {
     setIsModalOpen(true);
   };
 
-  const handleOpenEdit = (user: any) => {
+ const handleOpenEdit = (user: any) => {
     setUserForm({
       id: user.id,
       name: user.name,
@@ -88,10 +88,9 @@ const UserManagement: React.FC = () => {
     });
     setIsModalOpen(true);
   };
-
-  const handleDelete = async (id: string) => {
-    if (!window.confirm("هل أنت متأكد من حذف هذا المستخدم نهائياً؟")) return;
-    try {
+    });
+    setIsModalOpen(true);
+  };
       const { error } = await supabase.from('profiles').delete().eq('id', id);
       if (error) throw error;
       logActivity?.('حذف مستخدم', profiles.find(p => p.id === id)?.name || 'مستخدم', 'text-orange-500');
