@@ -38,28 +38,74 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         supabase.from('project_works').select('*').order('created_at', { ascending: false })
       ]);
 
-      setProjects(pRes.data?.map(p => ({ ...p, name: p.name || p.title || 'مشروع' })) || []);
+      setProjects(pRes.data?.map(p => ({ 
+        ...p, 
+        name: p.name || p.title || 'مشروع' 
+      })) || []);
+
       setTechnicalRequests(trRes.data || []);
       setClearanceRequests(drRes.data || []);
       setProjectWorks(pwRes.data || []);
-    } catch (e) { console.error(e); } finally { setIsDbLoading(false); }
+    } catch (e) { 
+      console.error("Error refreshing data:", e); 
+    } finally { 
+      setIsDbLoading(false); 
+    }
   }, [currentUser]);
 
   useEffect(() => {
     const initAuth = async () => {
       const { data: { session } } = await supabase.auth.getSession();
-      if (session?.user?.email === ADMIN_EMAIL) {
-        setCurrentUser({ id: session.user.id, email: session.user.email, name: 'الوليد الدوسري', role: 'ADMIN' });
-      } else if (session?.user) {
-        const { data } = await supabase.from('profiles').select('*').eq('id', session.user.id).single();
-        if (data) setCurrentUser(data);
+      
+      if (session?.user) {
+        if (session.user.email === ADMIN_EMAIL) {
+          // تعيين صلاحياتك كمدير فوراً لفتح القفل الكامل
+          setCurrentUser({ 
+            id: session.user.id, 
+            email: session.user.email, 
+            name: 'الوليد الدوسري', 
+            role: 'ADMIN' as UserRole 
+          });
+        } else {
+          // نظام الحماية المزدوج للموظفين الجدد (لحل مشكلة Schema Error)
+          try {
+            const { data: profile } = await supabase
+              .from('profiles')
+              .select('*')
+              .eq('id', session.user.id)
+              .maybeSingle(); // استخدام maybeSingle لعدم إيقاف النظام في حال وجود خطأ
+
+            if (profile) {
+              setCurrentUser(profile);
+            } else {
+              // تعيين رتبة افتراضية لضمان فتح الحساب في حال تأخر مزامنة البيانات
+              setCurrentUser({ 
+                id: session.user.id, 
+                email: session.user.email, 
+                name: 'موظف جديد', 
+                role: 'CONVEYANCE' as UserRole 
+              });
+            }
+          } catch (err) {
+            console.error("Auth Profile Error:", err);
+            // صلاحية طوارئ لفتح بوابة المتابعة فوراً
+            setCurrentUser({ 
+              id: session.user.id, 
+              email: session.user.email, 
+              name: 'موظف', 
+              role: 'CONVEYANCE' as UserRole 
+            });
+          }
+        }
       }
       setIsAuthLoading(false);
     };
     initAuth();
   }, []);
 
-  useEffect(() => { if (currentUser) refreshData(); }, [currentUser, refreshData]);
+  useEffect(() => { 
+    if (currentUser) refreshData(); 
+  }, [currentUser, refreshData]);
 
   const login = async (email: string, password: string) => {
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
@@ -75,8 +121,16 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   return (
     <DataContext.Provider value={{
-      projects, technicalRequests, clearanceRequests, projectWorks,
-      currentUser, isDbLoading, isAuthLoading, login, logout, refreshData
+      projects,
+      technicalRequests,
+      clearanceRequests,
+      projectWorks,
+      currentUser,
+      isDbLoading,
+      isAuthLoading,
+      login,
+      logout,
+      refreshData
     }}>
       {children}
     </DataContext.Provider>
