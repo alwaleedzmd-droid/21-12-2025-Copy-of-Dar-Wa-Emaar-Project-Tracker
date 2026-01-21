@@ -82,9 +82,11 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       projects, technicalRequests, clearanceRequests, projectWorks,
       currentUser, isDbLoading, isAuthLoading,
       login: async (email, password) => {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) throw error;
-      },
+  // تصحيح: استقبال الـ data والـ error معاً لضمان اكتمال العملية
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+  if (error) throw error;
+  return data; 
+},
       logout: async () => {
         await supabase.auth.signOut();
         setCurrentUser(null);

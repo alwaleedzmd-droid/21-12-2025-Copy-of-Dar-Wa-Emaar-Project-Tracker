@@ -118,13 +118,14 @@ const UserManagement: React.FC = () => {
           throw new Error("كلمة المرور يجب أن لا تقل عن 6 خانات");
         }
 
-        const { data, error } = await supabase.rpc('create_new_user', {
-          email: userForm.email,
-          password: userForm.password,
-          full_name: userForm.name,
-          user_role: userForm.role
-        });
-
+       // التعديل يبدأ من السطر 121
+const { data, error } = await supabase.rpc('create_new_user', {
+  email: userForm.email,
+  password: userForm.password,
+  full_name: userForm.name,
+  user_role: userForm.role,
+  user_dept: userForm.department // أضف هذا السطر هنا لربط القسم
+});
         if (error) throw error;
         logActivity?.('إضافة مستخدم جديد', userForm.name, 'text-green-500');
       }
