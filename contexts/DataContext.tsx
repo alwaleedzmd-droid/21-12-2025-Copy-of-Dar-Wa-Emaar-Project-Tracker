@@ -32,7 +32,6 @@ interface DataContextType {
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
 
-// الحساب المدير الأساسي للدخول الصامت وتجاوز السياسات
 const ADMIN_EMAIL = 'adaldawsari@darwaemaar.com';
 
 export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
@@ -62,8 +61,8 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const refreshData = useCallback(async () => {
     if (!currentUser) return;
     setIsDbLoading(true);
+    setErrorState(null);
     try {
-      // جلب كافة الجداول لضمان ظهور المشاريع والإفراغات فوراً
       const [pRes, trRes, drRes, pwRes, prRes] = await Promise.all([
         supabase.from('projects').select('*').order('id', { ascending: true }),
         supabase.from('technical_requests').select('*').order('created_at', { ascending: false }),
@@ -72,7 +71,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         supabase.from('profiles').select('*')
       ]);
 
-      // التصحيح: مطابقة الحقل name مع قاعدة البيانات لضمان ظهور المشاريع الـ 14
+      // حل مشكلة تعارض name/title لضمان ظهور المشاريع الـ 14
       setProjects(pRes.data?.map(p => ({
         ...p,
         name: p.name || p.title || 'مشروع بدون اسم'
@@ -83,24 +82,24 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setProjectWorks(pwRes.data || []);
       setAppUsers(prRes.data || []);
       
-      setErrorState(null);
     } catch (e: any) {
-      console.error("[DATA_SYNC] Fetch error:", e.message);
+      console.error("[CRITICAL_SYNC_ERROR]:", e.message);
+      setErrorState(e.message);
     } finally {
       setIsDbLoading(false);
     }
   }, [currentUser]);
 
   const fetchProfile = useCallback(async (userId: string, email: string) => {
-    // تجاوز الصلاحيات لبريد المدير العام
     if (email === ADMIN_EMAIL) {
-      setCurrentUser({
+      const adminData: User = {
         id: userId,
         email: email,
         name: 'الوليد الدوسري',
         role: 'ADMIN' as UserRole,
         department: 'الإدارة العليا'
-      });
+      };
+      setCurrentUser(adminData);
       setIsAuthLoading(false);
       
       supabase.from('profiles').select('*').eq('id', userId).maybeSingle().then(({ data }) => {
@@ -112,11 +111,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     try {
       const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle();
       if (error) throw error;
-      if (data) {
-        setCurrentUser(data as User);
-      } else {
-        setCurrentUser(null);
-      }
+      setCurrentUser(data ? (data as User) : null);
     } catch (err) {
       setCurrentUser(null);
     } finally {
