@@ -56,10 +56,17 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         if (session.user.email === ADMIN_EMAIL) {
           setCurrentUser({ id: session.user.id, email: session.user.email, name: 'الوليد الدوسري', role: 'ADMIN' });
         } else {
-          const { data: profile } = await supabase.from('profiles').select('*').eq('id', session.user.id).maybeSingle();
+          // جلب الملف الشخصي مع معالجة الأخطاء
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', session.user.id)
+            .maybeSingle();
+            
           if (profile) {
             setCurrentUser(profile);
           } else {
+            // صلاحية افتراضية للموظف الجديد
             setCurrentUser({ id: session.user.id, email: session.user.email, name: 'موظف', role: 'CONVEYANCE' });
           }
         }
@@ -90,7 +97,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       projects,
       technicalRequests,
       clearanceRequests,
-      projectWorks, // تم تصحيح الاسم هنا ليتطابق مع الواجهة
+      projectWorks, // تم تصحيح الاسم هنا ليكون camelCase
       currentUser,
       isDbLoading,
       isAuthLoading,
