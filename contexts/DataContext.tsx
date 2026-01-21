@@ -37,11 +37,20 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         supabase.from('deeds_requests').select('*').order('created_at', { ascending: false }),
         supabase.from('project_works').select('*').order('created_at', { ascending: false })
       ]);
-      setProjects(pRes.data?.map(p => ({ ...p, name: p.name || p.title || 'مشروع' })) || []);
+
+      setProjects(pRes.data?.map(p => ({ 
+        ...p, 
+        name: p.name || p.title || 'مشروع' 
+      })) || []);
+
       setTechnicalRequests(trRes.data || []);
       setClearanceRequests(drRes.data || []);
       setProjectWorks(pwRes.data || []);
-    } catch (e) { console.error("Data error:", e); } finally { setIsDbLoading(false); }
+    } catch (e) {
+      console.error("خطأ في جلب البيانات:", e);
+    } finally {
+      setIsDbLoading(false);
+    }
   }, [currentUser]);
 
   useEffect(() => {
@@ -49,14 +58,30 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.user) {
         if (session.user.email === ADMIN_EMAIL) {
-          setCurrentUser({ id: session.user.id, email: session.user.email, name: 'الوليد الدوسري', role: 'ADMIN' });
+          setCurrentUser({ 
+            id: session.user.id, 
+            email: session.user.email, 
+            name: 'الوليد الدوسري', 
+            role: 'ADMIN' as UserRole 
+          });
         } else {
-          // جلب الملف الشخصي حصراً للموظف المسجل
-          const { data: profile } = await supabase.from('profiles').select('*').eq('id', session.user.id).maybeSingle();
-          if (profile) {
-            setCurrentUser(profile);
-          } else {
-            // طرد أي حساب غريب غير مسجل في جدول الـ profiles
+          // التحقق من وجود الموظف في جدول profiles حصراً لمنع الحسابات الغريبة
+          try {
+            const { data: profile } = await supabase
+              .from('profiles')
+              .select('*')
+              .eq('id', session.user.id)
+              .maybeSingle();
+
+            if (profile) {
+              setCurrentUser(profile);
+            } else {
+              // إذا كان الحساب مسجلاً في Auth ولكن ليس له ملف شخصي، يتم طرده فوراً
+              await supabase.auth.signOut();
+              setCurrentUser(null);
+            }
+          } catch (err) {
+            console.error("Profile Fetch Error:", err);
             await supabase.auth.signOut();
             setCurrentUser(null);
           }
@@ -67,9 +92,12 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     initAuth();
   }, []);
 
-  useEffect(() => { if (currentUser) refreshData(); }, [currentUser, refreshData]);
+  useEffect(() => {
+    if (currentUser) refreshData();
+  }, [currentUser, refreshData]);
 
   const login = async (email: string, password: string) => {
+    // استقبال الـ data والـ error لضمان استقرار شاشة الدخول
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) throw error;
     return data;
@@ -83,8 +111,16 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   return (
     <DataContext.Provider value={{
-      projects, technicalRequests, clearanceRequests, projectWorks,
-      currentUser, isDbLoading, isAuthLoading, login, logout, refreshData
+      projects,
+      technicalRequests,
+      clearanceRequests,
+      projectWorks, // تم تصحيح الحرف W ليكون كبيراً هنا وفي كامل الملف
+      currentUser,
+      isDbLoading,
+      isAuthLoading,
+      login,
+      logout,
+      refreshData
     }}>
       {children}
     </DataContext.Provider>
