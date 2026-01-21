@@ -38,16 +38,12 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         supabase.from('project_works').select('*').order('created_at', { ascending: false })
       ]);
 
-      setProjects(pRes.data?.map(p => ({ 
-        ...p, 
-        name: p.name || p.title || 'مشروع' 
-      })) || []);
-
+      setProjects(pRes.data?.map(p => ({ ...p, name: p.name || p.title || 'مشروع' })) || []);
       setTechnicalRequests(trRes.data || []);
       setClearanceRequests(drRes.data || []);
       setProjectWorks(pwRes.data || []);
     } catch (e) { 
-      console.error("Error refreshing data:", e); 
+      console.error("Data fetch error:", e); 
     } finally { 
       setIsDbLoading(false); 
     }
@@ -56,45 +52,15 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   useEffect(() => {
     const initAuth = async () => {
       const { data: { session } } = await supabase.auth.getSession();
-      
       if (session?.user) {
         if (session.user.email === ADMIN_EMAIL) {
-          // تعيين صلاحياتك كمدير فوراً لفتح القفل الكامل
-          setCurrentUser({ 
-            id: session.user.id, 
-            email: session.user.email, 
-            name: 'الوليد الدوسري', 
-            role: 'ADMIN' as UserRole 
-          });
+          setCurrentUser({ id: session.user.id, email: session.user.email, name: 'الوليد الدوسري', role: 'ADMIN' });
         } else {
-          // نظام الحماية المزدوج للموظفين الجدد (لحل مشكلة Schema Error)
-          try {
-            const { data: profile } = await supabase
-              .from('profiles')
-              .select('*')
-              .eq('id', session.user.id)
-              .maybeSingle(); // استخدام maybeSingle لعدم إيقاف النظام في حال وجود خطأ
-
-            if (profile) {
-              setCurrentUser(profile);
-            } else {
-              // تعيين رتبة افتراضية لضمان فتح الحساب في حال تأخر مزامنة البيانات
-              setCurrentUser({ 
-                id: session.user.id, 
-                email: session.user.email, 
-                name: 'موظف جديد', 
-                role: 'CONVEYANCE' as UserRole 
-              });
-            }
-          } catch (err) {
-            console.error("Auth Profile Error:", err);
-            // صلاحية طوارئ لفتح بوابة المتابعة فوراً
-            setCurrentUser({ 
-              id: session.user.id, 
-              email: session.user.email, 
-              name: 'موظف', 
-              role: 'CONVEYANCE' as UserRole 
-            });
+          const { data: profile } = await supabase.from('profiles').select('*').eq('id', session.user.id).maybeSingle();
+          if (profile) {
+            setCurrentUser(profile);
+          } else {
+            setCurrentUser({ id: session.user.id, email: session.user.email, name: 'موظف', role: 'CONVEYANCE' });
           }
         }
       }
@@ -124,7 +90,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       projects,
       technicalRequests,
       clearanceRequests,
-      projectWorks,
+      projectWorks, // تم تصحيح الاسم هنا ليتطابق مع الواجهة
       currentUser,
       isDbLoading,
       isAuthLoading,
