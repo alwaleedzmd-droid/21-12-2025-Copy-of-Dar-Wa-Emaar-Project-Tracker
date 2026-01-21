@@ -22,7 +22,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [technicalRequests, setTechnicalRequests] = useState<TechnicalRequest[]>([]);
   const [clearanceRequests, setClearanceRequests] = useState<any[]>([]);
-  const [projectWorks, setProjectWorks] = useState<ProjectWork[]>([]); // تأكد من الحرف الكبير هنا
+  const [projectWorks, setProjectWorks] = useState<ProjectWork[]>([]);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isDbLoading, setIsDbLoading] = useState(false);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
@@ -37,7 +37,6 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         supabase.from('deeds_requests').select('*').order('created_at', { ascending: false }),
         supabase.from('project_works').select('*').order('created_at', { ascending: false })
       ]);
-
       setProjects(pRes.data?.map(p => ({ ...p, name: p.name || p.title || 'مشروع' })) || []);
       setTechnicalRequests(trRes.data || []);
       setClearanceRequests(drRes.data || []);
@@ -53,11 +52,8 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           setCurrentUser({ id: session.user.id, email: session.user.email, name: 'الوليد الدوسري', role: 'ADMIN' });
         } else {
           const { data: profile } = await supabase.from('profiles').select('*').eq('id', session.user.id).maybeSingle();
-          if (profile) {
-            setCurrentUser(profile);
-          } else {
-            setCurrentUser({ id: session.user.id, email: session.user.email, name: 'موظف', role: 'CONVEYANCE' });
-          }
+          if (profile) setCurrentUser(profile);
+          else setCurrentUser({ id: session.user.id, email: session.user.email, name: 'موظف', role: 'CONVEYANCE' });
         }
       }
       setIsAuthLoading(false);
@@ -81,16 +77,8 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   return (
     <DataContext.Provider value={{
-      projects,
-      technicalRequests,
-      clearanceRequests,
-      projectWorks, // تصحيح نهائي: الحرف W كبير ليتطابق مع التعريف
-      currentUser,
-      isDbLoading,
-      isAuthLoading,
-      login,
-      logout,
-      refreshData
+      projects, technicalRequests, clearanceRequests, projectWorks,
+      currentUser, isDbLoading, isAuthLoading, login, logout, refreshData
     }}>
       {children}
     </DataContext.Provider>
