@@ -58,13 +58,15 @@ const ClearanceModule: React.FC<ClearanceModuleProps> = ({
             .maybeSingle();
 
           if (data) {
+            if (data) {
             setAddForm(prev => ({
               ...prev,
-              client_name: data.beneficiary_name || data.client_name,
-              project_name: data.project_name,
-              mobile: data.mobile,
-              building_number: data.building_number,
-              unit_number: data.unit_number,
+              // جلب البيانات بالأسماء الدقيقة الموجودة في SQL
+              client_name: data.client_name || data.beneficiary_name || '',
+              project_name: data.project_name || '',
+              mobile: data.mobile || '',
+              building_number: data.building_number || '',
+              unit_number: data.unit_number || '',
               district: data.district || 'الرياض',
               city: data.city || 'الرياض'
             }));
@@ -93,10 +95,10 @@ const ClearanceModule: React.FC<ClearanceModuleProps> = ({
     processing: requests.filter(r => r.status === 'pending' || r.status === 'new').length,
     alert: requests.filter(r => r.status === 'pending_modification' || r.status === 'rejected').length
   }), [requests]);
-
-  const handleAddNew = async () => {
+const handleAddNew = async () => {
     if (!addForm.client_name || !addForm.id_number) return alert("الاسم ورقم الهوية مطلوبان");
     
+    // تأكد من إرسال كافة الحقول ليتمكن النظام من جلبها تلقائياً المرة القادمة
     const { error } = await supabase.from('deeds_requests').insert([{
       client_name: addForm.client_name,
       id_number: addForm.id_number,
@@ -104,6 +106,8 @@ const ClearanceModule: React.FC<ClearanceModuleProps> = ({
       mobile: addForm.mobile,
       building_number: addForm.building_number,
       unit_number: addForm.unit_number,
+      district: addForm.district,
+      city: addForm.city,
       status: 'new',
       created_at: new Date().toISOString()
     }]);
@@ -113,6 +117,9 @@ const ClearanceModule: React.FC<ClearanceModuleProps> = ({
       setIsAddModalOpen(false);
       onRefresh();
     } else {
+      alert("خطأ في الحفظ: " + error.message);
+    }
+  };
       alert("خطأ في الحفظ: " + error.message);
     }
   };
