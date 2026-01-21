@@ -51,15 +51,14 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         if (session.user.email === ADMIN_EMAIL) {
           setCurrentUser({ id: session.user.id, email: session.user.email, name: 'الوليد الدوسري', role: 'ADMIN' });
         } else {
-          // جلب الملف الشخصي حصراً لمنع دخول غير المسجلين
+          // جلب الملف الشخصي حصراً (الأمان أولاً)
           const { data: profile } = await supabase.from('profiles').select('*').eq('id', session.user.id).maybeSingle();
           if (profile) {
             setCurrentUser(profile);
           } else {
-            // إذا لم يوجد ملف شخصي، يتم تسجيل الخروج فوراً ومنع الدخول
+            // منع دخول أي مستخدم ليس له سجل في قاعدة البيانات
             await supabase.auth.signOut();
             setCurrentUser(null);
-            alert("عذراً، هذا الحساب غير مسجل في قائمة الموظفين.");
           }
         }
       }
