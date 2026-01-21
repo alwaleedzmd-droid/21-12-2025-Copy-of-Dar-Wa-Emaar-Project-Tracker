@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { supabase } from '../supabaseClient';
 import { ProjectSummary, TechnicalRequest, User, UserRole, ProjectWork } from '../types';
@@ -74,9 +73,9 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       ]);
 
       // التصحيح: مطابقة الحقل name مع قاعدة البيانات لضمان ظهور المشاريع الـ 14
-      setProjects(pRes.data?.map(p => ({ 
-        ...p, 
-        name: p.name || p.title || 'مشروع بدون اسم' 
+      setProjects(pRes.data?.map(p => ({
+        ...p,
+        name: p.name || p.title || 'مشروع بدون اسم'
       })) || []);
 
       setTechnicalRequests(trRes.data || []);
@@ -93,6 +92,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, [currentUser]);
 
   const fetchProfile = useCallback(async (userId: string, email: string) => {
+    // تجاوز الصلاحيات لبريد المدير العام
     if (email === ADMIN_EMAIL) {
       setCurrentUser({
         id: userId,
@@ -115,7 +115,6 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (data) {
         setCurrentUser(data as User);
       } else {
-        // في حال عدم وجود ملف تعريف، يتم تعيين مستخدم بدون رتبة (يتم التعامل معه كغير مخول)
         setCurrentUser(null);
       }
     } catch (err) {
@@ -165,9 +164,9 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         setIsAuthLoading(true); 
         await supabase.auth.signOut();
         setCurrentUser(null);
-        localStorage.clear(); // تصفير شامل لمنع الدخول التلقائي
+        localStorage.clear();
         sessionStorage.clear();
-        window.location.href = '/'; // إجبار المتصفح على إعادة التحميل من الصفر
+        window.location.href = '/';
       },
       refreshData,
       forceRefreshProfile: async () => {
