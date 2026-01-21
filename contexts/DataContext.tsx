@@ -10,8 +10,9 @@ interface DataContextType {
   currentUser: User | null;
   isDbLoading: boolean;
   isAuthLoading: boolean;
-  refreshData: () => Promise<void>;
+  login: (email: string, password: string) => Promise<void>; // تأكد من وجود هذا السطر
   logout: () => Promise<void>;
+  refreshData: () => Promise<void>;
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
@@ -37,31 +38,59 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         supabase.from('project_works').select('*').order('created_at', { ascending: false })
       ]);
 
-      setProjects(pRes.data?.map(p => ({ ...p, name: p.name || p.title || 'مشروع بدون اسم' })) || []);
+      // ضمان مطابقة name و title لظهور المشاريع الـ 14
+      setProjects(pRes.data?.map(p => ({ 
+        ...p, 
+        name: p.name || p.title || 'مشروع بدون اسم' 
+      })) || []);
+
       setTechnicalRequests(trRes.data || []);
       setClearanceRequests(drRes.data || []);
       setProjectWorks(pwRes.data || []);
-    } catch (e) { console.error("Error fetching data", e); }
-    finally { setIsDbLoading(false); }
+    } catch (e) {
+      console.error("خطأ في جلب البيانات:", e);
+    } finally {
+      setIsDbLoading(false);
+    }
   }, [currentUser]);
 
   useEffect(() => {
     const initAuth = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.user) {
-        setCurrentUser({ id: session.user.id, email: session.user.email || '', name: 'الوليد الدوسري', role: 'ADMIN' as UserRole });
+        // تعيين بياناتك كمدير فوراً لفتح القفل
+        if (session.user.email === ADMIN_EMAIL) {
+          setCurrentUser({ 
+            id: session.user.id, 
+            email: session.user.email, 
+            name: 'الوليد الدوسري', 
+            role: 'ADMIN' as UserRole 
+          });
+        }
       }
       setIsAuthLoading(false);
     };
     initAuth();
   }, []);
 
-  useEffect(() => { if (currentUser) refreshData(); }, [currentUser, refreshData]);
+  useEffect(() => {
+    if (currentUser) refreshData();
+  }, [currentUser, refreshData]);
 
   return (
     <DataContext.Provider value={{
-      projects, technicalRequests, clearanceRequests, projectWorks, currentUser, isDbLoading, isAuthLoading, refreshData,
-      logout: async () => { await supabase.auth.signOut(); setCurrentUser(null); window.location.href = '/'; }
+      projects, technicalRequests, clearanceRequests, projectWorks,
+      currentUser, isDbLoading, isAuthLoading,
+      login: async (email, password) => {
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) throw error;
+      },
+      logout: async () => {
+        await supabase.auth.signOut();
+        setCurrentUser(null);
+        window.location.href = '/';
+      },
+      refreshData
     }}>
       {children}
     </DataContext.Provider>
