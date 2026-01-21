@@ -41,7 +41,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setTechnicalRequests(trRes.data || []);
       setClearanceRequests(drRes.data || []);
       setProjectWorks(pwRes.data || []);
-    } catch (e) { console.error("Error:", e); } finally { setIsDbLoading(false); }
+    } catch (e) { console.error("Data error:", e); } finally { setIsDbLoading(false); }
   }, [currentUser]);
 
   useEffect(() => {
@@ -55,7 +55,6 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           if (profile) {
             setCurrentUser(profile);
           } else {
-            // منع دخول الحسابات التي ليس لها بروفايل معرف
             await supabase.auth.signOut();
             setCurrentUser(null);
           }
@@ -82,7 +81,8 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   return (
     <DataContext.Provider value={{
-      projects, technicalRequests, clearanceRequests, projectWorks,
+      projects, technicalRequests, clearanceRequests,
+      projectWorks, // الحرف W كبير ليتطابق مع التعريف
       currentUser, isDbLoading, isAuthLoading, login, logout, refreshData
     }}>
       {children}
