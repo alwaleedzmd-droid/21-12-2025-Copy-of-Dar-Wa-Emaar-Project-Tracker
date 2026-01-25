@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { supabase } from '../supabaseClient';
 import { ProjectSummary, TechnicalRequest, User, UserRole, ProjectWork } from '../types';
@@ -8,14 +7,13 @@ interface DataContextType {
   technicalRequests: TechnicalRequest[];
   clearanceRequests: any[];
   projectWorks: ProjectWork[];
-  appUsers: User[]; 
+  appUsers: User[];
   currentUser: User | null;
   isDbLoading: boolean;
   isAuthLoading: boolean;
   login: (email: string, password: string) => Promise<any>;
   logout: () => Promise<void>;
   refreshData: () => Promise<void>;
-  logActivity: (action: string, details: string, color: string) => void;
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
@@ -31,10 +29,6 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [isDbLoading, setIsDbLoading] = useState(false);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
 
-  const logActivity = (action: string, details: string, color: string) => {
-    console.log(`Activity: ${action} - ${details}`);
-  };
-
   const refreshData = useCallback(async () => {
     if (!currentUser) return;
     setIsDbLoading(true);
@@ -44,23 +38,14 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         supabase.from('technical_requests').select('*').order('created_at', { ascending: false }),
         supabase.from('deeds_requests').select('*').order('created_at', { ascending: false }),
         supabase.from('project_works').select('*').order('created_at', { ascending: false }),
-        supabase.from('profiles').select('*') 
+        supabase.from('profiles').select('*')
       ]);
-      
-      setProjects(pRes.data?.map(p => ({ 
-        ...p, 
-        name: p.name || p.title || 'مشروع بدون اسم' 
-      })) || []);
-
+      setProjects(pRes.data?.map(p => ({ ...p, name: p.name || p.title || 'مشروع' })) || []);
       setTechnicalRequests(trRes.data || []);
       setClearanceRequests(drRes.data || []);
       setProjectWorks(pwRes.data || []);
       setAppUsers(uRes.data || []);
-    } catch (e) { 
-      console.error("Data error:", e); 
-    } finally { 
-      setIsDbLoading(false); 
-    }
+    } catch (e) { console.error(e); } finally { setIsDbLoading(false); }
   }, [currentUser]);
 
   useEffect(() => {
@@ -72,10 +57,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         } else {
           const { data: profile } = await supabase.from('profiles').select('*').eq('id', session.user.id).maybeSingle();
           if (profile) setCurrentUser(profile);
-          else { 
-            await supabase.auth.signOut(); 
-            setCurrentUser(null); 
-          }
+          else { await supabase.auth.signOut(); setCurrentUser(null); }
         }
       }
       setIsAuthLoading(false);
@@ -100,7 +82,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   return (
     <DataContext.Provider value={{
       projects, technicalRequests, clearanceRequests, projectWorks, appUsers,
-      currentUser, isDbLoading, isAuthLoading, login, logout, refreshData, logActivity
+      currentUser, isDbLoading, isAuthLoading, login, logout, refreshData
     }}>
       {children}
     </DataContext.Provider>
