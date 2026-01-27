@@ -1,145 +1,100 @@
 import React, { useState } from 'react';
-import { useNavigate, useLocation } from 'react-router';
-import { 
-  LayoutDashboard, LogOut, RefreshCw, Building2, 
-  Zap, FileStack, Menu, X, Users
-} from 'lucide-react';
+import { Plus, UserPlus, Shield, Mail, Trash2, Edit2, Loader2 } from 'lucide-react';
+import { supabase } from '../supabaseClient';
 import { useData } from '../contexts/DataContext';
-import { DAR_LOGO } from '../constants';
-import NotificationBell from '../components/NotificationBell';
+import Modal from './Modal';
 
-interface MainLayoutProps {
-  children: React.ReactNode;
-}
+const UserManagement = () => {
+  const { appUsers, refreshData, currentUser } = useData();
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [newUser, setNewUser] = useState({ name: '', email: '', password: '', role: 'CONVEYANCE', department: '' });
 
-const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
-  const navigate = useNavigate();
-  const location = useLocation();
-  const { currentUser, logout, refreshData } = useData();
+  const handleAddUser = async () => {
+    if (!newUser.email || !newUser.password) return alert("البريد وكلمة المرور مطلوبة");
+    setIsLoading(true);
+    try {
+      // استدعاء وظيفة SQL التي أصلحناها سابقاً لمنع الأخطاء
+      const { data, error } = await supabase.rpc('create_new_user', {
+        email: newUser.email,
+        password: newUser.password,
+        full_name: newUser.name,
+        user_role: newUser.role,
+        user_dept: newUser.department
+      });
 
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => 
-    localStorage.getItem('dar_sidebar_v2_collapsed') === 'true'
-  );
-
-  if (!currentUser) return <>{children}</>;
-
-  /**
-   * تعريف صلاحيات القائمة الجانبية المحدثة حسب طلبك
-   */
-  const navItems = [
-    { 
-      label: 'لوحة التحكم', 
-      icon: <LayoutDashboard size={20} />, 
-      path: '/dashboard', 
-      roles: ['ADMIN', 'PR_MANAGER'] 
-    },
-    { 
-      label: 'إدارة المشاريع', 
-      icon: <Building2 size={20} />, 
-      path: '/projects', 
-      roles: ['ADMIN', 'PR_MANAGER'] // تم إزالة TECHNICAL لكي لا تظهر لهم
-    },
-    { 
-      label: 'الطلبات الفنية', 
-      icon: <Zap size={20} />, 
-      path: '/technical', 
-      roles: ['ADMIN', 'TECHNICAL', 'PR_MANAGER'] 
-    },
-    { 
-      label: 'سجل الإفراغ', 
-      icon: <FileStack size={20} />, 
-      path: '/deeds', 
-      roles: ['ADMIN', 'CONVEYANCE', 'PR_MANAGER'] 
-    },
-    { 
-      label: 'إدارة المستخدمين', 
-      icon: <Users size={20} />, 
-      path: '/users', 
-      roles: ['ADMIN'] 
-    },
-  ];
-
-  const filteredNav = navItems.filter(item => item.roles.includes(currentUser.role));
+      if (error) throw error;
+      
+      alert("تمت إضافة المستخدم بنجاح ✅");
+      setIsAddModalOpen(false);
+      setNewUser({ name: '', email: '', password: '', role: 'CONVEYANCE', department: '' });
+      refreshData();
+    } catch (err: any) {
+      alert("فشل الحفظ: " + err.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   return (
-    <div className="flex min-h-screen bg-[#F8F9FA] font-cairo" dir="rtl">
-      <aside className={`fixed inset-y-0 right-0 z-40 bg-[#1B2B48] text-white transition-all duration-300 flex flex-col ${isSidebarCollapsed ? 'w-20' : 'w-72 shadow-2xl'}`}>
-        <div className="p-6 flex items-center justify-between border-b border-white/5">
-          {!isSidebarCollapsed && (
-            <div className="flex items-center gap-3">
-              <img src={DAR_LOGO} className="w-10 h-10 rounded-xl" alt="Logo" /> 
-              <span className="font-black text-xl tracking-tight">دار وإعمار</span>
-            </div>
-          )}
-          <button onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)} className="p-2 hover:bg-white/10 rounded-xl">
-            {isSidebarCollapsed ? <Menu size={20} /> : <X size={20} />}
-          </button>
-        </div>
-
-        <nav className="flex-1 px-4 py-8 space-y-2 overflow-y-auto">
-          {filteredNav.map(item => {
-            const isActive = location.pathname === item.path;
-            return (
-              <button 
-                key={item.path} 
-                onClick={() => navigate(item.path)} 
-                className={`w-full flex items-center gap-4 px-4 py-4 rounded-2xl transition-all ${isActive ? 'bg-[#E95D22] text-white shadow-lg shadow-orange-900/20' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}
-              >
-                <div className={isActive ? "text-white" : "text-gray-400 group-hover:text-white"}>
-                  {item.icon}
-                </div>
-                {!isSidebarCollapsed && <span className="font-bold text-sm">{item.label}</span>}
-              </button>
-            );
-          })}
-        </nav>
-
-        <div className="p-4 border-t border-white/5">
-          <button onClick={logout} className="w-full flex items-center gap-4 px-4 py-4 rounded-2xl text-red-400 hover:bg-red-500/10 transition-colors">
-            <LogOut size={20}/> 
-            {!isSidebarCollapsed && <span className="font-bold text-sm">تسجيل الخروج</span>}
-          </button>
-        </div>
-      </aside>
-
-      <div className={`flex-1 flex flex-col transition-all duration-300 ${isSidebarCollapsed ? 'mr-20' : 'mr-72'}`}>
-        <header className="h-20 bg-white border-b border-gray-100 flex items-center justify-between px-8 sticky top-0 z-30 shadow-sm">
-          <div className="flex items-center gap-4">
-             <button onClick={() => refreshData()} className="p-2 text-gray-400 hover:bg-gray-100 rounded-xl transition-all active:rotate-180">
-                <RefreshCw size={20}/>
-             </button>
-             <div className="hidden sm:block">
-                <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">التاريخ الحالي</p>
-                <p className="text-sm font-black text-[#1B2B48]">{new Date().toLocaleDateString('ar-SA')}</p>
-             </div>
-          </div>
-          <div className="flex items-center gap-6">
-            <NotificationBell />
-            <div className="flex items-center gap-3">
-              <div className="text-left">
-                <p className="text-sm font-black text-[#1B2B48]">{currentUser.name}</p>
-                <p className="text-[10px] text-gray-400 font-bold text-right uppercase tracking-tighter">{ROLE_CONFIG[currentUser.role]?.label || currentUser.role}</p>
-              </div>
-              <div className="w-12 h-12 rounded-2xl bg-[#1B2B48] text-white flex items-center justify-center font-black shadow-sm">
-                {currentUser.name[0]}
-              </div>
-            </div>
-          </div>
-        </header>
-
-        <main className="p-8 overflow-y-auto">
-          {children}
-        </main>
+    <div className="space-y-6 font-cairo" dir="rtl">
+      <div className="flex justify-between items-center">
+        <h2 className="text-2xl font-black text-[#1B2B48]">إدارة المستخدمين</h2>
+        <button onClick={() => setIsAddModalOpen(true)} className="bg-[#E95D22] text-white px-6 py-3 rounded-2xl font-bold flex items-center gap-2 shadow-lg">
+          <UserPlus size={20} /> إضافة موظف
+        </button>
       </div>
+
+      <div className="bg-white rounded-[35px] border shadow-sm overflow-hidden">
+        <table className="w-full text-right">
+          <thead className="bg-gray-50 border-b">
+            <tr>
+              <th className="p-5 font-black text-gray-400 text-xs">الموظف</th>
+              <th className="p-5 font-black text-gray-400 text-xs">الدور الوظيفي</th>
+              <th className="p-5 font-black text-gray-400 text-xs">القسم</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y">
+            {appUsers.map((user) => (
+              <tr key={user.id} className="hover:bg-gray-50 transition-colors">
+                <td className="p-5">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-[#1B2B48] text-white rounded-xl flex items-center justify-center font-black">{user.name[0]}</div>
+                    <div>
+                      <p className="font-bold text-[#1B2B48]">{user.name}</p>
+                      <p className="text-[10px] text-gray-400 font-bold">{user.email}</p>
+                    </div>
+                  </div>
+                </td>
+                <td className="p-5">
+                  <span className="px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg text-[10px] font-black">{user.role}</span>
+                </td>
+                <td className="p-5 font-bold text-sm text-gray-600">{user.department || '-'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <Modal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} title="إضافة موظف جديد">
+        <div className="space-y-4 pt-2">
+          <input className="w-full p-4 bg-gray-50 border rounded-2xl font-bold outline-none focus:border-[#E95D22]" placeholder="الاسم الكامل" value={newUser.name} onChange={e => setNewUser({...newUser, name: e.target.value})} />
+          <input className="w-full p-4 bg-gray-50 border rounded-2xl font-bold outline-none focus:border-[#E95D22]" placeholder="البريد الإلكتروني" value={newUser.email} onChange={e => setNewUser({...newUser, email: e.target.value})} />
+          <input className="w-full p-4 bg-gray-50 border rounded-2xl font-bold outline-none focus:border-[#E95D22]" type="password" placeholder="كلمة المرور" value={newUser.password} onChange={e => setNewUser({...newUser, password: e.target.value})} />
+          <select className="w-full p-4 bg-gray-50 border rounded-2xl font-bold outline-none focus:border-[#E95D22]" value={newUser.role} onChange={e => setNewUser({...newUser, role: e.target.value})}>
+            <option value="ADMIN">مدير نظام</option>
+            <option value="PR_MANAGER">مدير علاقات عامة</option>
+            <option value="TECHNICAL">القسم الفني</option>
+            <option value="CONVEYANCE">مسؤول إفراغات CX</option>
+          </select>
+          <input className="w-full p-4 bg-gray-50 border rounded-2xl font-bold outline-none focus:border-[#E95D22]" placeholder="القسم (اختياري)" value={newUser.department} onChange={e => setNewUser({...newUser, department: e.target.value})} />
+          <button onClick={handleAddUser} disabled={isLoading} className="w-full bg-[#1B2B48] text-white py-4 rounded-2xl font-black shadow-xl">
+            {isLoading ? <Loader2 className="animate-spin mx-auto" /> : "حفظ البيانات"}
+          </button>
+        </div>
+      </Modal>
     </div>
   );
 };
 
-const ROLE_CONFIG: Record<string, { label: string }> = {
-  'ADMIN': { label: 'مدير نظام' },
-  'PR_MANAGER': { label: 'مدير علاقات عامة' },
-  'TECHNICAL': { label: 'القسم الفني' },
-  'CONVEYANCE': { label: 'مسؤول إفراغات CX' }
-};
-
-export default MainLayout;
+export default UserManagement;
