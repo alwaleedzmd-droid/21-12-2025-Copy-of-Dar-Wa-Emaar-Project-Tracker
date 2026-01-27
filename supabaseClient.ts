@@ -1,8 +1,13 @@
-
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = 'https://xrjqfzjvhranyfvhnqap.supabase.co'; 
-const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhyanFmemp2aHJhbnlmdmhucWFwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjYxNjYyNzIsImV4cCI6MjA4MTc0MjI3Mn0.uEvfc2YRIF4_98Oy_T9w09wPPQh0CbZPEuqfdaqpHz0'; 
+// استدعاء الروابط من متغيرات البيئة بدلاً من كتابتها يدوياً
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+// التحقق من وجود المفاتيح لضمان عدم حدوث خطأ
+if (!supabaseUrl || !supabaseAnonKey) {
+  console.error("خطأ: مفاتيح سوبابيس غير موجودة في إعدادات Vercel!");
+}
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {

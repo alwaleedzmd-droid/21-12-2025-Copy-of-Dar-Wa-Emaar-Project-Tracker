@@ -30,7 +30,9 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [isAuthLoading, setIsAuthLoading] = useState(true);
 
   const refreshData = useCallback(async () => {
+    // صمام أمان: لا تجلب البيانات إلا إذا كان هناك مستخدم مسجل
     if (!currentUser) return;
+    
     setIsDbLoading(true);
     try {
       const [pRes, trRes, drRes, pwRes, uRes] = await Promise.all([
@@ -40,32 +42,44 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         supabase.from('project_works').select('*').order('created_at', { ascending: false }),
         supabase.from('profiles').select('*')
       ]);
+      
       setProjects(pRes.data?.map(p => ({ ...p, name: p.name || p.title || 'مشروع' })) || []);
       setTechnicalRequests(trRes.data || []);
       setClearanceRequests(drRes.data || []);
       setProjectWorks(pwRes.data || []);
       setAppUsers(uRes.data || []);
-    } catch (e) { console.error(e); } finally { setIsDbLoading(false); }
+    } catch (e) { 
+      console.error("خطأ في جلب البيانات:", e); 
+    } finally { 
+      setIsDbLoading(false); 
+    }
   }, [currentUser]);
 
   useEffect(() => {
     const initAuth = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.user) {
-        if (session.user.email === ADMIN_EMAIL) {
-          setCurrentUser({ id: session.user.id, email: session.user.email, name: 'الوليد الدوسري', role: 'ADMIN' });
-        } else {
-          const { data: profile } = await supabase.from('profiles').select('*').eq('id', session.user.id).maybeSingle();
-          if (profile) setCurrentUser(profile);
-          else { await supabase.auth.signOut(); setCurrentUser(null); }
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user) {
+          if (session.user.email === ADMIN_EMAIL) {
+            setCurrentUser({ id: session.user.id, email: session.user.email, name: 'الوليد الدوسري', role: 'ADMIN' });
+          } else {
+            const { data: profile } = await supabase.from('profiles').select('*').eq('id', session.user.id).maybeSingle();
+            if (profile) setCurrentUser(profile);
+            else { await supabase.auth.signOut(); setCurrentUser(null); }
+          }
         }
+      } catch (err) {
+        console.error("خطأ في التحقق من الهوية:", err);
+      } finally {
+        setIsAuthLoading(false);
       }
-      setIsAuthLoading(false);
     };
     initAuth();
   }, []);
 
-  useEffect(() => { if (currentUser) refreshData(); }, [currentUser, refreshData]);
+  useEffect(() => { 
+    if (currentUser) refreshData(); 
+  }, [currentUser, refreshData]);
 
   const login = async (email: string, password: string) => {
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
