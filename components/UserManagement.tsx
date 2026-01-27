@@ -1,132 +1,145 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState } from 'react';
+import { useNavigate, useLocation } from 'react-router';
 import { 
-  Users, UserPlus, Search, Shield, Trash2, Edit3, Loader2, AlertCircle
+  LayoutDashboard, LogOut, RefreshCw, Building2, 
+  Zap, FileStack, Menu, X, Users
 } from 'lucide-react';
-import { supabase } from '../supabaseClient';
-import { UserRole } from '../types';
-import Modal from './Modal';
 import { useData } from '../contexts/DataContext';
+import { DAR_LOGO } from '../constants';
+import NotificationBell from '../components/NotificationBell';
 
-const ROLE_CONFIG: Record<UserRole, { label: string; color: string; bg: string }> = {
-  'ADMIN': { label: 'مدير نظام', color: 'text-purple-700', bg: 'bg-purple-50' },
-  'PR_MANAGER': { label: 'مدير علاقات عامة', color: 'text-blue-700', bg: 'bg-blue-50' },
-  'TECHNICAL': { label: 'القسم الفني', color: 'text-emerald-700', bg: 'bg-emerald-50' },
-  'CONVEYANCE': { label: 'مسؤول إفراغات CX', color: 'text-orange-700', bg: 'bg-orange-50' }
-};
+interface MainLayoutProps {
+  children: React.ReactNode;
+}
 
-const UserManagement: React.FC = () => {
-  const { currentUser, refreshData } = useData();
-  const [profiles, setProfiles] = useState<any[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
+const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { currentUser, logout, refreshData } = useData();
 
-  const [userForm, setUserForm] = useState({
-    id: '', name: '', email: '', role: 'PR_MANAGER' as UserRole, department: '', password: '' 
-  });
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => 
+    localStorage.getItem('dar_sidebar_v2_collapsed') === 'true'
+  );
 
-  const fetchProfiles = async () => {
-    setIsLoading(true);
-    try {
-      const { data, error } = await supabase.from('profiles').select('*').order('created_at', { ascending: false });
-      if (error) throw error;
-      setProfiles(data || []);
-    } catch (err) { console.error(err); } finally { setIsLoading(false); }
-  };
+  if (!currentUser) return <>{children}</>;
 
-  useEffect(() => { fetchProfiles(); }, []);
+  /**
+   * تعريف صلاحيات القائمة الجانبية المحدثة حسب طلبك
+   */
+  const navItems = [
+    { 
+      label: 'لوحة التحكم', 
+      icon: <LayoutDashboard size={20} />, 
+      path: '/dashboard', 
+      roles: ['ADMIN', 'PR_MANAGER'] 
+    },
+    { 
+      label: 'إدارة المشاريع', 
+      icon: <Building2 size={20} />, 
+      path: '/projects', 
+      roles: ['ADMIN', 'PR_MANAGER'] // تم إزالة TECHNICAL لكي لا تظهر لهم
+    },
+    { 
+      label: 'الطلبات الفنية', 
+      icon: <Zap size={20} />, 
+      path: '/technical', 
+      roles: ['ADMIN', 'TECHNICAL', 'PR_MANAGER'] 
+    },
+    { 
+      label: 'سجل الإفراغ', 
+      icon: <FileStack size={20} />, 
+      path: '/deeds', 
+      roles: ['ADMIN', 'CONVEYANCE', 'PR_MANAGER'] 
+    },
+    { 
+      label: 'إدارة المستخدمين', 
+      icon: <Users size={20} />, 
+      path: '/users', 
+      roles: ['ADMIN'] 
+    },
+  ];
 
-  const handleOpenEdit = (user: any) => {
-    setUserForm({
-      id: user.id, name: user.name, email: user.email,
-      role: user.role, department: user.department || '', password: ''
-    });
-    setIsModalOpen(true);
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsSaving(true);
-    try {
-      if (userForm.id) {
-        await supabase.from('profiles').update({
-          name: userForm.name, role: userForm.role, department: userForm.department
-        }).eq('id', userForm.id);
-      } else {
-        const { error } = await supabase.rpc('create_new_user', {
-          email: userForm.email, password: userForm.password,
-          full_name: userForm.name, user_role: userForm.role,
-          user_dept: userForm.department
-        });
-        if (error) throw error;
-      }
-      setIsModalOpen(false);
-      fetchProfiles();
-      refreshData();
-    } catch (err: any) { alert(err.message); } finally { setIsSaving(false); }
-  };
-
-  if (currentUser?.role !== 'ADMIN') return <div className="p-20 text-center font-black">صلاحية محدودة</div>;
+  const filteredNav = navItems.filter(item => item.roles.includes(currentUser.role));
 
   return (
-    <div className="p-8 space-y-6 font-cairo text-right" dir="rtl">
-      <div className="flex justify-between items-center bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
-        <h2 className="text-2xl font-black text-[#1B2B48]">إدارة المستخدمين</h2>
-        <button onClick={() => { setUserForm({id:'', name:'', email:'', role:'PR_MANAGER', department:'', password:''}); setIsModalOpen(true); }} className="bg-[#E95D22] text-white px-6 py-3 rounded-xl font-black flex items-center gap-2">
-          <UserPlus size={20} /> إضافة عضو جديد
-        </button>
-      </div>
+    <div className="flex min-h-screen bg-[#F8F9FA] font-cairo" dir="rtl">
+      <aside className={`fixed inset-y-0 right-0 z-40 bg-[#1B2B48] text-white transition-all duration-300 flex flex-col ${isSidebarCollapsed ? 'w-20' : 'w-72 shadow-2xl'}`}>
+        <div className="p-6 flex items-center justify-between border-b border-white/5">
+          {!isSidebarCollapsed && (
+            <div className="flex items-center gap-3">
+              <img src={DAR_LOGO} className="w-10 h-10 rounded-xl" alt="Logo" /> 
+              <span className="font-black text-xl tracking-tight">دار وإعمار</span>
+            </div>
+          )}
+          <button onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)} className="p-2 hover:bg-white/10 rounded-xl">
+            {isSidebarCollapsed ? <Menu size={20} /> : <X size={20} />}
+          </button>
+        </div>
 
-      <div className="bg-white rounded-3xl border border-gray-100 overflow-hidden shadow-sm">
-        <table className="w-full">
-          <thead className="bg-gray-50 border-b">
-            <tr className="text-gray-400 text-[10px] font-black uppercase">
-              <th className="p-6 text-right">العضو</th>
-              <th className="p-6 text-right">الصلاحية</th>
-              <th className="p-6 text-right">القسم</th>
-              <th className="p-6"></th>
-            </tr>
-          </thead>
-          <tbody className="divide-y">
-            {profiles.map((user) => (
-              <tr key={user.id} className="hover:bg-gray-50 transition-colors">
-                <td className="p-6">
-                  <p className="font-black text-sm">{user.name}</p>
-                  <p className="text-xs text-gray-400">{user.email}</p>
-                </td>
-                <td className="p-6">
-                  <span className={`px-3 py-1 rounded-lg text-[10px] font-black ${ROLE_CONFIG[user.role as UserRole]?.bg} ${ROLE_CONFIG[user.role as UserRole]?.color}`}>
-                    {ROLE_CONFIG[user.role as UserRole]?.label || user.role}
-                  </span>
-                </td>
-                <td className="p-6 text-xs font-bold text-gray-500">{user.department || '-'}</td>
-                <td className="p-6 text-left">
-                  <button onClick={() => handleOpenEdit(user)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg"><Edit3 size={18}/></button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+        <nav className="flex-1 px-4 py-8 space-y-2 overflow-y-auto">
+          {filteredNav.map(item => {
+            const isActive = location.pathname === item.path;
+            return (
+              <button 
+                key={item.path} 
+                onClick={() => navigate(item.path)} 
+                className={`w-full flex items-center gap-4 px-4 py-4 rounded-2xl transition-all ${isActive ? 'bg-[#E95D22] text-white shadow-lg shadow-orange-900/20' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}
+              >
+                <div className={isActive ? "text-white" : "text-gray-400 group-hover:text-white"}>
+                  {item.icon}
+                </div>
+                {!isSidebarCollapsed && <span className="font-bold text-sm">{item.label}</span>}
+              </button>
+            );
+          })}
+        </nav>
 
-      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={userForm.id ? "تعديل مستخدم" : "إضافة مستخدم"}>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <input className="w-full p-4 bg-gray-50 border rounded-xl font-bold" placeholder="الاسم" value={userForm.name} onChange={e => setUserForm({...userForm, name: e.target.value})} required />
-          <input className="w-full p-4 bg-gray-50 border rounded-xl font-bold" placeholder="البريد" value={userForm.email} onChange={e => setUserForm({...userForm, email: e.target.value})} disabled={!!userForm.id} required />
-          {!userForm.id && <input type="password" className="w-full p-4 bg-gray-50 border rounded-xl font-bold" placeholder="كلمة المرور" value={userForm.password} onChange={e => setUserForm({...userForm, password: e.target.value})} required />}
-          <select className="w-full p-4 bg-gray-50 border rounded-xl font-bold" value={userForm.role} onChange={e => setUserForm({...userForm, role: e.target.value as UserRole})}>
-             <option value="PR_MANAGER">مدير علاقات عامة</option>
-             <option value="TECHNICAL">القسم الفني</option>
-             <option value="CONVEYANCE">مسؤول إفراغات CX</option>
-             <option value="ADMIN">مدير نظام</option>
-          </select>
-          <input className="w-full p-4 bg-gray-50 border rounded-xl font-bold" placeholder="القسم" value={userForm.department} onChange={e => setUserForm({...userForm, department: e.target.value})} />
-          <button type="submit" className="w-full bg-[#1B2B48] text-white py-4 rounded-xl font-black">{isSaving ? 'جاري الحفظ...' : 'حفظ البيانات'}</button>
-        </form>
-      </Modal>
+        <div className="p-4 border-t border-white/5">
+          <button onClick={logout} className="w-full flex items-center gap-4 px-4 py-4 rounded-2xl text-red-400 hover:bg-red-500/10 transition-colors">
+            <LogOut size={20}/> 
+            {!isSidebarCollapsed && <span className="font-bold text-sm">تسجيل الخروج</span>}
+          </button>
+        </div>
+      </aside>
+
+      <div className={`flex-1 flex flex-col transition-all duration-300 ${isSidebarCollapsed ? 'mr-20' : 'mr-72'}`}>
+        <header className="h-20 bg-white border-b border-gray-100 flex items-center justify-between px-8 sticky top-0 z-30 shadow-sm">
+          <div className="flex items-center gap-4">
+             <button onClick={() => refreshData()} className="p-2 text-gray-400 hover:bg-gray-100 rounded-xl transition-all active:rotate-180">
+                <RefreshCw size={20}/>
+             </button>
+             <div className="hidden sm:block">
+                <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">التاريخ الحالي</p>
+                <p className="text-sm font-black text-[#1B2B48]">{new Date().toLocaleDateString('ar-SA')}</p>
+             </div>
+          </div>
+          <div className="flex items-center gap-6">
+            <NotificationBell />
+            <div className="flex items-center gap-3">
+              <div className="text-left">
+                <p className="text-sm font-black text-[#1B2B48]">{currentUser.name}</p>
+                <p className="text-[10px] text-gray-400 font-bold text-right uppercase tracking-tighter">{ROLE_CONFIG[currentUser.role]?.label || currentUser.role}</p>
+              </div>
+              <div className="w-12 h-12 rounded-2xl bg-[#1B2B48] text-white flex items-center justify-center font-black shadow-sm">
+                {currentUser.name[0]}
+              </div>
+            </div>
+          </div>
+        </header>
+
+        <main className="p-8 overflow-y-auto">
+          {children}
+        </main>
+      </div>
     </div>
   );
 };
 
-export default UserManagement;
+const ROLE_CONFIG: Record<string, { label: string }> = {
+  'ADMIN': { label: 'مدير نظام' },
+  'PR_MANAGER': { label: 'مدير علاقات عامة' },
+  'TECHNICAL': { label: 'القسم الفني' },
+  'CONVEYANCE': { label: 'مسؤول إفراغات CX' }
+};
+
+export default MainLayout;

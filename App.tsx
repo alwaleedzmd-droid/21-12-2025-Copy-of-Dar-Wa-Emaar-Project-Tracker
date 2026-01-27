@@ -419,14 +419,23 @@ const AppContent: React.FC = () => {
 
   return (
     <MainLayout>
-      <Routes>
+<Routes>
         <Route path="/" element={<Navigate to={getDefaultPath(currentUser.role)} replace />} />
+        
+        {/* لوحة التحكم والمشاريع: للمدير والعلاقات العامة فقط */}
         <Route path="/dashboard" element={<ProtectedRoute allowedRoles={['ADMIN', 'PR_MANAGER']}><AppMapDashboard currentUser={currentUser} onLogout={logout} /></ProtectedRoute>} />
-        <Route path="/projects" element={<ProtectedRoute allowedRoles={['ADMIN', 'PR_MANAGER', 'TECHNICAL']}><ProjectsModule projects={projects} stats={{ projects: projects.length, techRequests: technicalRequests.length, clearRequests: clearanceRequests.length }} currentUser={currentUser} onProjectClick={(p) => navigate(`/projects/${p?.id}`)} onRefresh={refreshData} /></ProtectedRoute>} />
-        <Route path="/projects/:id" element={<ProtectedRoute allowedRoles={['ADMIN', 'PR_MANAGER', 'TECHNICAL']}><ProjectDetailWrapper projects={projects} currentUser={currentUser} /></ProtectedRoute>} />
+        <Route path="/projects" element={<ProtectedRoute allowedRoles={['ADMIN', 'PR_MANAGER']}><ProjectsModule projects={projects} stats={{ projects: projects.length, techRequests: technicalRequests.length, clearRequests: clearanceRequests.length }} currentUser={currentUser} onProjectClick={(p) => navigate(`/projects/${p?.id}`)} onRefresh={refreshData} /></ProtectedRoute>} />
+        <Route path="/projects/:id" element={<ProtectedRoute allowedRoles={['ADMIN', 'PR_MANAGER']}><ProjectDetailWrapper projects={projects} currentUser={currentUser} /></ProtectedRoute>} />
+        
+        {/* الطلبات الفنية: للفني، العلاقات العامة، والمدير */}
         <Route path="/technical" element={<ProtectedRoute allowedRoles={['ADMIN', 'TECHNICAL', 'PR_MANAGER']}><TechnicalModule requests={technicalRequests} projects={projects} currentUser={currentUser} usersList={appUsers} onRefresh={refreshData} logActivity={logActivity} /></ProtectedRoute>} />
+        
+        {/* سجل الإفراغ: لموظف الإفراغ، العلاقات العامة، والمدير */}
         <Route path="/deeds" element={<ProtectedRoute allowedRoles={['ADMIN', 'CONVEYANCE', 'PR_MANAGER']}><DeedsDashboard currentUserRole={currentUser.role} currentUserName={currentUser.name} logActivity={logActivity} /></ProtectedRoute>} />
+        
+        {/* إدارة المستخدمين: للمدير فقط */}
         <Route path="/users" element={<ProtectedRoute allowedRoles={['ADMIN']}><UserManagement /></ProtectedRoute>} />
+        
         <Route path="*" element={<Navigate to={getDefaultPath(currentUser.role)} replace />} />
       </Routes>
       {['ADMIN', 'PR_MANAGER'].includes(currentUser.role) && <AIAssistant currentUser={currentUser} projects={projects} technicalRequests={technicalRequests} clearanceRequests={clearanceRequests} projectWorks={projectWorks} onNavigate={(type, data) => navigate(type === 'PROJECT' ? `/projects/${data.id}` : '/deeds')} />}
