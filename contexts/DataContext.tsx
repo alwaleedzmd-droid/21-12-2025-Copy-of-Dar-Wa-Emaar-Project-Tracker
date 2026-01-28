@@ -1,3 +1,4 @@
+
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { supabase } from '../supabaseClient';
 import { ProjectSummary, TechnicalRequest, User, UserRole, ProjectWork } from '../types';
@@ -26,18 +27,18 @@ const EMPLOYEES_DATA: Record<string, { name: string; role: UserRole }> = {
   'malageel@darwaemaar.com': { name: 'مساعد العقيل', role: 'PR_MANAGER' },
   'syahya@darwaemaar.com': { name: 'صالح اليحيى', role: 'PR_MANAGER' },
   'mshammari@darwaemaar.com': { name: 'محمد الشمري', role: 'PR_MANAGER' },
-  'mbahri@darwaemaar.com': { name: 'محمد البحري', role: 'PR_MANAGER' },
-  'nora@darwaemaar.com': { name: 'نورة', role: 'CONVEYANCE' },
-  'sara@darwaemaar.com': { name: 'سارة', role: 'CONVEYANCE' },
-  'tamani@darwaemaar.com': { name: 'تماني', role: 'CONVEYANCE' },
-  'shaza@darwaemaar.com': { name: 'شذى', role: 'CONVEYANCE' },
-  'bushra@darwaemaar.com': { name: 'بشرى', role: 'CONVEYANCE' },
-  'hassan@darwaemaar.com': { name: 'حسن', role: 'CONVEYANCE' },
-  'fahad@darwaemaar.com': { name: 'فهد', role: 'CONVEYANCE' },
+  'malbahri@darwaemaar.com': { name: 'محمد البحري', role: 'PR_MANAGER' },
+  'nalmaliki@darwaemaar.com': { name: 'نورة المالكي', role: 'CONVEYANCE' },
+  'saalfahad@darwaemaar.com': { name: 'سارة الفهد', role: 'CONVEYANCE' },
+  'tmashari@darwaemaar.com': { name: 'تماني المشاري', role: 'CONVEYANCE' },
+  'shalmalki@darwaemaar.com': { name: 'شذى المالكي', role: 'CONVEYANCE' },
+  'balqarni@darwaemaar.com': { name: 'بشرى القرني', role: 'CONVEYANCE' },
+  'hmalsalman@darwaemaar.com': { name: 'حسن السلمان', role: 'CONVEYANCE' },
+  'falshammari@darwaemaar.com': { name: 'فهد الشمري', role: 'CONVEYANCE' },
   'ssalama@darwaemaar.com': { name: 'سيد سلامة', role: 'TECHNICAL' },
-  'islam@darwaemaar.com': { name: 'إسلام', role: 'TECHNICAL' },
-  'mbahaisi@darwaemaar.com': { name: 'محمود بحيصي', role: 'TECHNICAL' },
-  'haqeel@darwaemaar.com': { name: 'حمزة عقيل', role: 'TECHNICAL' }
+  'iahmad@darwaemaar.com': { name: 'إسلام أحمد', role: 'TECHNICAL' },
+  'mhbaishi@darwaemaar.com': { name: 'محمود بحيصي', role: 'TECHNICAL' },
+  'mhaqeel@darwaemaar.com': { name: 'حمزة عقيل', role: 'TECHNICAL' }
 };
 
 export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
@@ -53,7 +54,6 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   // Fix: Implemented logActivity as a callback to track user actions across the app
   const logActivity = useCallback((action: string, target: string, color: string = 'text-gray-500') => {
     console.log(`[Dar Activity] ${action}: ${target} (${color})`);
-    // Placeholder for database persistence if needed in the future
   }, []);
 
   const refreshData = useCallback(async () => {
@@ -83,7 +83,6 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         if (session?.user?.email) {
           const email = session.user.email.toLowerCase();
           
-          // استخدام "الخريطة" للتعرف على الموظف فوراً دون سؤال قاعدة البيانات
           if (EMPLOYEES_DATA[email]) {
             setCurrentUser({ id: session.user.id, email, ...EMPLOYEES_DATA[email] });
           } else {

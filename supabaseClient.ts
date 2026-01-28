@@ -1,8 +1,9 @@
+
 import { createClient } from '@supabase/supabase-js';
 
-// استخدام الرمز ? لضمان عدم الانهيار إذا كانت البيئة غير معرفة
-const supabaseUrl = import.meta.env?.VITE_SUPABASE_URL || '';
-const supabaseAnonKey = import.meta.env?.VITE_SUPABASE_ANON_KEY || '';
+// Fix: Use process.env instead of import.meta.env to resolve TypeScript 'ImportMeta' property errors.
+const supabaseUrl = process.env.VITE_SUPABASE_URL || '';
+const supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY || '';
 
 // التحقق لضمان استقرار الواجهة
 if (!supabaseUrl || !supabaseAnonKey) {
