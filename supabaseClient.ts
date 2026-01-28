@@ -1,16 +1,14 @@
-
 import { createClient } from '@supabase/supabase-js';
 
-// Fix: Use process.env instead of import.meta.env to resolve TypeScript 'ImportMeta' property errors.
-const supabaseUrl = process.env.VITE_SUPABASE_URL || '';
-const supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY || '';
+// جلب القيم مع التأكد من وجودها
+const supabaseUrl = import.meta.env?.VITE_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env?.VITE_SUPABASE_ANON_KEY;
 
-// التحقق لضمان استقرار الواجهة
-if (!supabaseUrl || !supabaseAnonKey) {
-  console.error("⚠️ تنبيه: روابط سوبابيس مفقودة في محرر الكود.");
-}
-
-// إنشاء العميل فقط في حال توفر البيانات
+// الحل: إذا لم تتوفر الروابط، لا نترك القيمة null بل ننشئ تنبيهاً واضحاً
 export const supabase = (supabaseUrl && supabaseAnonKey) 
   ? createClient(supabaseUrl, supabaseAnonKey) 
-  : null as any;
+  : { auth: {}, from: () => ({ select: () => ({ order: () => ({}) }) }) } as any; 
+
+if (!supabaseUrl || !supabaseAnonKey) {
+  console.warn("⚠️ روابط سوبابيس غير معرفة بعد في هذه البيئة.");
+}
