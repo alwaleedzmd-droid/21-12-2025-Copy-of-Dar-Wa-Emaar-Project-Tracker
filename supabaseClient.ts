@@ -1,12 +1,13 @@
+
 import { createClient } from '@supabase/supabase-js';
 
-// استدعاء الروابط من متغيرات البيئة بدلاً من كتابتها يدوياً
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+// استخدام process.env للوصول إلى متغيرات البيئة في هذه البيئة
+const supabaseUrl = (typeof process !== 'undefined' ? process.env.VITE_SUPABASE_URL : '') || '';
+const supabaseAnonKey = (typeof process !== 'undefined' ? process.env.VITE_SUPABASE_ANON_KEY : '') || '';
 
-// التحقق من وجود المفاتيح لضمان عدم حدوث خطأ
+// التحقق من وجود المفاتيح لضمان عدم حدوث خطأ عند تهيئة العميل
 if (!supabaseUrl || !supabaseAnonKey) {
-  console.error("خطأ: مفاتيح سوبابيس غير موجودة في إعدادات Vercel!");
+  console.warn("تنبيه: روابط Supabase غير معرفة في متغيرات البيئة، قد لا يعمل الاتصال بقاعدة البيانات بشكل صحيح.");
 }
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {

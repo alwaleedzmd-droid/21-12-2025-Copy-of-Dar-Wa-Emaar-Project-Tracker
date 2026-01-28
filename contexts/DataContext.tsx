@@ -17,7 +17,26 @@ interface DataContextType {
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
-const ADMIN_EMAIL = 'adaldawsari@darwaemaar.com';
+
+// --- تعريف الموظفين الـ 16 داخل الكود لتجاوز خطأ الـ Schema ---
+const EMPLOYEES_DATA: Record<string, { name: string; role: UserRole }> = {
+  'adaldawsari@darwaemaar.com': { name: 'الوليد الدوسري', role: 'ADMIN' },
+  'malageel@darwaemaar.com': { name: 'مساعد العقيل', role: 'PR_MANAGER' },
+  'syahya@darwaemaar.com': { name: 'صالح اليحيى', role: 'PR_MANAGER' },
+  'mshammari@darwaemaar.com': { name: 'محمد الشمري', role: 'PR_MANAGER' },
+  'mbahri@darwaemaar.com': { name: 'محمد البحري', role: 'PR_MANAGER' },
+  'nora@darwaemaar.com': { name: 'نورة', role: 'CONVEYANCE' },
+  'sara@darwaemaar.com': { name: 'سارة', role: 'CONVEYANCE' },
+  'tamani@darwaemaar.com': { name: 'تماني', role: 'CONVEYANCE' },
+  'shaza@darwaemaar.com': { name: 'شذى', role: 'CONVEYANCE' },
+  'bushra@darwaemaar.com': { name: 'بشرى', role: 'CONVEYANCE' },
+  'hassan@darwaemaar.com': { name: 'حسن', role: 'CONVEYANCE' },
+  'fahad@darwaemaar.com': { name: 'فهد', role: 'CONVEYANCE' },
+  'ssalama@darwaemaar.com': { name: 'سيد سلامة', role: 'TECHNICAL' },
+  'islam@darwaemaar.com': { name: 'إسلام', role: 'TECHNICAL' },
+  'mbahaisi@darwaemaar.com': { name: 'محمود بحيصي', role: 'TECHNICAL' },
+  'haqeel@darwaemaar.com': { name: 'حمزة عقيل', role: 'TECHNICAL' }
+};
 
 export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
@@ -30,9 +49,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [isAuthLoading, setIsAuthLoading] = useState(true);
 
   const refreshData = useCallback(async () => {
-    // صمام أمان: لا تجلب البيانات إلا إذا كان هناك مستخدم مسجل
     if (!currentUser) return;
-    
     setIsDbLoading(true);
     try {
       const [pRes, trRes, drRes, pwRes, uRes] = await Promise.all([
@@ -42,44 +59,38 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         supabase.from('project_works').select('*').order('created_at', { ascending: false }),
         supabase.from('profiles').select('*')
       ]);
-      
       setProjects(pRes.data?.map(p => ({ ...p, name: p.name || p.title || 'مشروع' })) || []);
       setTechnicalRequests(trRes.data || []);
       setClearanceRequests(drRes.data || []);
       setProjectWorks(pwRes.data || []);
       setAppUsers(uRes.data || []);
-    } catch (e) { 
-      console.error("خطأ في جلب البيانات:", e); 
-    } finally { 
-      setIsDbLoading(false); 
-    }
+    } catch (e) { console.error("Data refresh error:", e); } 
+    finally { setIsDbLoading(false); }
   }, [currentUser]);
 
   useEffect(() => {
     const initAuth = async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
-        if (session?.user) {
-          if (session.user.email === ADMIN_EMAIL) {
-            setCurrentUser({ id: session.user.id, email: session.user.email, name: 'الوليد الدوسري', role: 'ADMIN' });
+        if (session?.user?.email) {
+          const email = session.user.email.toLowerCase();
+          
+          // استخدام "الخريطة" للتعرف على الموظف فوراً دون سؤال قاعدة البيانات
+          if (EMPLOYEES_DATA[email]) {
+            setCurrentUser({ id: session.user.id, email, ...EMPLOYEES_DATA[email] });
           } else {
             const { data: profile } = await supabase.from('profiles').select('*').eq('id', session.user.id).maybeSingle();
             if (profile) setCurrentUser(profile);
             else { await supabase.auth.signOut(); setCurrentUser(null); }
           }
         }
-      } catch (err) {
-        console.error("خطأ في التحقق من الهوية:", err);
-      } finally {
-        setIsAuthLoading(false);
-      }
+      } catch (e) { console.error("Auth init error:", e); }
+      finally { setIsAuthLoading(false); }
     };
     initAuth();
   }, []);
 
-  useEffect(() => { 
-    if (currentUser) refreshData(); 
-  }, [currentUser, refreshData]);
+  useEffect(() => { if (currentUser) refreshData(); }, [currentUser, refreshData]);
 
   const login = async (email: string, password: string) => {
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
