@@ -1,19 +1,15 @@
-
 import { createClient } from '@supabase/supabase-js';
 
-// استخدام process.env للوصول إلى متغيرات البيئة في هذه البيئة
-const supabaseUrl = (typeof process !== 'undefined' ? process.env.VITE_SUPABASE_URL : '') || '';
-const supabaseAnonKey = (typeof process !== 'undefined' ? process.env.VITE_SUPABASE_ANON_KEY : '') || '';
+// استخدام الرمز ? لضمان عدم الانهيار إذا كانت البيئة غير معرفة
+const supabaseUrl = import.meta.env?.VITE_SUPABASE_URL || '';
+const supabaseAnonKey = import.meta.env?.VITE_SUPABASE_ANON_KEY || '';
 
-// التحقق من وجود المفاتيح لضمان عدم حدوث خطأ عند تهيئة العميل
+// التحقق لضمان استقرار الواجهة
 if (!supabaseUrl || !supabaseAnonKey) {
-  console.warn("تنبيه: روابط Supabase غير معرفة في متغيرات البيئة، قد لا يعمل الاتصال بقاعدة البيانات بشكل صحيح.");
+  console.error("⚠️ تنبيه: روابط سوبابيس مفقودة في محرر الكود.");
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    persistSession: true,
-    autoRefreshToken: true,
-    detectSessionInUrl: true
-  }
-});
+// إنشاء العميل فقط في حال توفر البيانات
+export const supabase = (supabaseUrl && supabaseAnonKey) 
+  ? createClient(supabaseUrl, supabaseAnonKey) 
+  : null as any;

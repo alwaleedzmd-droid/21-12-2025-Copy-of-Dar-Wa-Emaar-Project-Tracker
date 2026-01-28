@@ -14,6 +14,8 @@ interface DataContextType {
   login: (email: string, password: string) => Promise<any>;
   logout: () => Promise<void>;
   refreshData: () => Promise<void>;
+  // Fix: Added logActivity to context interface to satisfy usage in App.tsx and UsersModule.tsx
+  logActivity: (action: string, target: string, color?: string) => void;
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
@@ -47,6 +49,12 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isDbLoading, setIsDbLoading] = useState(false);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
+
+  // Fix: Implemented logActivity as a callback to track user actions across the app
+  const logActivity = useCallback((action: string, target: string, color: string = 'text-gray-500') => {
+    console.log(`[Dar Activity] ${action}: ${target} (${color})`);
+    // Placeholder for database persistence if needed in the future
+  }, []);
 
   const refreshData = useCallback(async () => {
     if (!currentUser) return;
@@ -107,7 +115,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   return (
     <DataContext.Provider value={{
       projects, technicalRequests, clearanceRequests, projectWorks, appUsers,
-      currentUser, isDbLoading, isAuthLoading, login, logout, refreshData
+      currentUser, isDbLoading, isAuthLoading, login, logout, refreshData, logActivity
     }}>
       {children}
     </DataContext.Provider>
