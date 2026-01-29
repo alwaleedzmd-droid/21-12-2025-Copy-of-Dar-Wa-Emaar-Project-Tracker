@@ -421,7 +421,7 @@ const AppContent: React.FC = () => {
    <MainLayout>
       <Routes>
         {/* التوجيه التلقائي للموظف حسب صلاحياته */}
-        <Route path="/" element={<Navigate to={getDefaultPath(currentUser.role)} replace />} />
+        <Route path="/" element={currentUser ? <Navigate to={getDefaultPath(currentUser.role)} replace /> : <Navigate to="/dashboard" replace />} />
         
         {/* لوحة التحكم والمشاريع: تظهر للمدير (الوليد) والعلاقات العامة فقط */}
         <Route path="/dashboard" element={<ProtectedRoute allowedRoles={['ADMIN', 'PR_MANAGER']}><AppMapDashboard currentUser={currentUser} onLogout={logout} /></ProtectedRoute>} />
@@ -439,7 +439,7 @@ const AppContent: React.FC = () => {
         {/* إدارة المستخدمين: للمدير فقط */}
         <Route path="/users" element={<ProtectedRoute allowedRoles={['ADMIN']}><UserManagement /></ProtectedRoute>} />
         
-        <Route path="*" element={<Navigate to={getDefaultPath(currentUser.role)} replace />} />
+        <Route path="*" element={currentUser ? <Navigate to={getDefaultPath(currentUser.role)} replace /> : <Navigate to="/dashboard" replace />} />
       </Routes>
       
       {/* ظهور المساعد الذكي للمدير ومدير العلاقات فقط */}

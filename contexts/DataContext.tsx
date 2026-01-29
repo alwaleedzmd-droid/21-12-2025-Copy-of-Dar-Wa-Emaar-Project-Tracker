@@ -37,7 +37,8 @@ const EMPLOYEES_DATA: Record<string, { name: string; role: UserRole }> = {
   'ssalama@darwaemaar.com': { name: 'سيد سلامة', role: 'TECHNICAL' },
   'iahmad@darwaemaar.com': { name: 'إسلام أحمد', role: 'TECHNICAL' },
   'mhbaishi@darwaemaar.com': { name: 'محمود بحيصي', role: 'TECHNICAL' },
-  'mhaqeel@darwaemaar.com': { name: 'حمزة عقيل', role: 'TECHNICAL' }
+  'mhaqeel@darwaemaar.com': { name: 'حمزة عقيل', role: 'TECHNICAL' },
+  'emelshity@darwaemaar.com': { name: 'أحمد الملشتي', role: 'TECHNICAL' }
 };
 
 export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
@@ -78,7 +79,18 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const initAuth = async () => {
       try {
         if (!supabase || !supabase.auth) {
-          console.warn("Supabase auth is not initialized yet.");
+          console.warn("Supabase auth is not initialized yet. Falling back to local demo session if available.");
+          // Try demo session from localStorage
+          const demo = localStorage.getItem('dar_demo_session');
+          if (demo) {
+            try {
+              const parsed = JSON.parse(demo);
+              const email = parsed.email?.toLowerCase();
+              if (email && EMPLOYEES_DATA[email]) {
+                setCurrentUser({ id: parsed.id || 'demo-' + email, email, ...EMPLOYEES_DATA[email] });
+              }
+            } catch (err) { /* ignore parse errors */ }
+          }
           setIsAuthLoading(false);
           return;
         }
@@ -101,6 +113,19 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             }
           }
         }
+        // If there's no session but a local demo session exists, restore it
+        if (!session?.user?.email) {
+          const demo = localStorage.getItem('dar_demo_session');
+          if (demo) {
+            try {
+              const parsed = JSON.parse(demo);
+              const demEmail = parsed.email?.toLowerCase();
+              if (demEmail && EMPLOYEES_DATA[demEmail]) {
+                setCurrentUser({ id: parsed.id || 'demo-' + demEmail, email: demEmail, ...EMPLOYEES_DATA[demEmail] });
+              }
+            } catch (err) { /* ignore */ }
+          }
+        }
       } catch (e) { 
         console.error("Auth init error details:", e); 
       } finally { 
@@ -113,14 +138,41 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   useEffect(() => { if (currentUser) refreshData(); }, [currentUser, refreshData]);
 
   const login = async (email: string, password: string) => {
+    const e = email.toLowerCase();
+    // Immediate demo login for known employee records
+    if (EMPLOYEES_DATA[e]) {
+      const demoId = 'demo-' + e;
+      const user = { id: demoId, email: e, ...EMPLOYEES_DATA[e] } as any;
+      setCurrentUser(user);
+      try { localStorage.setItem('dar_demo_session', JSON.stringify({ id: demoId, email: e })); } catch (err) { /* ignore */ }
+      return { user };
+    }
+
+    // Allow any @darwaemaar.com email as a demo user with default role
+    if (e.endsWith('@darwaemaar.com')) {
+      const demoId = 'demo-' + e;
+      const namePart = e.split('@')[0];
+      const user = { id: demoId, email: e, name: namePart, role: 'PR_MANAGER' } as any;
+      setCurrentUser(user);
+      try { localStorage.setItem('dar_demo_session', JSON.stringify({ id: demoId, email: e })); } catch (err) { /* ignore */ }
+      return { user };
+    }
+
     if (!supabase) throw new Error("Supabase client is not available.");
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) throw error;
-    return data;
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+      return data;
+    } catch (err: any) {
+      throw err;
+    }
   };
 
   const logout = async () => {
-    if (supabase) await supabase.auth.signOut();
+    try {
+      if (supabase && supabase.auth) await supabase.auth.signOut();
+    } catch (e) { /* ignore */ }
+    localStorage.removeItem('dar_demo_session');
     setCurrentUser(null);
     window.location.href = '/';
   };
