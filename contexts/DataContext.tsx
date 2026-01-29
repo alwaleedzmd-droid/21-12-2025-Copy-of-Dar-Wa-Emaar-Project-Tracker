@@ -15,13 +15,12 @@ interface DataContextType {
   login: (email: string, password: string) => Promise<any>;
   logout: () => Promise<void>;
   refreshData: () => Promise<void>;
-  // Fix: Added logActivity to context interface to satisfy usage in App.tsx and UsersModule.tsx
   logActivity: (action: string, target: string, color?: string) => void;
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
 
-// --- تعريف الموظفين الـ 16 داخل الكود لتجاوز خطأ الـ Schema ---
+// --- تعريف الموظفين الـ 16 داخل الكود لتجاوز خطأ الـ Schema والتحقق السريع ---
 const EMPLOYEES_DATA: Record<string, { name: string; role: UserRole }> = {
   'adaldawsari@darwaemaar.com': { name: 'الوليد الدوسري', role: 'ADMIN' },
   'malageel@darwaemaar.com': { name: 'مساعد العقيل', role: 'PR_MANAGER' },
@@ -51,13 +50,12 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [isDbLoading, setIsDbLoading] = useState(false);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
 
-  // Fix: Implemented logActivity as a callback to track user actions across the app
   const logActivity = useCallback((action: string, target: string, color: string = 'text-gray-500') => {
     console.log(`[Dar Activity] ${action}: ${target} (${color})`);
   }, []);
 
   const refreshData = useCallback(async () => {
-    if (!currentUser) return;
+    if (!currentUser || !supabase) return;
     setIsDbLoading(true);
     try {
       const [pRes, trRes, drRes, pwRes, uRes] = await Promise.all([
@@ -79,7 +77,16 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   useEffect(() => {
     const initAuth = async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
+        if (!supabase || !supabase.auth) {
+          console.warn("Supabase auth is not initialized yet.");
+          setIsAuthLoading(false);
+          return;
+        }
+
+        const { data: { session }, error } = await supabase.auth.getSession();
+        
+        if (error) throw error;
+
         if (session?.user?.email) {
           const email = session.user.email.toLowerCase();
           
@@ -88,11 +95,17 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           } else {
             const { data: profile } = await supabase.from('profiles').select('*').eq('id', session.user.id).maybeSingle();
             if (profile) setCurrentUser(profile);
-            else { await supabase.auth.signOut(); setCurrentUser(null); }
+            else { 
+              await supabase.auth.signOut(); 
+              setCurrentUser(null); 
+            }
           }
         }
-      } catch (e) { console.error("Auth init error:", e); }
-      finally { setIsAuthLoading(false); }
+      } catch (e) { 
+        console.error("Auth init error details:", e); 
+      } finally { 
+        setIsAuthLoading(false); 
+      }
     };
     initAuth();
   }, []);
@@ -100,13 +113,14 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   useEffect(() => { if (currentUser) refreshData(); }, [currentUser, refreshData]);
 
   const login = async (email: string, password: string) => {
+    if (!supabase) throw new Error("Supabase client is not available.");
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) throw error;
     return data;
   };
 
   const logout = async () => {
-    await supabase.auth.signOut();
+    if (supabase) await supabase.auth.signOut();
     setCurrentUser(null);
     window.location.href = '/';
   };

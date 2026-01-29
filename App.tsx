@@ -78,7 +78,7 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
     return { hasError: true };
   }
 
-  render() {
+  render(): React.ReactNode {
     if (this.state.hasError) return (
       <div className="min-h-screen flex items-center justify-center text-red-500 font-bold bg-[#f8f9fa] p-10 text-center flex-col gap-4" dir="rtl">
         <AlertTriangle size={48} />
