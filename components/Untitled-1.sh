@@ -1,0 +1,1 @@
+cd /workspaces/21-12-2025-Copy-of-Dar-Wa-Emaar-Project-Tracker && npm run dev

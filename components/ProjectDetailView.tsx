@@ -1,4 +1,4 @@
-
+ps aux | grep -E "node|python|java|ruby" | grep -v grep
 import React, { useState } from 'react';
 import { 
   Building2, Zap, FileText, MapPin, 
@@ -22,7 +22,9 @@ const ProjectDetailView: React.FC<ProjectDetailViewProps> = ({
   onRefresh
 }) => {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [editForm, setEditForm] = useState<any>({});
+  const [editForm, setEditForm] = useState<Record<string, any>>({});
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const openEditModal = () => {
     setEditForm({
@@ -39,18 +41,48 @@ const ProjectDetailView: React.FC<ProjectDetailViewProps> = ({
       water_contractor: project['water_contractor'] || '',
       electricity_contractor: project['electricity_contractor'] || ''
     });
+    setError(null);
     setIsEditModalOpen(true);
   };
 
   const handleUpdateProject = async () => {
-    const { error } = await supabase.from('projects').update(editForm).eq('id', editForm.id);
-    if (error) {
-      alert('حدث خطأ: ' + error.message);
-    } else {
+    try {
+      if (!editForm.id) {
+        setError('خطأ: معرّف المشروع غير موجود');
+        return;
+      }
+
+      setLoading(true);
+      setError(null);
+      
+      const { id, ...dataToUpdate } = editForm;
+
+      const { error: updateError } = await supabase
+        .from('projects')
+        .update(dataToUpdate)
+        .eq('id', id);
+      
+      if (updateError) {
+        throw updateError;
+      }
+      
       setIsEditModalOpen(false);
-      alert('تم حفظ التعديلات بنجاح');
+      setEditForm({});
+      alert('تم حفظ التعديلات بنجاح ✓');
       onRefresh();
+    } catch (err: any) {
+      const errorMsg = err?.message || 'حدث خطأ غير معروف';
+      setError(errorMsg);
+      console.error('خطأ في التحديث:', err);
+    } finally {
+      setLoading(false);
     }
+  };
+
+  const handleCloseModal = () => {
+    setIsEditModalOpen(false);
+    setError(null);
+    setEditForm({});
   };
 
   return (
@@ -62,7 +94,7 @@ const ProjectDetailView: React.FC<ProjectDetailViewProps> = ({
             <ArrowLeft size={20}/>
           </button>
           <div>
-            <h2 className="text-3xl font-black text-[#1B2B48]">{project.name || project.title || project.client}</h2>
+            <h2 className="text-3xl font-black text-[#1B2B48]">{project.name || project.title || project.client || 'مشروع بدون اسم'}</h2>
             <p className="text-gray-400 text-sm font-bold flex items-center gap-1">
               <MapPin size={14}/> {project.location || 'غير محدد'}
             </p>
@@ -126,8 +158,14 @@ const ProjectDetailView: React.FC<ProjectDetailViewProps> = ({
       </div>
 
       {/* نافذة التعديل */}
-      <Modal isOpen={isEditModalOpen} onClose={() => setIsEditModalOpen(false)} title="تعديل تفاصيل المشروع">
+      <Modal isOpen={isEditModalOpen} onClose={handleCloseModal} title="تعديل تفاصيل المشروع">
         <div className="space-y-6 text-right font-cairo">
+          {error && (
+            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-sm font-bold">
+              ⚠️ {error}
+            </div>
+          )}
+          
           <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100">
             <h4 className="text-xs font-black text-gray-400 mb-3 uppercase tracking-wider">الإحصائيات والعدادات</h4>
             <div className="grid grid-cols-2 gap-3">
@@ -139,6 +177,7 @@ const ProjectDetailView: React.FC<ProjectDetailViewProps> = ({
               <InputGroup label="القرارات المساحية" value={editForm.survey_decisions_count} onChange={v => setEditForm({...editForm, survey_decisions_count: v})} />
             </div>
           </div>
+          
           <div>
             <h4 className="text-xs font-black text-gray-400 mb-3 uppercase tracking-wider">بيانات المكتب الاستشاري</h4>
             <div className="space-y-3">
@@ -149,6 +188,7 @@ const ProjectDetailView: React.FC<ProjectDetailViewProps> = ({
                </div>
             </div>
           </div>
+          
           <div>
             <h4 className="text-xs font-black text-gray-400 mb-3 uppercase tracking-wider">بيانات المقاولين</h4>
             <div className="grid grid-cols-2 gap-3">
@@ -156,9 +196,23 @@ const ProjectDetailView: React.FC<ProjectDetailViewProps> = ({
                <InputText label="مقاول المياه" value={editForm.water_contractor} onChange={v => setEditForm({...editForm, water_contractor: v})} icon={<Droplet size={16}/>} />
             </div>
           </div>
-          <button onClick={handleUpdateProject} className="w-full bg-[#1B2B48] text-white py-4 rounded-[20px] font-black hover:bg-[#2a3f63] transition shadow-lg active:scale-95">
-             حفظ التغييرات
-          </button>
+          
+          <div className="flex gap-3">
+            <button 
+              onClick={handleUpdateProject} 
+              disabled={loading}
+              className="flex-1 bg-[#1B2B48] text-white py-4 rounded-[20px] font-black hover:bg-[#2a3f63] transition shadow-lg active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+               {loading ? '⏳ جاري الحفظ...' : '✓ حفظ التغييرات'}
+            </button>
+            <button 
+              onClick={handleCloseModal}
+              disabled={loading}
+              className="flex-1 bg-gray-200 text-gray-800 py-4 rounded-[20px] font-black hover:bg-gray-300 transition shadow-lg active:scale-95 disabled:opacity-50"
+            >
+              إلغاء
+            </button>
+          </div>
         </div>
       </Modal>
     </div>
@@ -184,8 +238,13 @@ const InfoRow = ({ label, value, isLtr }: any) => (
 const InputGroup = ({ label, value, onChange }: any) => (
   <div>
     <label className="block text-[10px] text-gray-400 font-bold mb-1">{label}</label>
-    <input type="number" className="w-full p-3 bg-white rounded-xl border border-gray-100 outline-none font-bold text-center focus:border-blue-500 transition"
-      value={value} onChange={e => onChange(Number(e.target.value))} />
+    <input 
+      type="number" 
+      className="w-full p-3 bg-white rounded-xl border border-gray-100 outline-none font-bold text-center focus:border-blue-500 transition"
+      value={value || 0} 
+      onChange={e => onChange(Number(e.target.value))} 
+      min="0"
+    />
   </div>
 );
 
@@ -194,8 +253,13 @@ const InputText = ({ label, value, onChange, icon }: any) => (
     <label className="text-gray-400 text-xs font-bold block mb-2">{label}</label>
     <div className="relative">
       <div className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-300">{icon}</div>
-      <input type="text" className="w-full p-4 pr-12 bg-gray-50 rounded-2xl border border-gray-200 outline-none font-bold focus:border-[#1B2B48] transition"
-        value={value} onChange={e => onChange(e.target.value)} />
+      <input 
+        type="text" 
+        className="w-full p-4 pr-12 bg-gray-50 rounded-2xl border border-gray-200 outline-none font-bold focus:border-[#1B2B48] transition"
+        value={value || ''} 
+        onChange={e => onChange(e.target.value)} 
+        placeholder=" "
+      />
     </div>
   </div>
 );
