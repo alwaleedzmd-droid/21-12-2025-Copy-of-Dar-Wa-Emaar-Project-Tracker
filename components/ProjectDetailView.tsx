@@ -1,4 +1,3 @@
-ps aux | grep -E "node|python|java|ruby" | grep -v grep
 import React, { useState } from 'react';
 import { 
   Building2, Zap, FileText, MapPin, 
