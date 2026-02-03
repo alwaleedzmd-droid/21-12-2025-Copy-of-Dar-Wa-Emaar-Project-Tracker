@@ -25,6 +25,7 @@ import ProjectDetailView from './components/ProjectDetailView';
 import UserManagement from './components/UserManagement'; 
 import AIAssistant from './components/AIAssistant';
 import AppMapDashboard from './components/AppMapDashboard';
+import LoginPage from './components/LoginPage';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -348,13 +349,9 @@ const AppContent: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { 
-    currentUser, isAuthLoading, login, logout,
+    currentUser, isAuthLoading, logout,
     projects, technicalRequests, clearanceRequests, projectWorks, appUsers, refreshData, logActivity 
   } = useData();
-
-  const [loginData, setLoginData] = useState({ email: 'adaldawsari@darwaemaar.com', password: '' });
-  const [loginError, setLoginError] = useState<string | null>(null);
-  const [isLoggingIn, setIsLoggingIn] = useState(false);
 
   const getDefaultPath = (role: UserRole) => {
     switch (role) {
@@ -370,19 +367,6 @@ const AppContent: React.FC = () => {
     }
   };
 
-  const handleAuthSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoginError(null);
-    setIsLoggingIn(true);
-    
-    try {
-      await login(loginData.email, loginData.password);
-    } catch (err: any) {
-      setLoginError(err.message || "خطأ في تسجيل الدخول");
-      setIsLoggingIn(false); 
-    }
-  };
-
   useEffect(() => {
     if (currentUser && !isAuthLoading && location.pathname === '/') {
       navigate(getDefaultPath(currentUser.role), { replace: true });
@@ -393,29 +377,12 @@ const AppContent: React.FC = () => {
     <div className="min-h-screen flex items-center justify-center bg-white">
       <div className="flex flex-col items-center gap-4">
         <Loader2 className="animate-spin text-[#1B2B48] opacity-20 w-12 h-12" />
-        <p className="text-[#1B2B48]/30 font-bold text-sm">جاري مزامنة البيانات...</p>
+        <p className="text-[#1B2B48]/30 font-bold text-sm">جاري تحميل البيانات...</p>
       </div>
     </div>
   );
 
-  if (!currentUser) return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6 font-cairo" dir="rtl">
-      <div className="bg-[#1B2B48] w-full max-w-md rounded-[50px] shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-300">
-        <div className="p-12 text-center">
-          <img src={DAR_LOGO} className="h-32 mx-auto mb-6" alt="Logo" />
-          <h1 className="text-white text-3xl font-black tracking-tight">بوابة المتابعة</h1>
-        </div>
-        <form onSubmit={handleAuthSubmit} className="p-10 bg-white space-y-6 rounded-t-[50px]">
-          {loginError && <p className="text-red-500 text-xs font-bold text-center">{loginError}</p>}
-          <input type="email" required placeholder="البريد الإلكتروني" className="w-full p-4 bg-gray-50 rounded-2xl border outline-none font-bold" value={loginData.email} onChange={e => setLoginData({...loginData, email: e.target.value})} />
-          <input type="password" required placeholder="كلمة المرور" className="w-full p-4 bg-gray-50 rounded-2xl border outline-none font-bold" value={loginData.password} onChange={e => setLoginData({...loginData, password: e.target.value})} />
-          <button type="submit" disabled={isLoggingIn} className="w-full bg-[#E95D22] text-white py-5 rounded-[30px] font-black shadow-lg flex items-center justify-center gap-3">
-            {isLoggingIn ? <Loader2 className="animate-spin" size={24} /> : 'تسجيل الدخول'}
-          </button>
-        </form>
-      </div>
-    </div>
-  );
+  if (!currentUser) return <LoginPage />;
 
   return (
    <MainLayout>

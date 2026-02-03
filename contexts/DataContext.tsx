@@ -78,8 +78,10 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   useEffect(() => {
     const initAuth = async () => {
       try {
+        console.log('🔐 بدء تهيئة المصادقة...');
+        
         if (!supabase || !supabase.auth) {
-          console.warn("Supabase auth is not initialized yet. Falling back to local demo session if available.");
+          console.warn("⚠️ Supabase auth غير متاح. استخدام وضع Demo...");
           // Try demo session from localStorage
           const demo = localStorage.getItem('dar_demo_session');
           if (demo) {
@@ -87,9 +89,10 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
               const parsed = JSON.parse(demo);
               const email = parsed.email?.toLowerCase();
               if (email && EMPLOYEES_DATA[email]) {
+                console.log('✅ تسجيل دخول Demo:', email);
                 setCurrentUser({ id: parsed.id || 'demo-' + email, email, ...EMPLOYEES_DATA[email] });
               }
-            } catch (err) { /* ignore parse errors */ }
+            } catch (err) { console.error('خطأ في تحليل demo session:', err); }
           }
           setIsAuthLoading(false);
           return;
@@ -97,10 +100,14 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
         const { data: { session }, error } = await supabase.auth.getSession();
         
-        if (error) throw error;
+        if (error) {
+          console.error('❌ خطأ في جلب الجلسة:', error);
+          throw error;
+        }
 
         if (session?.user?.email) {
           const email = session.user.email.toLowerCase();
+          console.log('✅ مستخدم مسجل:', email);
           
           if (EMPLOYEES_DATA[email]) {
             setCurrentUser({ id: session.user.id, email, ...EMPLOYEES_DATA[email] });
@@ -108,28 +115,31 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             const { data: profile } = await supabase.from('profiles').select('*').eq('id', session.user.id).maybeSingle();
             if (profile) setCurrentUser(profile);
             else { 
+              console.warn('⚠️ ملف تعريف غير موجود للمستخدم');
               await supabase.auth.signOut(); 
               setCurrentUser(null); 
             }
           }
-        }
-        // If there's no session but a local demo session exists, restore it
-        if (!session?.user?.email) {
+        } else {
+          console.log('ℹ️ لا توجد جلسة نشطة، التحقق من Demo session...');
+          // If there's no session but a local demo session exists, restore it
           const demo = localStorage.getItem('dar_demo_session');
           if (demo) {
             try {
               const parsed = JSON.parse(demo);
               const demEmail = parsed.email?.toLowerCase();
               if (demEmail && EMPLOYEES_DATA[demEmail]) {
+                console.log('✅ استعادة Demo session:', demEmail);
                 setCurrentUser({ id: parsed.id || 'demo-' + demEmail, email: demEmail, ...EMPLOYEES_DATA[demEmail] });
               }
-            } catch (err) { /* ignore */ }
+            } catch (err) { console.error('خطأ في استعادة demo:', err); }
           }
         }
       } catch (e) { 
-        console.error("Auth init error details:", e); 
+        console.error("❌ خطأ في تهيئة المصادقة:", e); 
       } finally { 
         setIsAuthLoading(false); 
+        console.log('✅ انتهت تهيئة المصادقة');
       }
     };
     initAuth();
