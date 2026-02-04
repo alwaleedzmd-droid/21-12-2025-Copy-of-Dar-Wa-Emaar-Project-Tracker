@@ -24,7 +24,9 @@ const DataContext = createContext<DataContextType | undefined>(undefined);
 const EMPLOYEES_DATA: Record<string, { name: string; role: UserRole }> = {
   'adaldawsari@darwaemaar.com': { name: 'الوليد الدوسري', role: 'ADMIN' },
   'malageel@darwaemaar.com': { name: 'مساعد العقيل', role: 'PR_MANAGER' },
+  'ssalyahya@darwaemaar.com': { name: 'صالح اليحيى', role: 'PR_MANAGER' },
   'syahya@darwaemaar.com': { name: 'صالح اليحيى', role: 'PR_MANAGER' },
+  'maashammari@darwaemaar.com': { name: 'محمد الشمري', role: 'PR_MANAGER' },
   'mshammari@darwaemaar.com': { name: 'محمد الشمري', role: 'PR_MANAGER' },
   'malbahri@darwaemaar.com': { name: 'محمد البحري', role: 'PR_MANAGER' },
   'nalmaliki@darwaemaar.com': { name: 'نورة المالكي', role: 'CONVEYANCE' },
@@ -34,11 +36,20 @@ const EMPLOYEES_DATA: Record<string, { name: string; role: UserRole }> = {
   'balqarni@darwaemaar.com': { name: 'بشرى القرني', role: 'CONVEYANCE' },
   'hmalsalman@darwaemaar.com': { name: 'حسن السلمان', role: 'CONVEYANCE' },
   'falshammari@darwaemaar.com': { name: 'فهد الشمري', role: 'CONVEYANCE' },
+  'saalabdulsalam@darwaemaar.com': { name: 'سارة عبدالسلام', role: 'CONVEYANCE' },
+  'taalmalki@darwaemaar.com': { name: 'تماني المالكي', role: 'CONVEYANCE' },
+  'smalsanawi@darwaemaar.com': { name: 'شذى الصنعاوي', role: 'CONVEYANCE' },
+  'bsalzamaa@darwaemaar.com': { name: 'بشرى القحطاني', role: 'CONVEYANCE' },
+  'hmalsenbel@darwaemaar.com': { name: 'حسن السنبل', role: 'CONVEYANCE' },
+  'ffalotaibi@darwaemaar.com': { name: 'فهد العتيبي', role: 'CONVEYANCE' },
   'ssalama@darwaemaar.com': { name: 'سيد سلامة', role: 'TECHNICAL' },
+  'easalama@darwaemaar.com': { name: 'سيد سلامة', role: 'TECHNICAL' },
   'iahmad@darwaemaar.com': { name: 'إسلام أحمد', role: 'TECHNICAL' },
   'mhbaishi@darwaemaar.com': { name: 'محمود بحيصي', role: 'TECHNICAL' },
+  'mbuhaisi@darwaemaar.com': { name: 'محمود بحيصي', role: 'TECHNICAL' },
   'mhaqeel@darwaemaar.com': { name: 'حمزة عقيل', role: 'TECHNICAL' },
-  'emelshity@darwaemaar.com': { name: 'أحمد الملشتي', role: 'TECHNICAL' }
+  'hmaqel@darwaemaar.com': { name: 'حمزة عقيل', role: 'TECHNICAL' },
+  'emelshity@darwaemaar.com': { name: 'إسلام الملشتي', role: 'TECHNICAL' }
 };
 
 export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
