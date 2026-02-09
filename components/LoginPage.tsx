@@ -109,29 +109,6 @@ const LoginPage: React.FC = () => {
           </button>
         </form>
 
-        {/* Demo Accounts */}
-        <div className="mt-8 pt-8 border-t-2 border-gray-100">
-          <p className="text-xs text-gray-500 text-center mb-4 font-bold">
-            للتجربة السريعة - حسابات تجريبية:
-          </p>
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              onClick={() => quickLogin('adaldawsari@darwaemaar.com')}
-              className="px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-xs font-bold text-gray-700 transition-colors"
-              disabled={loading}
-            >
-              مدير عام
-            </button>
-            <button
-              onClick={() => quickLogin('malageel@darwaemaar.com')}
-              className="px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-xs font-bold text-gray-700 transition-colors"
-              disabled={loading}
-            >
-              مدير علاقات
-            </button>
-          </div>
-        </div>
-
         {/* Footer */}
         <p className="text-center text-xs text-gray-400 mt-8 font-bold">
           © 2026 دار وإعمار للتطوير العقاري

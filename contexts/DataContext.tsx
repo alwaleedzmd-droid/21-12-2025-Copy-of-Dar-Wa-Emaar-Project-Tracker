@@ -20,15 +20,30 @@ interface DataContextType {
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
 
-// --- تعريف الموظفين الـ 16 داخل الكود لتجاوز خطأ الـ Schema والتحقق السريع ---
+// --- تعريف الموظفين حسب البيانات المحدثة ---
 const EMPLOYEES_DATA: Record<string, { name: string; role: UserRole }> = {
+  // المدير العام
   'adaldawsari@darwaemaar.com': { name: 'الوليد الدوسري', role: 'ADMIN' },
+  
+  // علاقات عامة (PR_MANAGER)
   'malageel@darwaemaar.com': { name: 'مساعد العقيل', role: 'PR_MANAGER' },
   'ssalyahya@darwaemaar.com': { name: 'صالح اليحيى', role: 'PR_MANAGER' },
   'syahya@darwaemaar.com': { name: 'صالح اليحيى', role: 'PR_MANAGER' },
   'maashammari@darwaemaar.com': { name: 'محمد الشمري', role: 'PR_MANAGER' },
   'mshammari@darwaemaar.com': { name: 'محمد الشمري', role: 'PR_MANAGER' },
   'malbahri@darwaemaar.com': { name: 'محمد البحري', role: 'PR_MANAGER' },
+  
+  // القسم الفني (TECHNICAL)
+  'ssalama@darwaemaar.com': { name: 'سيد سلامة', role: 'TECHNICAL' },
+  'easalama@darwaemaar.com': { name: 'سيد سلامة', role: 'TECHNICAL' },
+  'iahmad@darwaemaar.com': { name: 'إسلام أحمد', role: 'TECHNICAL' },
+  'emelshity@darwaemaar.com': { name: 'إسلام الملشتي', role: 'TECHNICAL' },
+  'mhbaishi@darwaemaar.com': { name: 'محمود بحيصي', role: 'TECHNICAL' },
+  'mbuhaisi@darwaemaar.com': { name: 'محمود بحيصي', role: 'TECHNICAL' },
+  'mhaqeel@darwaemaar.com': { name: 'حمزة عقيل', role: 'TECHNICAL' },
+  'hmaqel@darwaemaar.com': { name: 'حمزة عقيل', role: 'TECHNICAL' },
+  
+  // موظفو الإفراغات (CONVEYANCE)
   'nalmaliki@darwaemaar.com': { name: 'نورة المالكي', role: 'CONVEYANCE' },
   'saalfahad@darwaemaar.com': { name: 'سارة الفهد', role: 'CONVEYANCE' },
   'tmashari@darwaemaar.com': { name: 'تماني المشاري', role: 'CONVEYANCE' },
@@ -41,15 +56,7 @@ const EMPLOYEES_DATA: Record<string, { name: string; role: UserRole }> = {
   'smalsanawi@darwaemaar.com': { name: 'شذى الصنعاوي', role: 'CONVEYANCE' },
   'bsalzamaa@darwaemaar.com': { name: 'بشرى القحطاني', role: 'CONVEYANCE' },
   'hmalsenbel@darwaemaar.com': { name: 'حسن السنبل', role: 'CONVEYANCE' },
-  'ffalotaibi@darwaemaar.com': { name: 'فهد العتيبي', role: 'CONVEYANCE' },
-  'ssalama@darwaemaar.com': { name: 'سيد سلامة', role: 'TECHNICAL' },
-  'easalama@darwaemaar.com': { name: 'سيد سلامة', role: 'TECHNICAL' },
-  'iahmad@darwaemaar.com': { name: 'إسلام أحمد', role: 'TECHNICAL' },
-  'mhbaishi@darwaemaar.com': { name: 'محمود بحيصي', role: 'TECHNICAL' },
-  'mbuhaisi@darwaemaar.com': { name: 'محمود بحيصي', role: 'TECHNICAL' },
-  'mhaqeel@darwaemaar.com': { name: 'حمزة عقيل', role: 'TECHNICAL' },
-  'hmaqel@darwaemaar.com': { name: 'حمزة عقيل', role: 'TECHNICAL' },
-  'emelshity@darwaemaar.com': { name: 'إسلام الملشتي', role: 'TECHNICAL' }
+  'ffalotaibi@darwaemaar.com': { name: 'فهد العتيبي', role: 'CONVEYANCE' }
 };
 
 export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) => {

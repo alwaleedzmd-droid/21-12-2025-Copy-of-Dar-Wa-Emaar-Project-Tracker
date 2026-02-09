@@ -25,7 +25,10 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   if (!currentUser) return <>{children}</>;
 
   /**
-   * تعريف صلاحيات القائمة الجانبية حسب الأدوار الأربعة الجديدة
+   * تعريف صلاحيات القائمة الجانبية حسب كل دور
+   * - ADMIN & PR_MANAGER: الوصول لكل شيء
+   * - TECHNICAL: فقط الطلبات الفنية
+   * - CONVEYANCE: فقط سجل الإفراغ
    */
   const navItems = [
     { 
@@ -38,7 +41,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
       label: 'إدارة المشاريع', 
       icon: <Building2 size={20} />, 
       path: '/projects', 
-      roles: ['ADMIN', 'PR_MANAGER', 'TECHNICAL'] 
+      roles: ['ADMIN', 'PR_MANAGER'] 
     },
     { 
       label: 'الطلبات الفنية', 
