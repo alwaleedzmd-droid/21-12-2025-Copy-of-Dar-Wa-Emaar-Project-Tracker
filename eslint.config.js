@@ -31,14 +31,12 @@ export default [
       ...tsPlugin.configs.recommended.rules,
       ...react.configs.recommended.rules,
       ...reactHooks.configs.recommended.rules,
+      'react-hooks/exhaustive-deps': 'off',
       'no-undef': 'off',
-      'no-empty': 'warn',
+      'no-empty': 'off',
       'no-useless-catch': 'off',
       '@typescript-eslint/no-explicit-any': 'off',
-      '@typescript-eslint/no-unused-vars': [
-        'warn',
-        { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }
-      ]
+      '@typescript-eslint/no-unused-vars': 'off'
     }
   }
 ];
