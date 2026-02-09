@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { supabase } from '../supabaseClient';
 import { ProjectSummary, TechnicalRequest, User, UserRole, ProjectWork } from '../types';
