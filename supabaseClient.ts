@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js';
+import { createClient } from'@supabase/supabase-js';
 
 /**
  * جلب القيم من import.meta.env (Vite) مع قيم احتياطية
