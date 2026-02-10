@@ -6,8 +6,19 @@ import { createClient } from'@supabase/supabase-js';
 const fallbackUrl = 'https://xrjqfzjvhranyfvhnqap.supabase.co';
 const fallbackKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhyanFmemp2aHJhbnlmdmhucWFwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjYxNjYyNzIsImV4cCI6MjA4MTc0MjI3Mn0.uEvfc2YRIF4_98Oy_T9w09wPPQh0CbZPEuqfdaqpHz0';
 
-const rawSupabaseUrl = (import.meta.env.VITE_SUPABASE_URL ?? '').trim();
-const rawSupabaseAnonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY ?? '').trim();
+/**
+ * تنظيف القيم: إزالة المسافات، علامات = الزائدة، وعلامات التنصيص
+ */
+const cleanEnvValue = (value: string): string => {
+  return value
+    .trim()
+    .replace(/^["']+|["']+$/g, '')  // إزالة علامات التنصيص
+    .replace(/^=+/, '')              // إزالة = في البداية
+    .trim();
+};
+
+const rawSupabaseUrl = cleanEnvValue(import.meta.env.VITE_SUPABASE_URL ?? '');
+const rawSupabaseAnonKey = cleanEnvValue(import.meta.env.VITE_SUPABASE_ANON_KEY ?? '');
 
 const isValidHttpUrl = (value: string) => {
   try {
@@ -18,13 +29,22 @@ const isValidHttpUrl = (value: string) => {
   }
 };
 
+/**
+ * التحقق من أن المفتاح يبدو كـ JWT صالح (يبدأ بـ eyJ)
+ */
+const isValidJWT = (key: string): boolean => {
+  return key.startsWith('eyJ') && key.includes('.') && key.split('.').length === 3;
+};
+
 const supabaseUrl = isValidHttpUrl(rawSupabaseUrl) ? rawSupabaseUrl : fallbackUrl;
-const supabaseAnonKey = rawSupabaseAnonKey || fallbackKey;
+const supabaseAnonKey = (rawSupabaseAnonKey && isValidJWT(rawSupabaseAnonKey)) ? rawSupabaseAnonKey : fallbackKey;
 
 console.log('Supabase Config:', {
   url: supabaseUrl,
   hasKey: !!supabaseAnonKey,
-  keyLength: supabaseAnonKey.length
+  keyLength: supabaseAnonKey.length,
+  keyPrefix: supabaseAnonKey.substring(0, 10) + '...',
+  usingFallback: supabaseAnonKey === fallbackKey
 });
 
 /**

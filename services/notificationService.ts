@@ -33,8 +33,10 @@ export const notificationService = {
         // إرسال إشعار لكل مستخدم بالدور المطلوب
         const notifications = targetUsers.map(user => ({
           user_id: user.id,
-          title: `${senderName} | ${linkUrl}`,
+          title: senderName,
           message: message,
+          link: linkUrl,
+          is_read: false,
           created_at: new Date().toISOString()
         }));
 
@@ -52,6 +54,8 @@ export const notificationService = {
           .insert([{
             title: `${senderName} → ${targetRole}`,
             message: message,
+            link: linkUrl,
+            is_read: false,
             created_at: new Date().toISOString()
           }]);
 

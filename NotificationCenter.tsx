@@ -23,7 +23,7 @@ const NotificationCenter = () => {
       }
 
       setNotifications(data || []);
-      setUnreadCount(data?.length || 0);
+      setUnreadCount(data?.filter(n => !n.is_read).length || 0);
       setIsOffline(false);
     } catch (err: any) {
       if (err instanceof TypeError || err.message?.includes('fetch')) {
@@ -41,8 +41,14 @@ const NotificationCenter = () => {
     return () => clearInterval(interval);
   }, []);
 
-  const markAllRead = () => {
-    setUnreadCount(0);
+  const markAllRead = async () => {
+    try {
+      await supabase.from('notifications').update({ is_read: true }).eq('is_read', false);
+      setUnreadCount(0);
+      fetchNotifications();
+    } catch (err) {
+      console.warn('خطأ في تحديث الإشعارات:', err);
+    }
   };
 
   return (
@@ -86,7 +92,7 @@ const NotificationCenter = () => {
               </div>
             ) : (
               notifications.map((n) => (
-                <div key={n.id} className={`p-4 border-b border-gray-50 hover:bg-gray-50 transition-colors`}>
+                <div key={n.id} className={`p-4 border-b border-gray-50 hover:bg-gray-50 transition-colors ${!n.is_read ? 'bg-blue-50/30' : ''}`}>
                   {n.title && <p className="text-[10px] text-gray-400 font-bold mb-1">{n.title}</p>}
                   <p className="text-xs text-gray-600 font-bold leading-relaxed">{n.message}</p>
                   <span className="text-[9px] text-gray-400 mt-1 block">

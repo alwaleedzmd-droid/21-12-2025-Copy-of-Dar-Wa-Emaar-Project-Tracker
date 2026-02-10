@@ -7,8 +7,7 @@ const NotificationBell = () => {
   const { currentUser } = useData();
   const [notifications, setNotifications] = useState<any[]>([]);
   const [isOpen, setIsOpen] = useState(false);
-  const [readIds, setReadIds] = useState<Set<string>>(new Set());
-  const unreadCount = notifications.filter(n => !readIds.has(n.id)).length;
+  const unreadCount = notifications.filter(n => !n.is_read).length;
 
   const fetchNotifications = useCallback(async () => {
     if (!currentUser) return;
@@ -68,9 +67,20 @@ const NotificationBell = () => {
     };
   }, [currentUser, fetchNotifications]);
 
-  const markAsRead = () => {
-    const allIds = new Set(notifications.map(n => n.id));
-    setReadIds(allIds);
+  const markAsRead = async () => {
+    if (unreadCount === 0) return;
+    try {
+      const isDemoUser = currentUser?.id?.startsWith('demo-');
+      if (isDemoUser) {
+        // للمستخدم التجريبي نحدث الكل
+        await supabase.from('notifications').update({ is_read: true }).eq('is_read', false);
+      } else {
+        await supabase.from('notifications').update({ is_read: true }).eq('user_id', currentUser?.id).eq('is_read', false);
+      }
+      setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
+    } catch (err) {
+      console.warn('خطأ تحديث حالة الإشعارات:', err);
+    }
   };
 
   return (
