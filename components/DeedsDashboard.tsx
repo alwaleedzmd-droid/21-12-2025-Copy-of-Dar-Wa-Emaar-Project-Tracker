@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo, useRef, useEffect } from 'react';
+import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { useLocation } from 'react-router';
 import { supabase } from '../supabaseClient'; 
 import { 
@@ -50,6 +50,8 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
     const fileInputRef = useRef<HTMLInputElement>(null);
     const excelInputRef = useRef<HTMLInputElement>(null);
     const commentsEndRef = useRef<HTMLDivElement>(null);
+    const lastFetchedIdRef = useRef<string>('');
+    const autoFillTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const [newDeedForm, setNewDeedForm] = useState<any>({
         region: 'الرياض',
@@ -125,8 +127,14 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
       }
     };
 
-    const fetchClientDetails = async (id: string) => {
-        if (!id || id.length < 10) return;
+    const normalizeId = useCallback((value: string) => value.replace(/\s+/g, '').replace(/-/g, '').trim(), []);
+
+    const fetchClientDetails = useCallback(async (id: string) => {
+        const normalizedId = normalizeId(id);
+        if (!normalizedId || normalizedId.length < 10) return;
+        if (normalizedId === lastFetchedIdRef.current) return;
+
+        lastFetchedIdRef.current = normalizedId;
         setIsAutoFilling(true);
         setAutoFillSuccess(false);
 
@@ -134,8 +142,10 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
             const { data, error } = await supabase
                 .from('client_archive')
                 .select('*')
-                .eq('id_number', id)
+                .eq('id_number', normalizedId)
                 .maybeSingle();
+
+            if (error) throw error;
 
             if (data) {
                 setNewDeedForm((prev: any) => ({
@@ -154,13 +164,32 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
                 }));
                 setAutoFillSuccess(true);
                 setTimeout(() => setAutoFillSuccess(false), 3000);
+            } else {
+                setAutoFillSuccess(false);
             }
         } catch (err) {
             console.error("🔥 Error in fetchClientDetails:", err);
         } finally {
             setIsAutoFilling(false);
         }
-    };
+    }, [normalizeId]);
+
+    useEffect(() => {
+        const idValue = normalizeId(newDeedForm.id_number || '');
+        if (idValue.length < 10) {
+            setAutoFillSuccess(false);
+            return;
+        }
+
+        if (autoFillTimerRef.current) clearTimeout(autoFillTimerRef.current);
+        autoFillTimerRef.current = setTimeout(() => {
+            fetchClientDetails(idValue);
+        }, 500);
+
+        return () => {
+            if (autoFillTimerRef.current) clearTimeout(autoFillTimerRef.current);
+        };
+    }, [newDeedForm.id_number, normalizeId, fetchClientDetails]);
 
     const fetchComments = async (requestId: number) => {
         setIsCommentLoading(true);
@@ -375,7 +404,6 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
                                     className={`w-full p-3 bg-white rounded-xl border outline-none font-black text-sm transition-all focus:border-[#E95D22] shadow-sm ${autoFillSuccess ? 'ring-2 ring-green-100 border-green-500' : 'border-gray-100'}`} 
                                     placeholder="100XXXXXXXX"
                                     value={newDeedForm.id_number} 
-                                    onBlur={(e) => fetchClientDetails(e.target.value)}
                                     onChange={e => setNewDeedForm({...newDeedForm, id_number: e.target.value})} 
                                 />
                            </div>
