@@ -6,11 +6,11 @@ import { useData } from '../contexts/DataContext';
 interface Notification {
   id: string;
   created_at: string;
+  title?: string;
   message: string;
-  link_url: string;
+  link?: string;
   is_read: boolean;
-  sender_name: string;
-  recipient_role: string;
+  user_id?: string;
 }
 
 interface NotificationContextType {
@@ -35,13 +35,18 @@ export const NotificationProvider: React.FC<{ children: ReactNode }> = ({ childr
   const fetchNotifications = async () => {
     if (!currentUser) return;
     try {
-      // جلب آخر 20 تنبيه يخص دور المستخدم الحالي أو موجه للمدراء
-      const { data, error } = await supabase
+      const isDemoUser = currentUser.id?.startsWith('demo-');
+      let query = supabase
         .from('notifications')
         .select('*')
-        .or(`recipient_role.eq.${currentUser.role},recipient_role.eq.ADMIN`)
         .order('created_at', { ascending: false })
         .limit(20);
+
+      if (!isDemoUser) {
+        query = query.eq('user_id', currentUser.id);
+      }
+
+      const { data, error } = await query;
 
       if (!error && data) setNotifications(data);
     } catch (err) {
@@ -66,17 +71,16 @@ export const NotificationProvider: React.FC<{ children: ReactNode }> = ({ childr
         },
         (payload) => {
           const newNotif = payload.new as Notification;
-          
-          // الفلترة الذكية: التأكد من أن التنبيه موجه لهذا المستخدم أو هو مدير نظام
-          if (newNotif.recipient_role === currentUser.role || currentUser.role === 'ADMIN') {
+          const isDemoUser = currentUser.id?.startsWith('demo-');
+
+          if (isDemoUser || newNotif.user_id === currentUser.id) {
             setNotifications(prev => [newNotif, ...prev]);
-            
-            // تشغيل صوت تنبيه خفيف
+
             try {
               const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2354/2354-preview.mp3');
               audio.volume = 0.4;
               audio.play();
-            } catch(e) {
+            } catch (e) {
               console.log('Audio playback blocked');
             }
           }
@@ -105,10 +109,14 @@ export const NotificationProvider: React.FC<{ children: ReactNode }> = ({ childr
   const markAllAsRead = async () => {
     if (!currentUser) return;
     try {
-      const { error } = await supabase
-        .from('notifications')
-        .update({ is_read: true })
-        .eq('recipient_role', currentUser.role);
+      const isDemoUser = currentUser.id?.startsWith('demo-');
+      let query = supabase.from('notifications').update({ is_read: true }).eq('is_read', false);
+
+      if (!isDemoUser) {
+        query = query.eq('user_id', currentUser.id);
+      }
+
+      const { error } = await query;
 
       if (!error) {
         setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
