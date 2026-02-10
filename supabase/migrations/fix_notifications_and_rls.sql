@@ -76,3 +76,9 @@ CREATE POLICY IF NOT EXISTS "allow_read_work_comments" ON public.work_comments
 
 CREATE POLICY IF NOT EXISTS "allow_all_work_comments" ON public.work_comments
   FOR ALL USING (true) WITH CHECK (true);
+
+-- أرشيف العملاء (لخاصية الإكمال التلقائي)
+ALTER TABLE public.client_archive ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY IF NOT EXISTS "allow_read_client_archive" ON public.client_archive
+  FOR SELECT USING (true);
