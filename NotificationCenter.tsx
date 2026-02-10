@@ -18,15 +18,14 @@ const NotificationCenter = () => {
         .limit(10);
 
       if (error) {
-        if (error.code === 'PGRST116' || error.code === '42P01') return; // جدول غير موجود أو فارغ
+        if (error.code === 'PGRST116' || error.code === '42P01') return;
         throw error;
       }
 
       setNotifications(data || []);
-      setUnreadCount(data?.filter(n => !n.is_read).length || 0);
+      setUnreadCount(data?.length || 0);
       setIsOffline(false);
     } catch (err: any) {
-      // معالجة خطأ TypeError: Failed to fetch
       if (err instanceof TypeError || err.message?.includes('fetch')) {
         setIsOffline(true);
         console.warn("Notification Service: Network connection unavailable or Supabase project paused.");
@@ -42,11 +41,8 @@ const NotificationCenter = () => {
     return () => clearInterval(interval);
   }, []);
 
-  const markAllRead = async () => {
-    try {
-      await supabase.from('notifications').update({ is_read: true }).eq('is_read', false);
-      fetchNotifications();
-    } catch (err) {}
+  const markAllRead = () => {
+    setUnreadCount(0);
   };
 
   return (
@@ -90,7 +86,8 @@ const NotificationCenter = () => {
               </div>
             ) : (
               notifications.map((n) => (
-                <div key={n.id} className={`p-4 border-b border-gray-50 hover:bg-gray-50 transition-colors ${!n.is_read ? 'bg-blue-50/30' : ''}`}>
+                <div key={n.id} className={`p-4 border-b border-gray-50 hover:bg-gray-50 transition-colors`}>
+                  {n.title && <p className="text-[10px] text-gray-400 font-bold mb-1">{n.title}</p>}
                   <p className="text-xs text-gray-600 font-bold leading-relaxed">{n.message}</p>
                   <span className="text-[9px] text-gray-400 mt-1 block">
                     {new Date(n.created_at).toLocaleTimeString('ar-SA')}

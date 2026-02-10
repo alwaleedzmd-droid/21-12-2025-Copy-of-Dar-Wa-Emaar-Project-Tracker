@@ -73,8 +73,12 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, []);
 
   const refreshData = useCallback(async () => {
-    if (!currentUser || !supabase) return;
+    if (!currentUser || !supabase) {
+      console.warn('⚠️ refreshData: لا يوجد مستخدم أو عميل Supabase');
+      return;
+    }
     setIsDbLoading(true);
+    console.log('🔄 جاري جلب البيانات من Supabase...');
     try {
       const [pRes, trRes, drRes, pwRes, uRes] = await Promise.all([
         supabase.from('projects').select('*').order('id', { ascending: true }),
@@ -83,13 +87,32 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         supabase.from('project_works').select('*').order('created_at', { ascending: false }),
         supabase.from('profiles').select('*')
       ]);
+
+      // تسجيل الأخطاء لكل جدول
+      if (pRes.error) console.error('❌ خطأ جلب المشاريع:', pRes.error.message);
+      if (trRes.error) console.error('❌ خطأ جلب الطلبات الفنية:', trRes.error.message);
+      if (drRes.error) console.error('❌ خطأ جلب الإفراغات:', drRes.error.message);
+      if (pwRes.error) console.error('❌ خطأ جلب أعمال المشاريع:', pwRes.error.message);
+      if (uRes.error) console.error('❌ خطأ جلب المستخدمين:', uRes.error.message);
+
       setProjects(pRes.data?.map(p => ({ ...p, name: p.name || p.title || 'مشروع' })) || []);
       setTechnicalRequests(trRes.data || []);
       setClearanceRequests(drRes.data || []);
       setProjectWorks(pwRes.data || []);
       setAppUsers(uRes.data || []);
-    } catch (e) { console.error("Data refresh error:", e); } 
-    finally { setIsDbLoading(false); }
+
+      console.log('✅ تم جلب البيانات:', {
+        projects: pRes.data?.length || 0,
+        technicalRequests: trRes.data?.length || 0,
+        clearanceRequests: drRes.data?.length || 0,
+        projectWorks: pwRes.data?.length || 0,
+        users: uRes.data?.length || 0
+      });
+    } catch (e: any) {
+      console.error('❌ خطأ عام في جلب البيانات:', e?.message || e);
+    } finally {
+      setIsDbLoading(false);
+    }
   }, [currentUser]);
 
   useEffect(() => {
@@ -162,12 +185,70 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     initAuth();
   }, []);
 
-  useEffect(() => { if (currentUser) refreshData(); }, [currentUser, refreshData]);
+  // ربط اشتراك Real-time لتحديث البيانات تلقائياً
+  useEffect(() => {
+    if (!currentUser) return;
+    refreshData();
+
+    // الاشتراك في التغييرات اللحظية من Supabase
+    const channel = supabase
+      .channel('db-realtime-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'projects' }, () => {
+        console.log('🔔 تحديث لحظي: المشاريع');
+        refreshData();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'technical_requests' }, () => {
+        console.log('🔔 تحديث لحظي: الطلبات الفنية');
+        refreshData();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'deeds_requests' }, () => {
+        console.log('🔔 تحديث لحظي: الإفراغات');
+        refreshData();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'project_works' }, () => {
+        console.log('🔔 تحديث لحظي: أعمال المشاريع');
+        refreshData();
+      })
+      .subscribe((status) => {
+        console.log('📡 حالة Real-time:', status);
+      });
+
+    return () => { supabase.removeChannel(channel); };
+  }, [currentUser, refreshData]);
 
   const login = async (email: string, password: string) => {
     const e = email.toLowerCase();
-    // Immediate demo login for known employee records
+    console.log('🔐 محاولة تسجيل الدخول:', e);
+
+    // ١- محاولة تسجيل الدخول عبر Supabase Auth أولاً
+    if (supabase && supabase.auth) {
+      try {
+        const { data, error } = await supabase.auth.signInWithPassword({ email: e, password });
+        if (!error && data?.user) {
+          console.log('✅ تسجيل دخول ناجح عبر Supabase Auth:', data.user.id);
+          const emp = EMPLOYEES_DATA[e];
+          if (emp) {
+            setCurrentUser({ id: data.user.id, email: e, ...emp });
+          } else {
+            const { data: profile } = await supabase.from('profiles').select('*').eq('id', data.user.id).maybeSingle();
+            if (profile) {
+              setCurrentUser(profile);
+            } else {
+              setCurrentUser({ id: data.user.id, email: e, name: e.split('@')[0], role: 'PR_MANAGER' });
+            }
+          }
+          return data;
+        }
+        // إذا فشل Supabase Auth، نسجل الخطأ ونحاول الوضع التجريبي
+        if (error) console.warn('⚠️ Supabase Auth رفض:', error.message);
+      } catch (err: any) {
+        console.warn('⚠️ خطأ Supabase Auth:', err?.message);
+      }
+    }
+
+    // ٢- الوضع التجريبي (Demo) للموظفين المعروفين
     if (EMPLOYEES_DATA[e]) {
+      console.log('ℹ️ تسجيل دخول تجريبي (Demo):', e);
       const demoId = 'demo-' + e;
       const user = { id: demoId, email: e, ...EMPLOYEES_DATA[e] } as any;
       setCurrentUser(user);
@@ -175,7 +256,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       return { user };
     }
 
-    // Allow any @darwaemaar.com email as a demo user with default role
+    // ٣- السماح لأي بريد @darwaemaar.com كمستخدم تجريبي
     if (e.endsWith('@darwaemaar.com')) {
       const demoId = 'demo-' + e;
       const namePart = e.split('@')[0];
@@ -185,14 +266,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       return { user };
     }
 
-    if (!supabase) throw new Error("Supabase client is not available.");
-    try {
-      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) throw error;
-      return data;
-    } catch (err: any) {
-      throw err;
-    }
+    throw new Error('بيانات تسجيل الدخول غير صحيحة');
   };
 
   const logout = async () => {

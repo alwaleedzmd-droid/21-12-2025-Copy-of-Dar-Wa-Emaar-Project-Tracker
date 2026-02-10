@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Bell, CheckCircle2, Info } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import { useData } from '../contexts/DataContext';
@@ -7,21 +7,40 @@ const NotificationBell = () => {
   const { currentUser } = useData();
   const [notifications, setNotifications] = useState<any[]>([]);
   const [isOpen, setIsOpen] = useState(false);
-  const unreadCount = notifications.filter(n => !n.is_read).length;
+  const [readIds, setReadIds] = useState<Set<string>>(new Set());
+  const unreadCount = notifications.filter(n => !readIds.has(n.id)).length;
+
+  const fetchNotifications = useCallback(async () => {
+    if (!currentUser) return;
+    try {
+      const isDemoUser = currentUser.id?.startsWith('demo-');
+      let query = supabase
+        .from('notifications')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(15);
+
+      // إذا كان المستخدم حقيقي (Supabase Auth)، جلب إشعاراته فقط
+      // إذا كان تجريبي (Demo)، جلب كل الإشعارات
+      if (!isDemoUser) {
+        query = query.eq('user_id', currentUser.id);
+      }
+
+      const { data, error } = await query;
+      if (error) {
+        if (error.code !== '42P01' && error.code !== 'PGRST116') {
+          console.warn('خطأ جلب الإشعارات:', error.message);
+        }
+        return;
+      }
+      if (data) setNotifications(data);
+    } catch (err) {
+      console.warn('خدمة الإشعارات غير متاحة حالياً');
+    }
+  }, [currentUser]);
 
   useEffect(() => {
     if (!currentUser) return;
-
-    // جلب الإشعارات القديمة
-    const fetchNotifications = async () => {
-      const { data } = await supabase
-        .from('notifications')
-        .select('*')
-        .eq('user_id', currentUser.id)
-        .order('created_at', { ascending: false })
-        .limit(10);
-      if (data) setNotifications(data);
-    };
 
     fetchNotifications();
 
@@ -31,22 +50,27 @@ const NotificationBell = () => {
       .on('postgres_changes', { 
         event: 'INSERT', 
         schema: 'public', 
-        table: 'notifications', 
-        filter: `user_id=eq.${currentUser.id}` 
+        table: 'notifications'
       }, (payload) => {
-        setNotifications(prev => [payload.new, ...prev]);
-        // صوت تنبيه خفيف
-        new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3').play();
+        setNotifications(prev => [payload.new as any, ...prev]);
+        try {
+          new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3').play().catch(() => {});
+        } catch {} 
       })
       .subscribe();
 
-    return () => { supabase.removeChannel(channel); };
-  }, [currentUser]);
+    // تحديث دوري كل 30 ثانية
+    const interval = setInterval(fetchNotifications, 30000);
 
-  const markAsRead = async () => {
-    if (unreadCount === 0) return;
-    await supabase.from('notifications').update({ is_read: true }).eq('user_id', currentUser?.id);
-    setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
+    return () => { 
+      supabase.removeChannel(channel); 
+      clearInterval(interval);
+    };
+  }, [currentUser, fetchNotifications]);
+
+  const markAsRead = () => {
+    const allIds = new Set(notifications.map(n => n.id));
+    setReadIds(allIds);
   };
 
   return (
