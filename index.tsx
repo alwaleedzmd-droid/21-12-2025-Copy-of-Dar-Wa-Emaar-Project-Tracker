@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { createRoot } from 'react-dom/client';
-import { BrowserRouter } from 'react-router-dom'; 
+import { HashRouter } from 'react-router-dom'; 
 import App from './App';
 import { DataProvider } from './contexts/DataContext';
 import { NotificationProvider } from './context/NotificationContext';
@@ -28,17 +28,17 @@ try {
 } catch (e) { /* ignore URL parsing errors in older browsers */ }
 
 /**
- * Hard Refactor: Using BrowserRouter for address bar sync.
- * Order: BrowserRouter -> DataProvider (Auth) -> NotificationProvider (Real-time).
+ * Hard Refactor: Using HashRouter to avoid 404 on refresh.
+ * Order: HashRouter -> DataProvider (Auth) -> NotificationProvider (Real-time).
  */
 root.render(
   <React.StrictMode>
-    <BrowserRouter> 
+    <HashRouter> 
       <DataProvider>
         <NotificationProvider>
           <App />
         </NotificationProvider>
       </DataProvider>
-    </BrowserRouter>
+    </HashRouter>
   </React.StrictMode>
 );
