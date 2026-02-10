@@ -147,28 +147,45 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
 
             if (error) throw error;
 
-            if (data) {
+            let resolved = data;
+
+            if (!resolved) {
+                const { data: fallbackData, error: fallbackError } = await supabase
+                    .from('client_archive')
+                    .select('*')
+                    .ilike('id_number', `%${normalizedId}%`)
+                    .limit(1)
+                    .maybeSingle();
+
+                if (fallbackError) throw fallbackError;
+                resolved = fallbackData;
+            }
+
+            if (resolved) {
                 setNewDeedForm((prev: any) => ({
                     ...prev,
-                    client_name: data.customer_name || data.full_name || prev.client_name,
-                    project_name: data.project_name || prev.project_name,
-                    unit_number: data.unit_number || prev.unit_number,
-                    unit_value: data.sale_price || data.unit_price || prev.unit_value,
-                    bank_name: data.bank_name || prev.bank_name,
-                    sakani_support_number: data.housing_contract_number || data.support_contract_number || prev.sakani_support_number,
-                    dob_hijri: data.birth_date || data.dob_hijri || prev.dob_hijri,
-                    mobile: data.mobile_number || data.customer_mobile || prev.mobile,
-                    tax_number: data.tax_number || prev.tax_number,
-                    city: data.city || prev.city,
-                    region: data.region || prev.region
+                    client_name: resolved.customer_name || resolved.full_name || prev.client_name,
+                    project_name: resolved.project_name || prev.project_name,
+                    unit_number: resolved.unit_number || prev.unit_number,
+                    unit_value: resolved.sale_price || resolved.unit_price || prev.unit_value,
+                    bank_name: resolved.bank_name || prev.bank_name,
+                    sakani_support_number: resolved.housing_contract_number || resolved.support_contract_number || prev.sakani_support_number,
+                    dob_hijri: resolved.birth_date || resolved.dob_hijri || prev.dob_hijri,
+                    mobile: resolved.mobile_number || resolved.customer_mobile || prev.mobile,
+                    tax_number: resolved.tax_number || prev.tax_number,
+                    city: resolved.city || prev.city,
+                    region: resolved.region || prev.region
                 }));
                 setAutoFillSuccess(true);
                 setTimeout(() => setAutoFillSuccess(false), 3000);
             } else {
                 setAutoFillSuccess(false);
+                lastFetchedIdRef.current = '';
+                console.warn('لم يتم العثور على بيانات في client_archive للهوية:', normalizedId);
             }
         } catch (err) {
             console.error("🔥 Error in fetchClientDetails:", err);
+            lastFetchedIdRef.current = '';
         } finally {
             setIsAutoFilling(false);
         }
@@ -178,6 +195,7 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
         const idValue = normalizeId(newDeedForm.id_number || '');
         if (idValue.length < 10) {
             setAutoFillSuccess(false);
+            lastFetchedIdRef.current = '';
             return;
         }
 
