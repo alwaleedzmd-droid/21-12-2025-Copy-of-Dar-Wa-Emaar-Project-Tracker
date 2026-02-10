@@ -117,7 +117,10 @@ const ProjectDetailWrapper = ({ projects = [], currentUser }: any) => {
    const fetchWorks = async () => {
      if (!id) return;
      const projectId = Number(id);
-     const projectName = project?.name || project?.title || project?.client || '';
+     const projectNames = [project?.name, project?.title, project?.client]
+       .map((name) => (name || '').trim())
+       .filter(Boolean);
+
      try {
        const { data: byId, error: byIdError } = await supabase
          .from('project_works')
@@ -129,31 +132,54 @@ const ProjectDetailWrapper = ({ projects = [], currentUser }: any) => {
          console.error('Fetch works (by id) error:', byIdError.message);
        }
 
-       if (!projectName) {
-         setProjectWorks(byId || []);
+       let merged = new Map<number, ProjectWork>();
+       (byId || []).forEach((work) => merged.set(work.id, work));
+
+       if (projectNames.length > 0) {
+         const { data: byName, error: byNameError } = await supabase
+           .from('project_works')
+           .select('*')
+           .in('project_name', projectNames)
+           .order('created_at', { ascending: false });
+
+         if (byNameError) {
+           console.error('Fetch works (by name) error:', byNameError.message);
+         }
+
+         (byName || []).forEach((work) => merged.set(work.id, work));
+       }
+
+       if (merged.size > 0) {
+         setProjectWorks(Array.from(merged.values()));
          return;
        }
 
-       const { data: byName, error: byNameError } = await supabase
+       const { data: allWorks, error: allError } = await supabase
          .from('project_works')
          .select('*')
-         .eq('project_name', projectName)
          .order('created_at', { ascending: false });
 
-       if (byNameError) {
-         console.error('Fetch works (by name) error:', byNameError.message);
+       if (allError) {
+         console.error('Fetch works (all) error:', allError.message);
+         setProjectWorks([]);
+         return;
        }
 
-       const merged = new Map<number, ProjectWork>();
-       (byId || []).forEach((work) => merged.set(work.id, work));
-       (byName || []).forEach((work) => merged.set(work.id, work));
-       setProjectWorks(Array.from(merged.values()));
+       const filtered = (allWorks || []).filter((work: any) => {
+         const workProjectId = work.projectId ?? work.project_id ?? work.projectid;
+         if (Number(workProjectId) === projectId) return true;
+         if (!work.project_name) return false;
+         const workName = String(work.project_name).trim();
+         return projectNames.includes(workName);
+       });
+
+       setProjectWorks(filtered);
      } catch (err) {
        console.error('Fetch works error:', err);
      }
    };
 
-   useEffect(() => { fetchWorks(); }, [id]);
+  useEffect(() => { fetchWorks(); }, [id, project?.name, project?.title, project?.client]);
 
    const fetchWorkComments = async (workId: number) => {
      setLoadingComments(true);
