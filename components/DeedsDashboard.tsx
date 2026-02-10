@@ -141,8 +141,9 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
         try {
             const { data, error } = await supabase
                 .from('client_archive')
-                .select('*')
+                .select('id_number, customer_name, mobile_number, project_name, unit_number, sale_price, bank_name, birth_date, housing_contract_number')
                 .eq('id_number', normalizedId)
+                .limit(1)
                 .maybeSingle();
 
             if (error) throw error;
@@ -152,7 +153,7 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
             if (!resolved) {
                 const { data: fallbackData, error: fallbackError } = await supabase
                     .from('client_archive')
-                    .select('*')
+                    .select('id_number, customer_name, mobile_number, project_name, unit_number, sale_price, bank_name, birth_date, housing_contract_number')
                     .ilike('id_number', `%${normalizedId}%`)
                     .limit(1)
                     .maybeSingle();

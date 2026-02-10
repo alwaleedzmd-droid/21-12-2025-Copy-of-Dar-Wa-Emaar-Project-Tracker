@@ -116,10 +116,41 @@ const ProjectDetailWrapper = ({ projects = [], currentUser }: any) => {
 
    const fetchWorks = async () => {
      if (!id) return;
+     const projectId = Number(id);
+     const projectName = project?.name || project?.title || project?.client || '';
      try {
-       const { data } = await supabase.from('project_works').select('*').eq('projectId', Number(id)).order('created_at', { ascending: false });
-       setProjectWorks(data || []);
-     } catch (err) { console.error("Fetch works error:", err); }
+       const { data: byId, error: byIdError } = await supabase
+         .from('project_works')
+         .select('*')
+         .eq('projectId', projectId)
+         .order('created_at', { ascending: false });
+
+       if (byIdError) {
+         console.error('Fetch works (by id) error:', byIdError.message);
+       }
+
+       if (!projectName) {
+         setProjectWorks(byId || []);
+         return;
+       }
+
+       const { data: byName, error: byNameError } = await supabase
+         .from('project_works')
+         .select('*')
+         .eq('project_name', projectName)
+         .order('created_at', { ascending: false });
+
+       if (byNameError) {
+         console.error('Fetch works (by name) error:', byNameError.message);
+       }
+
+       const merged = new Map<number, ProjectWork>();
+       (byId || []).forEach((work) => merged.set(work.id, work));
+       (byName || []).forEach((work) => merged.set(work.id, work));
+       setProjectWorks(Array.from(merged.values()));
+     } catch (err) {
+       console.error('Fetch works error:', err);
+     }
    };
 
    useEffect(() => { fetchWorks(); }, [id]);
@@ -211,9 +242,10 @@ const ProjectDetailWrapper = ({ projects = [], currentUser }: any) => {
      } catch (err: any) { alert("خطأ: " + err.message); } finally { setLoadingComments(false); }
    };
 
-   const handleAddWork = async () => {
+     const handleAddWork = async () => {
        if (!newWorkForm.task_name || !project) return;
-       const { error } = await supabase.from('project_works').insert({ ...newWorkForm, project_name: project.name, projectId: project.id, status: 'in_progress' });
+       const projectName = project.name || project.title || project.client || '';
+       const { error } = await supabase.from('project_works').insert({ ...newWorkForm, project_name: projectName, projectId: project.id, status: 'in_progress' });
        if (!error) { 
          notificationService.send('PR_MANAGER', `🆕 تم تسجيل عمل جديد بمشروع ${project.name}`, `/projects/${id}`, currentUser?.name);
          
