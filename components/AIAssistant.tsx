@@ -67,8 +67,8 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
       const pNameStr = matchedProject.name || matchedProject.title || "مشروع غير مسمى";
 
       // 2. تجميع البيانات من كافة المصادر مع ضمان مطابقة الأنواع (The ID Fix)
-      const relatedWorks = projectWorks?.filter((w: any) => Number(w.projectId || w.project_id) === pId) || [];
-      const relatedTech = technicalRequests?.filter((t: any) => Number(t.project_id || t.projectId) === pId) || [];
+      const relatedWorks = projectWorks?.filter((w: any) => Number(w.projectId ?? w.projectid ?? w.project_id) === pId) || [];
+      const relatedTech = technicalRequests?.filter((t: any) => Number(t.project_id ?? t.projectId ?? t.projectid) === pId) || [];
       
       // مطابقة الإفراغات باسم المشروع لضمان الدقة
       const relatedDeeds = clearanceRequests?.filter((d: any) => {

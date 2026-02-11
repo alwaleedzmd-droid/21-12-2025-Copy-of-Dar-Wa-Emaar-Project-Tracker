@@ -94,12 +94,11 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
 const ProjectDetailWrapper = ({ projects = [], currentUser }: any) => {
    const { id } = useParams();
    const navigate = useNavigate();
-   const { refreshData, logActivity } = useData();
+   const { refreshData, logActivity, projectWorks: allProjectWorks } = useData();
    
    const [isAddWorkOpen, setIsAddWorkOpen] = useState(false);
    const [isWorkDetailOpen, setIsWorkDetailOpen] = useState(false);
    const [selectedWork, setSelectedWork] = useState<ProjectWork | null>(null);
-   const [projectWorks, setProjectWorks] = useState<ProjectWork[]>([]);
    const [workComments, setWorkComments] = useState<any[]>([]);
    const [newComment, setNewComment] = useState('');
    const [loadingComments, setLoadingComments] = useState(false);
@@ -114,72 +113,21 @@ const ProjectDetailWrapper = ({ projects = [], currentUser }: any) => {
    const isManager = ['ADMIN', 'PR_MANAGER'].includes(currentUser?.role || '');
    const isAdmin = currentUser?.role === 'ADMIN';
 
-   const fetchWorks = async () => {
-     if (!id) return;
-     const projectId = Number(id);
-     const projectNames = [project?.name, project?.title, project?.client]
-       .map((name) => (name || '').trim())
+   // استخدام بيانات أعمال المشاريع من DataContext وتصفيتها حسب المشروع الحالي
+   const projectWorks = useMemo(() => {
+     if (!project) return [];
+     const pid = project.id;
+     const projectNames = [project.name, project.title, project.client]
+       .map((n: string | undefined) => (n || '').trim())
        .filter(Boolean);
-
-     try {
-       const { data: byId, error: byIdError } = await supabase
-         .from('project_works')
-         .select('*')
-         .eq('projectId', projectId)
-         .order('created_at', { ascending: false });
-
-       if (byIdError) {
-         console.error('Fetch works (by id) error:', byIdError.message);
-       }
-
-       let merged = new Map<number, ProjectWork>();
-       (byId || []).forEach((work) => merged.set(work.id, work));
-
-       if (projectNames.length > 0) {
-         const { data: byName, error: byNameError } = await supabase
-           .from('project_works')
-           .select('*')
-           .in('project_name', projectNames)
-           .order('created_at', { ascending: false });
-
-         if (byNameError) {
-           console.error('Fetch works (by name) error:', byNameError.message);
-         }
-
-         (byName || []).forEach((work) => merged.set(work.id, work));
-       }
-
-       if (merged.size > 0) {
-         setProjectWorks(Array.from(merged.values()));
-         return;
-       }
-
-       const { data: allWorks, error: allError } = await supabase
-         .from('project_works')
-         .select('*')
-         .order('created_at', { ascending: false });
-
-       if (allError) {
-         console.error('Fetch works (all) error:', allError.message);
-         setProjectWorks([]);
-         return;
-       }
-
-       const filtered = (allWorks || []).filter((work: any) => {
-         const workProjectId = work.projectId ?? work.project_id ?? work.projectid;
-         if (Number(workProjectId) === projectId) return true;
-         if (!work.project_name) return false;
-         const workName = String(work.project_name).trim();
-         return projectNames.includes(workName);
-       });
-
-       setProjectWorks(filtered);
-     } catch (err) {
-       console.error('Fetch works error:', err);
-     }
-   };
-
-  useEffect(() => { fetchWorks(); }, [id, project?.name, project?.title, project?.client]);
+     
+     return (allProjectWorks || []).filter((w: any) => {
+       const wId = w.projectId ?? w.projectid ?? w.project_id;
+       if (Number(wId) === pid) return true;
+       if (!w.project_name) return false;
+       return projectNames.includes(String(w.project_name).trim());
+     });
+   }, [allProjectWorks, project]);
 
    const fetchWorkComments = async (workId: number) => {
      setLoadingComments(true);
@@ -208,7 +156,7 @@ const ProjectDetailWrapper = ({ projects = [], currentUser }: any) => {
 
       notificationService.send('PR_MANAGER', `تم استيراد ${data.length} عمل لمشروع ${project.name}`, `/projects/${id}`, currentUser?.name);
       logActivity?.('استيراد إكسل أعمال', `مشروع ${project.name}: ${data.length} عمل`, 'text-blue-500');
-      fetchWorks();
+      refreshData();
       alert(`تم استيراد ${data.length} سجل بنجاح ✅`);
     } catch (err: any) {
       alert("فشل الاستيراد: " + err.message);
@@ -232,7 +180,6 @@ const ProjectDetailWrapper = ({ projects = [], currentUser }: any) => {
 
        setSelectedWork({ ...selectedWork, status });
        logActivity?.('تحديث حالة عمل', `${selectedWork.task_name} -> ${status}`, 'text-blue-500');
-       fetchWorks();
        refreshData();
      } catch (err: any) { alert("فشل التحديث: " + err.message); } finally { setIsActionLoading(false); }
    };
@@ -245,7 +192,6 @@ const ProjectDetailWrapper = ({ projects = [], currentUser }: any) => {
        if (error) throw error;
        logActivity?.('حذف عمل مشروع', taskName, 'text-orange-500');
        setIsWorkDetailOpen(false);
-       fetchWorks();
        refreshData();
      } catch (err: any) { alert("خطأ أثناء الحذف: " + err.message); }
    };
@@ -277,7 +223,6 @@ const ProjectDetailWrapper = ({ projects = [], currentUser }: any) => {
          
          setIsAddWorkOpen(false); 
          setNewWorkForm({ task_name: '', authority: '', department: '', notes: '' });
-         fetchWorks();
          refreshData(); 
        }
    };

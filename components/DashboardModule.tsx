@@ -95,7 +95,10 @@ const DashboardModule: React.FC<DashboardProps> = ({
   // حساب تقدم المشاريع الفردية للعرض الجانبي
   const topProjects = useMemo(() => {
       return (projects || []).slice(0, 4).map(p => {
-          const projectTasks = (projectWorks || []).filter(w => w?.projectId === p?.id);
+          const projectTasks = (projectWorks || []).filter((w: any) => {
+            const wId = w?.projectId ?? w?.projectid ?? w?.project_id;
+            return Number(wId) === p?.id;
+          });
           const completed = projectTasks.filter(w => w?.status === 'completed' || w?.status === 'منجز').length;
           const prog = projectTasks.length > 0 ? Math.round((completed / projectTasks.length) * 100) : (p?.progress || 0);
           return { ...p, calculatedProgress: prog };

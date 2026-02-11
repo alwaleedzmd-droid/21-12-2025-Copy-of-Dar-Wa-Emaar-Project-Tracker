@@ -98,7 +98,11 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setProjects(pRes.data?.map(p => ({ ...p, name: p.name || p.title || 'مشروع' })) || []);
       setTechnicalRequests(trRes.data || []);
       setClearanceRequests(drRes.data || []);
-      setProjectWorks(pwRes.data || []);
+      // تطبيع بيانات أعمال المشاريع لضمان وجود حقل projectId بشكل صحيح
+      setProjectWorks((pwRes.data || []).map((w: any) => ({
+        ...w,
+        projectId: w.projectId ?? w.projectid ?? w.project_id ?? null
+      })));
       setAppUsers(uRes.data || []);
 
       console.log('✅ تم جلب البيانات:', {
