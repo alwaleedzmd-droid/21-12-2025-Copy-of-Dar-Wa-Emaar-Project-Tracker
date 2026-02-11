@@ -4,7 +4,6 @@ import { createRoot } from 'react-dom/client';
 import { HashRouter } from 'react-router-dom'; 
 import App from './App';
 import { DataProvider } from './contexts/DataContext';
-import { NotificationProvider } from './context/NotificationContext';
 
 const rootElement = document.getElementById('root');
 if (!rootElement) throw new Error("Failed to find root element");
@@ -29,15 +28,12 @@ try {
 
 /**
  * Hard Refactor: Using HashRouter to avoid 404 on refresh.
- * Order: HashRouter -> DataProvider (Auth) -> NotificationProvider (Real-time).
  */
 root.render(
   <React.StrictMode>
     <HashRouter> 
       <DataProvider>
-        <NotificationProvider>
-          <App />
-        </NotificationProvider>
+        <App />
       </DataProvider>
     </HashRouter>
   </React.StrictMode>
