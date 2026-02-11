@@ -80,13 +80,19 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setIsDbLoading(true);
     console.log('🔄 جاري جلب البيانات من Supabase...');
     try {
-      const [pRes, trRes, drRes, pwRes, uRes] = await Promise.all([
+      const [pRes, trRes, drRes, uRes] = await Promise.all([
         supabase.from('projects').select('*').order('id', { ascending: true }),
         supabase.from('technical_requests').select('*').order('created_at', { ascending: false }),
         supabase.from('deeds_requests').select('*').order('created_at', { ascending: false }),
-        supabase.from('project_works').select('*').order('created_at', { ascending: false }),
         supabase.from('profiles').select('*')
       ]);
+
+      // جلب أعمال المشاريع بشكل منفصل مع محاولة بديلة
+      let pwRes = await supabase.from('project_works').select('*').order('id', { ascending: false });
+      if (pwRes.error) {
+        console.warn('⚠️ فشل جلب project_works مع الترتيب، إعادة المحاولة بدون ترتيب...');
+        pwRes = await supabase.from('project_works').select('*');
+      }
 
       // تسجيل الأخطاء لكل جدول
       if (pRes.error) console.error('❌ خطأ جلب المشاريع:', pRes.error.message);
@@ -95,23 +101,37 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (pwRes.error) console.error('❌ خطأ جلب أعمال المشاريع:', pwRes.error.message);
       if (uRes.error) console.error('❌ خطأ جلب المستخدمين:', uRes.error.message);
 
+      // سجل بنية البيانات للتشخيص
+      if (pwRes.data && pwRes.data.length > 0) {
+        console.log('📋 project_works أعمدة الجدول:', Object.keys(pwRes.data[0]));
+        console.log('📋 project_works عينة أول سجل:', JSON.stringify(pwRes.data[0]));
+      } else {
+        console.warn('⚠️ project_works: لا توجد بيانات! error:', pwRes.error?.message || 'لا يوجد خطأ', 'data:', pwRes.data);
+      }
+
       setProjects(pRes.data?.map(p => ({ ...p, name: p.name || p.title || 'مشروع' })) || []);
       setTechnicalRequests(trRes.data || []);
       setClearanceRequests(drRes.data || []);
       // تطبيع بيانات أعمال المشاريع لضمان وجود حقل projectId بشكل صحيح
-      setProjectWorks((pwRes.data || []).map((w: any) => ({
+      const normalizedWorks = (pwRes.data || []).map((w: any) => ({
         ...w,
         projectId: w.projectId ?? w.projectid ?? w.project_id ?? null
-      })));
+      }));
+      setProjectWorks(normalizedWorks);
       setAppUsers(uRes.data || []);
 
       console.log('✅ تم جلب البيانات:', {
         projects: pRes.data?.length || 0,
         technicalRequests: trRes.data?.length || 0,
         clearanceRequests: drRes.data?.length || 0,
-        projectWorks: pwRes.data?.length || 0,
+        projectWorks: normalizedWorks.length,
         users: uRes.data?.length || 0
       });
+
+      if (normalizedWorks.length > 0) {
+        const sample = normalizedWorks[0];
+        console.log('📋 أعمال المشاريع - عينة بعد التطبيع:', { id: sample.id, projectId: sample.projectId, project_name: sample.project_name, task_name: sample.task_name });
+      }
     } catch (e: any) {
       console.error('❌ خطأ عام في جلب البيانات:', e?.message || e);
     } finally {

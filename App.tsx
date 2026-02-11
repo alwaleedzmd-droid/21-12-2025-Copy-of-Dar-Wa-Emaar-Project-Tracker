@@ -113,21 +113,115 @@ const ProjectDetailWrapper = ({ projects = [], currentUser }: any) => {
    const isManager = ['ADMIN', 'PR_MANAGER'].includes(currentUser?.role || '');
    const isAdmin = currentUser?.role === 'ADMIN';
 
+   // جلب الأعمال مباشرة من Supabase كبديل احتياطي
+   const [localWorks, setLocalWorks] = useState<ProjectWork[]>([]);
+   const [localWorksFetched, setLocalWorksFetched] = useState(false);
+
    // استخدام بيانات أعمال المشاريع من DataContext وتصفيتها حسب المشروع الحالي
-   const projectWorks = useMemo(() => {
+   const filteredWorks = useMemo(() => {
      if (!project) return [];
-     const pid = project.id;
+     const pid = Number(project.id);
      const projectNames = [project.name, project.title, project.client]
        .map((n: string | undefined) => (n || '').trim())
        .filter(Boolean);
      
-     return (allProjectWorks || []).filter((w: any) => {
-       const wId = w.projectId ?? w.projectid ?? w.project_id;
-       if (Number(wId) === pid) return true;
+     const result = (allProjectWorks || []).filter((w: any) => {
+       const wId = Number(w.projectId ?? w.projectid ?? w.project_id ?? -1);
+       if (wId === pid) return true;
        if (!w.project_name) return false;
        return projectNames.includes(String(w.project_name).trim());
      });
+
+     console.log('🔍 تصفية أعمال المشروع:', {
+       projectId: pid,
+       projectNames,
+       totalWorksInContext: (allProjectWorks || []).length,
+       matchedWorks: result.length
+     });
+
+     return result;
    }, [allProjectWorks, project]);
+
+   // جلب مباشر من قاعدة البيانات في حال لم تعمل التصفية
+   useEffect(() => {
+     const fetchDirectWorks = async () => {
+       if (!project || filteredWorks.length > 0) {
+         setLocalWorks([]);
+         setLocalWorksFetched(true);
+         return;
+       }
+       // إذا لم تجد التصفية أي نتائج، جلب مباشر
+       console.log('⚠️ لم يتم العثور على أعمال عبر التصفية، جلب مباشر من Supabase...');
+       try {
+         const pid = Number(project.id);
+         const projectNames = [project.name, project.title, project.client].filter(Boolean);
+
+         // محاولة 1: بواسطة projectId
+         let { data, error } = await supabase
+           .from('project_works')
+           .select('*')
+           .or(`projectId.eq.${pid},projectid.eq.${pid},project_id.eq.${pid}`);
+         
+         if (error) {
+           console.warn('⚠️ خطأ الجلب بـ projectId:', error.message);
+           // محاولة 2: بدون فلتر
+           const res2 = await supabase.from('project_works').select('*');
+           if (!res2.error && res2.data) {
+             data = res2.data.filter((w: any) => {
+               const wId = Number(w.projectId ?? w.projectid ?? w.project_id ?? w['"projectId"'] ?? -1);
+               if (wId === pid) return true;
+               if (!w.project_name) return false;
+               return projectNames.includes(String(w.project_name).trim());
+             });
+           }
+         }
+
+         // محاولة 3: بواسطة project_name
+         if (!data || data.length === 0) {
+           if (projectNames.length > 0) {
+             const res3 = await supabase
+               .from('project_works')
+               .select('*')
+               .in('project_name', projectNames);
+             if (!res3.error && res3.data) {
+               data = res3.data;
+             }
+           }
+         }
+
+         // محاولة 4: جلب جميع الأعمال والتصفية يدوياً
+         if (!data || data.length === 0) {
+           const res4 = await supabase.from('project_works').select('*');
+           if (!res4.error && res4.data && res4.data.length > 0) {
+             console.log('📋 جميع الأعمال - أعمدة:', Object.keys(res4.data[0]));
+             console.log('📋 جميع الأعمال - عينة:', JSON.stringify(res4.data[0]));
+             data = res4.data.filter((w: any) => {
+               const wId = Number(w.projectId ?? w.projectid ?? w.project_id ?? -1);
+               if (wId === pid) return true;
+               if (!w.project_name) return false;
+               return projectNames.includes(String(w.project_name).trim());
+             });
+             console.log(`📋 بعد التصفية اليدوية: ${data.length} من ${res4.data.length}`);
+           }
+         }
+
+         const normalized = (data || []).map((w: any) => ({
+           ...w,
+           projectId: w.projectId ?? w.projectid ?? w.project_id ?? null
+         }));
+         console.log('✅ جلب مباشر:', normalized.length, 'عمل');
+         setLocalWorks(normalized);
+       } catch (err) {
+         console.error('❌ خطأ الجلب المباشر:', err);
+       } finally {
+         setLocalWorksFetched(true);
+       }
+     };
+     fetchDirectWorks();
+   }, [project, filteredWorks.length]);
+
+   // دمج النتائج: أولوية للتصفية من DataContext، ثم الجلب المباشر
+   const projectWorks = filteredWorks.length > 0 ? filteredWorks : localWorks;
 
    const fetchWorkComments = async (workId: number) => {
      setLoadingComments(true);
@@ -156,6 +250,7 @@ const ProjectDetailWrapper = ({ projects = [], currentUser }: any) => {
 
       notificationService.send('PR_MANAGER', `تم استيراد ${data.length} عمل لمشروع ${project.name}`, `/projects/${id}`, currentUser?.name);
       logActivity?.('استيراد إكسل أعمال', `مشروع ${project.name}: ${data.length} عمل`, 'text-blue-500');
+      setLocalWorksFetched(false);
       refreshData();
       alert(`تم استيراد ${data.length} سجل بنجاح ✅`);
     } catch (err: any) {
@@ -180,6 +275,7 @@ const ProjectDetailWrapper = ({ projects = [], currentUser }: any) => {
 
        setSelectedWork({ ...selectedWork, status });
        logActivity?.('تحديث حالة عمل', `${selectedWork.task_name} -> ${status}`, 'text-blue-500');
+       setLocalWorksFetched(false);
        refreshData();
      } catch (err: any) { alert("فشل التحديث: " + err.message); } finally { setIsActionLoading(false); }
    };
@@ -192,6 +288,7 @@ const ProjectDetailWrapper = ({ projects = [], currentUser }: any) => {
        if (error) throw error;
        logActivity?.('حذف عمل مشروع', taskName, 'text-orange-500');
        setIsWorkDetailOpen(false);
+       setLocalWorksFetched(false);
        refreshData();
      } catch (err: any) { alert("خطأ أثناء الحذف: " + err.message); }
    };
@@ -223,6 +320,7 @@ const ProjectDetailWrapper = ({ projects = [], currentUser }: any) => {
          
          setIsAddWorkOpen(false); 
          setNewWorkForm({ task_name: '', authority: '', department: '', notes: '' });
+         setLocalWorksFetched(false);
          refreshData(); 
        }
    };
