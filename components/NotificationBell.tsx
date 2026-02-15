@@ -19,12 +19,9 @@ const NotificationBell = () => {
         .order('created_at', { ascending: false })
         .limit(15);
 
-      if (!isDemoUser) {
-        // مستخدم حقيقي: جلب إشعاراته الشخصية + الإشعارات العامة لدوره
-        query = query.or(`user_id.eq.${currentUser.id},and(user_id.is.null,target_role.eq.${currentUser.role})`);
-      } else {
-        // مستخدم تجريبي: جلب الإشعارات العامة الموجهة لدوره فقط
-        query = query.or(`target_role.eq.${currentUser.role},target_role.is.null`);
+      // جلب الإشعارات الموجهة لدور المستخدم فقط
+      if (currentUser.role) {
+        query = query.eq('target_role', currentUser.role);
       }
 
       const { data, error } = await query;
@@ -72,13 +69,12 @@ const NotificationBell = () => {
   const markAsRead = async () => {
     if (unreadCount === 0) return;
     try {
-      const isDemoUser = currentUser?.id?.startsWith('demo-');
-      if (isDemoUser) {
-        // للمستخدم التجريبي نحدث الكل
-        await supabase.from('notifications').update({ is_read: true }).eq('is_read', false);
-      } else {
-        await supabase.from('notifications').update({ is_read: true }).eq('user_id', currentUser?.id).eq('is_read', false);
-      }
+      // تحديث فقط الإشعارات الموجهة لدور هذا المستخدم
+      await supabase
+        .from('notifications')
+        .update({ is_read: true })
+        .eq('target_role', currentUser?.role)
+        .eq('is_read', false);
       setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
     } catch (err) {
       console.warn('خطأ تحديث حالة الإشعارات:', err);
