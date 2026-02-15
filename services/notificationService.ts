@@ -7,27 +7,33 @@ import { UserRole } from '../types';
  * تم تصميمها لتكون مستقلة تماماً (Decoupled) ليتم استدعاؤها من أي مكان في النظام
  * متوافقة مع هيكل جدول notifications في Supabase:
  * id (uuid), created_at (timestamptz), user_id (uuid), title (text), message (text)
+ *
+ * منطق التوجيه:
+ * - CONVEYANCE ينشئ طلب → إشعار لـ PR_MANAGER + ADMIN
+ * - PR_MANAGER يعدل/يعلق → إشعار لـ CONVEYANCE + ADMIN
  */
 export const notificationService = {
   /**
    * إرسال تنبيه جديد لجهة محددة
-   * @param targetRole الدور المستهدف (ADMIN, PR_MANAGER, etc.)
+   * @param targetRole الدور المستهدف (ADMIN, PR_MANAGER, CONVEYANCE, etc.)
    * @param message نص الرسالة
    * @param linkUrl الرابط الذي يوجه إليه التنبيه عند النقر
    * @param senderName اسم المرسل (اختياري)
    */
   send: async (
-    targetRole: UserRole,
+    targetRole: UserRole | UserRole[],
     message: string,
     linkUrl: string = '/',
     senderName: string = 'نظام دار وإعمار'
   ) => {
     try {
-      // جلب المستخدمين المستهدفين حسب الدور من جدول profiles
+      const roles = Array.isArray(targetRole) ? targetRole : [targetRole];
+
+      // جلب المستخدمين المستهدفين حسب الأدوار من جدول profiles
       const { data: targetUsers } = await supabase
         .from('profiles')
         .select('id, role')
-        .eq('role', targetRole);
+        .in('role', roles);
 
       if (targetUsers && targetUsers.length > 0) {
         // إرسال إشعار لكل مستخدم بالدور المطلوب
@@ -36,6 +42,7 @@ export const notificationService = {
           title: senderName,
           message: message,
           link: linkUrl,
+          target_role: user.role,
           is_read: false,
           created_at: new Date().toISOString()
         }));
@@ -47,21 +54,24 @@ export const notificationService = {
         if (error && error.code !== '42P01') {
           console.warn('Notification Insert Error:', error.message);
         }
-      } else {
-        // إذا لم يوجد مستخدمون بالدور، إرسال بدون user_id
-        const { error } = await supabase
-          .from('notifications')
-          .insert([{
-            title: `${senderName} → ${targetRole}`,
-            message: message,
-            link: linkUrl,
-            is_read: false,
-            created_at: new Date().toISOString()
-          }]);
+      }
 
-        if (error && error.code !== '42P01' && error.code !== '23502') {
-          console.warn('Notification Bridge Error:', error.message);
-        }
+      // دائماً إنشاء إشعار عام (بدون user_id) حتى يظهر للمستخدمين التجريبيين (Demo)
+      const generalNotifications = roles.map(role => ({
+        title: senderName,
+        message: message,
+        link: linkUrl,
+        target_role: role,
+        is_read: false,
+        created_at: new Date().toISOString()
+      }));
+
+      const { error: genError } = await supabase
+        .from('notifications')
+        .insert(generalNotifications);
+
+      if (genError && genError.code !== '42P01' && genError.code !== '23502') {
+        console.warn('Notification General Error:', genError.message);
       }
     } catch (err) {
       // ضمان عدم تعطيل العمليات الرئيسية في حال فشل خدمة التنبيهات

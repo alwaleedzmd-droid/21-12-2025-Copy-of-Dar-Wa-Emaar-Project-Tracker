@@ -79,9 +79,19 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
     // إزالة الرتب القديمة وحصر الصلاحية في الرتب المطلوبة
     const isAuthorizedToManage = ['ADMIN', 'PR_MANAGER', 'CONVEYANCE'].includes(currentUserRole || '');
 
+    /**
+     * إرسال إشعار ذكي حسب دور المرسل:
+     * - CONVEYANCE → إشعار لـ PR_MANAGER و ADMIN
+     * - PR_MANAGER / ADMIN → إشعار لـ CONVEYANCE
+     */
     const sendAppNotification = async (title: string, message: string) => {
+        const senderRole = currentUserRole || currentUser?.role;
+        const targetRoles: any[] = senderRole === 'CONVEYANCE'
+            ? ['PR_MANAGER', 'ADMIN']
+            : ['CONVEYANCE'];
+
         await notificationService.send(
-            'PR_MANAGER',
+            targetRoles,
             `📢 ${title}: ${message}`,
             '/deeds',
             currentUserName || 'نظام الإفراغات'
@@ -248,6 +258,9 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
 
             await sendAppNotification('تعليق جديد', `تم إضافة ملاحظة على طلب العميل ${selectedDeed.client_name}`);
 
+            // تحديث updated_at لإظهار مؤشر التحديث الجديد
+            await supabase.from('deeds_requests').update({ updated_at: new Date().toISOString() }).eq('id', selectedDeed.id);
+
             setNewComment('');
             fetchComments(selectedDeed.id);
         } catch (err: any) {
@@ -258,12 +271,12 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
     const handleUpdateStatus = async (status: string) => {
         if (!selectedDeed || !isAuthorizedToManage) return;
         try {
-            const { error } = await supabase.from('deeds_requests').update({ status }).eq('id', selectedDeed.id);
+            const { error } = await supabase.from('deeds_requests').update({ status, updated_at: new Date().toISOString() }).eq('id', selectedDeed.id);
             if (error) throw error;
             
             await sendAppNotification('تحديث حالة إفراغ', `تم تغيير حالة طلب ${selectedDeed.client_name} إلى (${status})`);
             
-            setSelectedDeed({ ...selectedDeed, status });
+            setSelectedDeed({ ...selectedDeed, status, updated_at: new Date().toISOString() });
             fetchDeeds();
             logActivity?.('تحديث حالة إفراغ', `${selectedDeed.client_name} -> ${status}`, 'text-blue-500');
         } catch (err: any) {
@@ -441,11 +454,26 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
                             ) : filteredDeeds.length === 0 ? (
                                 <tr><td colSpan={5} className="p-20 text-center text-gray-300 font-bold italic">لا توجد سجلات</td></tr>
                             ) : (
-                                filteredDeeds.map((deed) => (
+                                filteredDeeds.map((deed) => {
+                                    // مؤشر التحديث الجديد: إذا تم التحديث خلال آخر 24 ساعة
+                                    const isRecentlyUpdated = deed.updated_at && 
+                                        (new Date().getTime() - new Date(deed.updated_at).getTime()) < 24 * 60 * 60 * 1000 &&
+                                        deed.updated_at !== deed.created_at;
+                                    return (
                                     <tr key={deed.id} className="hover:bg-gray-50 cursor-pointer transition-colors" onClick={() => handleOpenManage(deed)}>
                                         <td className="p-6">
-                                            <p className="font-bold text-[#1B2B48] text-sm">{deed.client_name}</p>
-                                            <p className="text-[10px] text-gray-400 font-bold">{deed.id_number}</p>
+                                            <div className="flex items-center gap-2">
+                                                <div>
+                                                    <p className="font-bold text-[#1B2B48] text-sm">{deed.client_name}</p>
+                                                    <p className="text-[10px] text-gray-400 font-bold">{deed.id_number}</p>
+                                                </div>
+                                                {isRecentlyUpdated && (
+                                                    <span className="flex items-center gap-1 px-2 py-0.5 bg-orange-50 text-[#E95D22] rounded-lg text-[9px] font-black border border-orange-100 animate-pulse">
+                                                        <Activity size={10} />
+                                                        تحديث
+                                                    </span>
+                                                )}
+                                            </div>
                                         </td>
                                         <td className="p-6">
                                             <p className="text-sm font-bold text-[#1B2B48]">{deed.project_name}</p>
@@ -466,7 +494,8 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
                                             <ChevronDown size={16} className="text-gray-300" />
                                         </td>
                                     </tr>
-                                ))
+                                    );
+                                })
                             )}
                         </tbody>
                     </table>

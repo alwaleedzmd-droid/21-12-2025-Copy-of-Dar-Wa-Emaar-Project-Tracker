@@ -19,10 +19,12 @@ const NotificationBell = () => {
         .order('created_at', { ascending: false })
         .limit(15);
 
-      // إذا كان المستخدم حقيقي (Supabase Auth)، جلب إشعاراته فقط
-      // إذا كان تجريبي (Demo)، جلب كل الإشعارات
       if (!isDemoUser) {
-        query = query.eq('user_id', currentUser.id);
+        // مستخدم حقيقي: جلب إشعاراته الشخصية + الإشعارات العامة لدوره
+        query = query.or(`user_id.eq.${currentUser.id},and(user_id.is.null,target_role.eq.${currentUser.role})`);
+      } else {
+        // مستخدم تجريبي: جلب الإشعارات العامة الموجهة لدوره فقط
+        query = query.or(`target_role.eq.${currentUser.role},target_role.is.null`);
       }
 
       const { data, error } = await query;
