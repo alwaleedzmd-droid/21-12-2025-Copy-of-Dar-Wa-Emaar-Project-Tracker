@@ -43,7 +43,7 @@ const EMPLOYEES_DATA: Record<string, { name: string; role: UserRole }> = {
   'hmaqel@darwaemaar.com': { name: 'حمزة عقيل', role: 'TECHNICAL' },
   
   // موظفو الإفراغات (CONVEYANCE)
-  'nalmaliki@darwaemaar.com': { name: 'نورة المالكي', role: 'CONVEYANCE' },
+  'nalmalki@darwaemaar.com': { name: 'نورة المالكي', role: 'CONVEYANCE' },
   'saalfahad@darwaemaar.com': { name: 'سارة الفهد', role: 'CONVEYANCE' },
   'tmashari@darwaemaar.com': { name: 'تماني المشاري', role: 'CONVEYANCE' },
   'shalmalki@darwaemaar.com': { name: 'شذى المالكي', role: 'CONVEYANCE' },
