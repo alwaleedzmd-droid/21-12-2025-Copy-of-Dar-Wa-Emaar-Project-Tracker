@@ -2,12 +2,13 @@
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { useLocation } from 'react-router';
 import { supabase } from '../supabaseClient'; 
+import * as XLSX from 'xlsx';
 import { 
   Plus, Search, CheckCircle2, Clock, 
   ChevronDown, User as UserIcon, 
   MessageSquare, Send, Loader2, XCircle, Activity,
   Sparkles, FileSpreadsheet, Calendar, CreditCard,
-  Building2, Phone, MapPin, FileText, Landmark, Sheet
+  Building2, Phone, MapPin, FileText, Landmark, Sheet, Download
 } from 'lucide-react';
 // Fix: Removed ActivityLog import as it is not exported from DataContext
 import { useData } from '../contexts/DataContext';
@@ -321,6 +322,70 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
         );
     }, [deeds, searchQuery]);
 
+    const handleExportExcel = () => {
+        if (filteredDeeds.length === 0) {
+            alert('لا توجد بيانات للتصدير');
+            return;
+        }
+
+        const exportData = filteredDeeds.map((deed, index) => ({
+            '#': index + 1,
+            'اسم المستفيد': deed.client_name || '',
+            'هوية المستفيد': deed.id_number || '',
+            'رقم جوال المستفيد': deed.mobile || '',
+            'المنطقة': deed.region || '',
+            'مدينة العقار': deed.city || '',
+            'اسم المشروع': deed.project_name || '',
+            'رقم المخطط': deed.plan_number || '',
+            'رقم الوحدة': deed.unit_number || '',
+            'رقم الصك القديم': deed.old_deed_number || '',
+            'تاريخ الصك': deed.deed_date || '',
+            'تاريخ الميلاد (هجري)': deed.birth_date || deed.dob_hijri || '',
+            'قيمة الوحدة': deed.unit_value || 0,
+            'الرقم الضريبي': deed.tax_number || '',
+            'الجهة التمويلية': deed.bank_name || '',
+            'نوع العقد التمويلي': deed.contract_type || '',
+            'رقم الصك الجديد': deed.new_deed_number || '',
+            'تاريخ الصك الجديد': deed.new_deed_date || '',
+            'رقم عقد الدعم': deed.sakani_support_number || '',
+            'الحالة': deed.status || '',
+            'مسجل بواسطة': deed.submitted_by || '',
+        }));
+
+        const worksheet = XLSX.utils.json_to_sheet(exportData);
+
+        // Set RTL and column widths
+        worksheet['!cols'] = [
+            { wch: 5 },   // #
+            { wch: 25 },  // اسم المستفيد
+            { wch: 15 },  // هوية المستفيد
+            { wch: 15 },  // رقم جوال
+            { wch: 12 },  // المنطقة
+            { wch: 12 },  // المدينة
+            { wch: 20 },  // المشروع
+            { wch: 12 },  // رقم المخطط
+            { wch: 12 },  // رقم الوحدة
+            { wch: 15 },  // الصك القديم
+            { wch: 14 },  // تاريخ الصك
+            { wch: 14 },  // الميلاد
+            { wch: 15 },  // القيمة
+            { wch: 15 },  // الضريبي
+            { wch: 15 },  // البنك
+            { wch: 15 },  // نوع العقد
+            { wch: 15 },  // الصك الجديد
+            { wch: 14 },  // تاريخ الجديد
+            { wch: 15 },  // عقد الدعم
+            { wch: 10 },  // الحالة
+            { wch: 18 },  // مسجل بواسطة
+        ];
+
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, 'سجل الإفراغات');
+
+        const today = new Date().toISOString().split('T')[0];
+        XLSX.writeFile(workbook, `سجل_الإفراغات_${today}.xlsx`);
+    };
+
     return (
         <div className="space-y-8 animate-in fade-in duration-500 font-cairo text-right" dir="rtl">
              <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-white p-6 rounded-[35px] border border-gray-100 shadow-sm">
@@ -330,6 +395,13 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
                 </div>
                 <div className="flex items-center gap-3">
                     <input type="file" ref={excelInputRef} hidden accept=".xlsx, .xls" onChange={handleExcelImport} />
+                    <button 
+                      onClick={handleExportExcel}
+                      className="flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-100 text-gray-600 rounded-xl font-bold text-sm hover:bg-gray-50 transition-all shadow-sm"
+                    >
+                      <Download size={16} className="text-blue-600" />
+                      تحميل إكسل
+                    </button>
                     <button 
                       onClick={() => excelInputRef.current?.click()}
                       disabled={isBulkLoading}
