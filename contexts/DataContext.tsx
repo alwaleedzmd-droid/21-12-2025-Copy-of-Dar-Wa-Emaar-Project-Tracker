@@ -244,40 +244,51 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const e = email.toLowerCase();
     console.log('🔐 محاولة تسجيل الدخول:', e);
 
-    // ١- محاولة تسجيل الدخول عبر Supabase Auth أولاً
-    if (supabase && supabase.auth) {
-      try {
-        const { data, error } = await supabase.auth.signInWithPassword({ email: e, password });
-        if (!error && data?.user) {
-          console.log('✅ تسجيل دخول ناجح عبر Supabase Auth:', data.user.id);
-          const emp = EMPLOYEES_DATA[e];
-          if (emp) {
-            setCurrentUser({ id: data.user.id, email: e, ...emp });
-          } else {
-            const { data: profile } = await supabase.from('profiles').select('*').eq('id', data.user.id).maybeSingle();
-            if (profile) {
-              setCurrentUser(profile);
-            } else {
-              setCurrentUser({ id: data.user.id, email: e, name: e.split('@')[0], role: 'PR_MANAGER' });
-            }
-          }
-          return data;
-        }
-        // إذا فشل Supabase Auth، نسجل الخطأ ونحاول الوضع التجريبي
-        if (error) console.warn('⚠️ Supabase Auth رفض:', error.message);
-      } catch (err: any) {
-        console.warn('⚠️ خطأ Supabase Auth:', err?.message);
-      }
-    }
-
-    // ٢- الوضع التجريبي (Demo) للموظفين المعروفين
+    // ١- للموظفين المعروفين: تسجيل دخول تجريبي فوري (بدون انتظار Supabase)
     if (EMPLOYEES_DATA[e]) {
+      // محاولة Supabase Auth مع timeout قصير (3 ثوانٍ)
+      if (supabase && supabase.auth) {
+        try {
+          const authPromise = supabase.auth.signInWithPassword({ email: e, password });
+          const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000));
+          const { data, error } = await Promise.race([authPromise, timeoutPromise]) as any;
+          if (!error && data?.user) {
+            console.log('✅ تسجيل دخول ناجح عبر Supabase Auth:', data.user.id);
+            setCurrentUser({ id: data.user.id, email: e, ...EMPLOYEES_DATA[e] });
+            return data;
+          }
+        } catch (err: any) {
+          console.warn('⚠️ Supabase Auth timeout/error، الانتقال للوضع التجريبي:', err?.message);
+        }
+      }
+
+      // تسجيل دخول تجريبي
       console.log('ℹ️ تسجيل دخول تجريبي (Demo):', e);
       const demoId = 'demo-' + e;
       const user = { id: demoId, email: e, ...EMPLOYEES_DATA[e] } as any;
       setCurrentUser(user);
       try { localStorage.setItem('dar_demo_session', JSON.stringify({ id: demoId, email: e })); } catch (err) { /* ignore */ }
       return { user };
+    }
+
+    // ٢- محاولة تسجيل الدخول عبر Supabase Auth للمستخدمين غير المعروفين
+    if (supabase && supabase.auth) {
+      try {
+        const { data, error } = await supabase.auth.signInWithPassword({ email: e, password });
+        if (!error && data?.user) {
+          console.log('✅ تسجيل دخول ناجح عبر Supabase Auth:', data.user.id);
+          const { data: profile } = await supabase.from('profiles').select('*').eq('id', data.user.id).maybeSingle();
+          if (profile) {
+            setCurrentUser(profile);
+          } else {
+            setCurrentUser({ id: data.user.id, email: e, name: e.split('@')[0], role: 'PR_MANAGER' });
+          }
+          return data;
+        }
+        if (error) console.warn('⚠️ Supabase Auth رفض:', error.message);
+      } catch (err: any) {
+        console.warn('⚠️ خطأ Supabase Auth:', err?.message);
+      }
     }
 
     // ٣- السماح لأي بريد @darwaemaar.com كمستخدم تجريبي

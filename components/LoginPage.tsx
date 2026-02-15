@@ -17,7 +17,7 @@ const LoginPage: React.FC = () => {
 
     try {
       await login(email.toLowerCase().trim(), password);
-      window.location.href = '/';
+      // لا حاجة لإعادة تحميل الصفحة - React يعيد الرسم تلقائياً عند تغيير currentUser
     } catch (err: any) {
       console.error('Login error:', err);
       setError(err.message || 'فشل تسجيل الدخول. تحقق من البريد الإلكتروني وكلمة المرور.');
