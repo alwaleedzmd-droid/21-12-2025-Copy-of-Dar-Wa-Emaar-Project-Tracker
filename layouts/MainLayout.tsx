@@ -262,10 +262,10 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
 
 // مساعدة لعرض المسميات الجديدة في الهيدر
 const ROLE_CONFIG: Record<string, { label: string }> = {
-  'ADMIN': { label: 'مدير نظام' },
-  'PR_MANAGER': { label: 'مدير علاقات عامة' },
-  'TECHNICAL': { label: 'القسم الفني' },
-  'CONVEYANCE': { label: 'مسؤول إفراغات CX' }
+  'ADMIN': { label: 'مدير النظام' },
+  'PR_MANAGER': { label: 'PR' },
+  'TECHNICAL': { label: 'المشاريع' },
+  'CONVEYANCE': { label: 'CX' }
 };
 
 export default MainLayout;
