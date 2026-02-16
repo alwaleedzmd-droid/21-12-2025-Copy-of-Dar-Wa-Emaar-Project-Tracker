@@ -1,13 +1,16 @@
--- تفعيل إضافة pgcrypto لتشفير كلمات المرور
+-- ============================================================
+-- إصلاح وظيفة إنشاء المستخدمين وإعادة إنشاء الحسابات
+-- الخطأ السابق: "Database error querying schema" عند تسجيل الدخول
+-- السبب: سجلات auth.users ناقصة أو تالفة
+-- ============================================================
+
+-- تفعيل pgcrypto
 CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA extensions;
 
--- إنشاء وظيفة لإنشاء مستخدم جديد في auth.users + profiles
--- تستخدم SECURITY DEFINER للوصول لجدول auth.users
--- يمكن للمدير فقط استدعائها
-
--- حذف الوظيفة القديمة إن وجدت (بسبب اختلاف نوع الإرجاع)
+-- ١. حذف الوظيفة القديمة
 DROP FUNCTION IF EXISTS public.create_new_user(TEXT, TEXT, TEXT, TEXT, TEXT);
 
+-- ٢. إنشاء الوظيفة المحسّنة مع جميع الأعمدة المطلوبة
 CREATE OR REPLACE FUNCTION public.create_new_user(
   email TEXT,
   password TEXT,
@@ -29,7 +32,9 @@ BEGIN
   encrypted_pw := crypt(password, gen_salt('bf'));
 
   -- التحقق من عدم وجود المستخدم مسبقاً
-  SELECT id INTO existing_user_id FROM auth.users WHERE auth.users.email = create_new_user.email;
+  SELECT id INTO existing_user_id 
+  FROM auth.users 
+  WHERE auth.users.email = create_new_user.email;
   
   IF existing_user_id IS NOT NULL THEN
     -- المستخدم موجود: تحديث كلمة المرور والملف الشخصي
@@ -40,6 +45,7 @@ BEGIN
       raw_user_meta_data = COALESCE(raw_user_meta_data, '{}'::jsonb) || jsonb_build_object('full_name', full_name)
     WHERE id = existing_user_id;
 
+    -- تحديث/إنشاء الملف الشخصي
     INSERT INTO public.profiles (id, email, name, role, department)
     VALUES (existing_user_id, create_new_user.email, full_name, user_role, user_dept)
     ON CONFLICT (id) DO UPDATE SET
@@ -50,7 +56,7 @@ BEGIN
     RETURN json_build_object('user_id', existing_user_id, 'status', 'exists_updated');
   END IF;
 
-  -- إنشاء المستخدم في auth.users مع جميع الأعمدة المطلوبة
+  -- إنشاء مستخدم جديد
   new_user_id := gen_random_uuid();
   
   INSERT INTO auth.users (
@@ -135,11 +141,10 @@ $$;
 GRANT EXECUTE ON FUNCTION public.create_new_user(TEXT, TEXT, TEXT, TEXT, TEXT) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.create_new_user(TEXT, TEXT, TEXT, TEXT, TEXT) TO service_role;
 
-
--- ========================
--- إنشاء جميع حسابات الموظفين بكلمة مرور افتراضية
--- كلمة المرور الافتراضية: Dar@2026
--- ========================
+-- ============================================================
+-- ٣. إصلاح حسابات المستخدمين الحالية (تحديث كلمات المرور والأعمدة الناقصة)
+--    يمكنك نسخ هذا الجزء فقط وتشغيله في SQL Editor
+-- ============================================================
 
 -- المدير العام
 SELECT public.create_new_user('adaldawsari@darwaemaar.com', 'Dar@2026', 'الوليد الدوسري', 'ADMIN', '');

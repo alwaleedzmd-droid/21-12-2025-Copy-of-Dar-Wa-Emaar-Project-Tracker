@@ -254,8 +254,18 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const { data, error } = await supabase.auth.signInWithPassword({ email: e, password });
     
     if (error) {
-      console.warn('❌ فشل تسجيل الدخول:', error.message);
-      throw new Error('البريد أو كلمة المرور غير صحيحة');
+      console.error('❌ فشل تسجيل الدخول:', error.message, 'status:', error.status);
+      
+      // التفريق بين أنواع الأخطاء
+      if (error.message?.includes('Database error') || error.status === 500) {
+        throw new Error('خطأ في الخادم - يرجى التواصل مع مدير النظام أو المحاولة لاحقاً. قد يحتاج حسابك إلى إعادة إنشاء.');
+      } else if (error.message?.includes('Invalid login') || error.message?.includes('invalid_grant') || error.status === 400) {
+        throw new Error('البريد أو كلمة المرور غير صحيحة');
+      } else if (error.message?.includes('Email not confirmed')) {
+        throw new Error('لم يتم تأكيد البريد الإلكتروني');
+      } else {
+        throw new Error(error.message || 'فشل تسجيل الدخول');
+      }
     }
     
     if (!data?.user) {
