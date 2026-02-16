@@ -173,12 +173,13 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
       if (techForm.id === 0) {
         const { error } = await supabase.from('technical_requests').insert([payload]);
         if (error) throw error;
-        notificationService.send('TECHNICAL', `طلب فني جديد: ${techForm.service_type} لمشروع ${selectedProj?.name}`, '/technical', currentUser?.name || 'الإدارة');
+        // إشعار بدون await لعدم تأثيره على الحفظ
+        notificationService.send('TECHNICAL', `طلب فني جديد: ${techForm.service_type} لمشروع ${selectedProj?.name}`, '/technical', currentUser?.name || 'الإدارة').catch(() => {});
       } else {
         const { error } = await supabase.from('technical_requests').update(payload).eq('id', Number(techForm.id));
         if (error) throw error;
         if (currentUser?.role === 'TECHNICAL') {
-            notificationService.send('PR_MANAGER', `تحديث على طلب فني: ${techForm.service_type}`, '/technical', currentUser?.name);
+            notificationService.send('PR_MANAGER', `تحديث على طلب فني: ${techForm.service_type}`, '/technical', currentUser?.name).catch(() => {});
         }
       }
       setIsAddModalOpen(false);
