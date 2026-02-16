@@ -25,6 +25,7 @@ import ProjectDetailView from './components/ProjectDetailView';
 import UserManagement from './components/UserManagement'; 
 import AIAssistant from './components/AIAssistant';
 import AppMapDashboard from './components/AppMapDashboard';
+import StatisticsDashboard from './components/StatisticsDashboard';
 import LoginPage from './components/LoginPage';
 
 interface ProtectedRouteProps {
@@ -493,6 +494,9 @@ const AppContent: React.FC = () => {
         
         {/* لوحة التحكم والمشاريع: تظهر للمدير (الوليد) والعلاقات العامة فقط */}
         <Route path="/dashboard" element={<ProtectedRoute allowedRoles={['ADMIN', 'PR_MANAGER']}><AppMapDashboard currentUser={currentUser} onLogout={logout} /></ProtectedRoute>} />
+        
+        {/* لوحة الإحصائيات التفاعلية */}
+        <Route path="/statistics" element={<ProtectedRoute allowedRoles={['ADMIN', 'PR_MANAGER']}><StatisticsDashboard /></ProtectedRoute>} />
         
         <Route path="/projects" element={<ProtectedRoute allowedRoles={['ADMIN', 'PR_MANAGER']}><ProjectsModule projects={projects} stats={{ projects: projects.length, techRequests: technicalRequests.length, clearRequests: clearanceRequests.length }} currentUser={currentUser} onProjectClick={(p) => navigate(`/projects/${p?.id}`)} onRefresh={refreshData} /></ProtectedRoute>} />
         

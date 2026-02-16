@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router';
 import { 
   LayoutDashboard, LogOut, RefreshCw, Building2, 
-  Zap, FileStack, Menu, X, Users
+  Zap, FileStack, Menu, X, Users, BarChart3
 } from 'lucide-react';
 import { useData } from '../contexts/DataContext';
 import { DAR_LOGO } from '../constants';
@@ -35,6 +35,12 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
       label: 'لوحة التحكم', 
       icon: <LayoutDashboard size={20} />, 
       path: '/dashboard', 
+      roles: ['ADMIN', 'PR_MANAGER'] 
+    },
+    { 
+      label: 'لوحة الإحصائيات', 
+      icon: <BarChart3 size={20} />, 
+      path: '/statistics', 
       roles: ['ADMIN', 'PR_MANAGER'] 
     },
     { 
