@@ -144,20 +144,11 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       try {
         console.log('🔐 بدء تهيئة المصادقة...');
         
+        // تنظيف أي جلسة تجريبية قديمة
+        localStorage.removeItem('dar_demo_session');
+        
         if (!supabase || !supabase.auth) {
-          console.warn("⚠️ Supabase auth غير متاح. استخدام وضع Demo...");
-          // Try demo session from localStorage
-          const demo = localStorage.getItem('dar_demo_session');
-          if (demo) {
-            try {
-              const parsed = JSON.parse(demo);
-              const email = parsed.email?.toLowerCase();
-              if (email && EMPLOYEES_DATA[email]) {
-                console.log('✅ تسجيل دخول Demo:', email);
-                setCurrentUser({ id: parsed.id || 'demo-' + email, email, ...EMPLOYEES_DATA[email] });
-              }
-            } catch (err) { console.error('خطأ في تحليل demo session:', err); }
-          }
+          console.error('❌ Supabase auth غير متاح.');
           setIsAuthLoading(false);
           return;
         }
@@ -185,22 +176,11 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             }
           }
         } else {
-          console.log('ℹ️ لا توجد جلسة نشطة، التحقق من Demo session...');
-          // If there's no session but a local demo session exists, restore it
-          const demo = localStorage.getItem('dar_demo_session');
-          if (demo) {
-            try {
-              const parsed = JSON.parse(demo);
-              const demEmail = parsed.email?.toLowerCase();
-              if (demEmail && EMPLOYEES_DATA[demEmail]) {
-                console.log('✅ استعادة Demo session:', demEmail);
-                setCurrentUser({ id: parsed.id || 'demo-' + demEmail, email: demEmail, ...EMPLOYEES_DATA[demEmail] });
-              }
-            } catch (err) { console.error('خطأ في استعادة demo:', err); }
-          }
+          console.log('ℹ️ لا توجد جلسة نشطة');
+          setCurrentUser(null);
         }
       } catch (e) { 
-        console.error("❌ خطأ في تهيئة المصادقة:", e); 
+        console.error('❌ خطأ في تهيئة المصادقة:', e); 
       } finally { 
         setIsAuthLoading(false); 
         console.log('✅ انتهت تهيئة المصادقة');
@@ -208,6 +188,28 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     };
     initAuth();
   }, []);
+
+  // مراقبة تغييرات جلسة المصادقة (لمنع فقدان البيانات عند تغيير كلمة المرور)
+  useEffect(() => {
+    if (!supabase || !supabase.auth) return;
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      console.log('🔐 Auth state changed:', event);
+      
+      // عند تحديث المستخدم (مثل تغيير كلمة المرور) أو تحديث التوكن، نحافظ على المستخدم الحالي
+      if ((event === 'USER_UPDATED' || event === 'TOKEN_REFRESHED') && session?.user?.email && currentUser) {
+        // لا نفعل شيئاً - فقط نحافظ على المستخدم الحالي
+        console.log('✅ تحديث الجلسة - المستخدم لا يزال مسجلاً');
+      }
+
+      // عند تسجيل الخروج
+      if (event === 'SIGNED_OUT') {
+        setCurrentUser(null);
+      }
+    });
+
+    return () => { subscription.unsubscribe(); };
+  }, [currentUser]);
 
   // ربط اشتراك Real-time لتحديث البيانات تلقائياً
   useEffect(() => {
@@ -244,81 +246,42 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const e = email.toLowerCase();
     console.log('🔐 محاولة تسجيل الدخول:', e);
 
-    // ١- للموظفين المعروفين
+    if (!supabase || !supabase.auth) {
+      throw new Error('خدمة المصادقة غير متاحة حالياً');
+    }
+
+    // تسجيل الدخول عبر Supabase Auth فقط
+    const { data, error } = await supabase.auth.signInWithPassword({ email: e, password });
+    
+    if (error) {
+      console.warn('❌ فشل تسجيل الدخول:', error.message);
+      throw new Error('البريد أو كلمة المرور غير صحيحة');
+    }
+    
+    if (!data?.user) {
+      throw new Error('فشل تسجيل الدخول');
+    }
+
+    console.log('✅ تسجيل دخول ناجح:', data.user.id);
+    
+    // جلب بيانات الموظف من EMPLOYEES_DATA أو profiles
     if (EMPLOYEES_DATA[e]) {
-      // محاولة Supabase Auth مع timeout قصير (3 ثوانٍ)
-      if (supabase && supabase.auth) {
-        try {
-          const authPromise = supabase.auth.signInWithPassword({ email: e, password });
-          const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000));
-          const { data, error } = await Promise.race([authPromise, timeoutPromise]) as any;
-          if (!error && data?.user) {
-            console.log('✅ تسجيل دخول ناجح عبر Supabase Auth:', data.user.id);
-            setCurrentUser({ id: data.user.id, email: e, ...EMPLOYEES_DATA[e] });
-            return data;
-          }
-          // إذا رفض Supabase Auth بسبب كلمة مرور خاطئة، لا ننتقل للوضع التجريبي
-          if (error && (error.message?.includes('Invalid login') || error.message?.includes('invalid') || error.status === 400)) {
-            console.warn('❌ Supabase Auth رفض بيانات الدخول:', error.message);
-            throw new Error('كلمة المرور غير صحيحة');
-          }
-        } catch (err: any) {
-          // إذا كان الخطأ رفض مصادقة صريح، نرميه للمستخدم
-          if (err.message === 'كلمة المرور غير صحيحة') {
-            throw err;
-          }
-          // فقط timeout أو خطأ شبكة → ننتقل للوضع التجريبي
-          console.warn('⚠️ Supabase Auth timeout/network error، الانتقال للوضع التجريبي:', err?.message);
-        }
-      }
-
-      // تسجيل دخول تجريبي (فقط عند timeout أو عدم توفر Supabase)
-      console.log('ℹ️ تسجيل دخول تجريبي (Demo):', e);
-      const demoId = 'demo-' + e;
-      const user = { id: demoId, email: e, ...EMPLOYEES_DATA[e] } as any;
-      setCurrentUser(user);
-      try { localStorage.setItem('dar_demo_session', JSON.stringify({ id: demoId, email: e })); } catch (err) { /* ignore */ }
-      return { user };
-    }
-
-    // ٢- محاولة تسجيل الدخول عبر Supabase Auth للمستخدمين غير المعروفين
-    if (supabase && supabase.auth) {
-      try {
-        const { data, error } = await supabase.auth.signInWithPassword({ email: e, password });
-        if (!error && data?.user) {
-          console.log('✅ تسجيل دخول ناجح عبر Supabase Auth:', data.user.id);
-          const { data: profile } = await supabase.from('profiles').select('*').eq('id', data.user.id).maybeSingle();
-          if (profile) {
-            setCurrentUser(profile);
-          } else {
-            setCurrentUser({ id: data.user.id, email: e, name: e.split('@')[0], role: 'PR_MANAGER' });
-          }
-          return data;
-        }
-        if (error) console.warn('⚠️ Supabase Auth رفض:', error.message);
-      } catch (err: any) {
-        console.warn('⚠️ خطأ Supabase Auth:', err?.message);
+      setCurrentUser({ id: data.user.id, email: e, ...EMPLOYEES_DATA[e] });
+    } else {
+      const { data: profile } = await supabase.from('profiles').select('*').eq('id', data.user.id).maybeSingle();
+      if (profile) {
+        setCurrentUser(profile);
+      } else {
+        setCurrentUser({ id: data.user.id, email: e, name: e.split('@')[0], role: 'PR_MANAGER' });
       }
     }
-
-    // ٣- السماح لأي بريد @darwaemaar.com كمستخدم تجريبي
-    if (e.endsWith('@darwaemaar.com')) {
-      const demoId = 'demo-' + e;
-      const namePart = e.split('@')[0];
-      const user = { id: demoId, email: e, name: namePart, role: 'PR_MANAGER' } as any;
-      setCurrentUser(user);
-      try { localStorage.setItem('dar_demo_session', JSON.stringify({ id: demoId, email: e })); } catch (err) { /* ignore */ }
-      return { user };
-    }
-
-    throw new Error('بيانات تسجيل الدخول غير صحيحة');
+    return data;
   };
 
   const logout = async () => {
     try {
       if (supabase && supabase.auth) await supabase.auth.signOut();
     } catch (e) { /* ignore */ }
-    localStorage.removeItem('dar_demo_session');
     setCurrentUser(null);
     window.location.href = '/';
   };
