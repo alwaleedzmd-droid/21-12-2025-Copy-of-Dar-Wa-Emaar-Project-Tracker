@@ -48,7 +48,7 @@ const AppMapDashboard: React.FC<AppMapDashboardProps> = ({ currentUser, onLogout
       title: 'لوحة الإحصائيات',
       description: 'تحليل بياني شامل لأداء المشاريع ونسب الإنجاز الفنية.',
       icon: <BarChart3 className="text-emerald-600" size={32} />,
-      action: () => navigate('/dashboard'),
+      action: () => navigate('/statistics'),
       color: 'bg-emerald-50'
     },
     {
