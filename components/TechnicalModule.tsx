@@ -121,7 +121,12 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
       const { error } = await supabase.from('technical_requests').insert(data);
       if (error) throw error;
 
-      notificationService.send('TECHNICAL', `تم استيراد ${data.length} طلب فني جديد عبر إكسل`, '/technical', currentUser?.name || 'النظام');
+      notificationService.send(
+        currentUser?.role === 'TECHNICAL' ? ['PR_MANAGER', 'ADMIN'] : ['TECHNICAL', 'ADMIN'],
+        `تم استيراد ${data.length} طلب فني جديد عبر إكسل`,
+        '/technical',
+        currentUser?.name || 'النظام'
+      );
       logActivity?.('استيراد إكسل', `تم إضافة ${data.length} طلب فني`, 'text-blue-500');
       onRefresh();
       alert(`تم استيراد ${data.length} سجل بنجاح ✅`);
@@ -173,8 +178,9 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
       if (techForm.id === 0) {
         const { error } = await supabase.from('technical_requests').insert([payload]);
         if (error) throw error;
-        // إشعار بدون await لعدم تأثيره على الحفظ
-        notificationService.send('TECHNICAL', `طلب فني جديد: ${techForm.service_type} لمشروع ${selectedProj?.name}`, '/technical', currentUser?.name || 'الإدارة').catch(() => {});
+        // إشعار للأدوار المعنية (ليس المرسل نفسه)
+        const targetRoles = currentUser?.role === 'TECHNICAL' ? ['PR_MANAGER', 'ADMIN'] : ['TECHNICAL', 'ADMIN'];
+        notificationService.send(targetRoles, `طلب فني جديد: ${techForm.service_type} لمشروع ${selectedProj?.name}`, '/technical', currentUser?.name || 'الإدارة').catch(() => {});
       } else {
         const { error } = await supabase.from('technical_requests').update(payload).eq('id', Number(techForm.id));
         if (error) throw error;
@@ -199,7 +205,7 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
       const { error } = await supabase.from('technical_requests').update(updateData).eq('id', Number(activeRequest?.id));
       if (error) throw error;
       
-      const targetRole = currentUser?.role === 'TECHNICAL' ? 'PR_MANAGER' : 'TECHNICAL';
+      const targetRole = currentUser?.role === 'TECHNICAL' ? ['PR_MANAGER', 'ADMIN'] : ['TECHNICAL', 'ADMIN'];
       notificationService.send(targetRole, `تغيرت حالة العمل: ${activeRequest.service_type} إلى ${newStatus}`, '/technical', currentUser?.name || 'النظام');
 
       setActiveRequest({ ...activeRequest, ...updateData });

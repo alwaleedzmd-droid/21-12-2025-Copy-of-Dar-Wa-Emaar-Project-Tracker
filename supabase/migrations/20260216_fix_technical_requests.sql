@@ -12,6 +12,7 @@ ALTER TABLE public.notifications ADD COLUMN IF NOT EXISTS message TEXT;
 ALTER TABLE public.notifications ADD COLUMN IF NOT EXISTS link TEXT;
 ALTER TABLE public.notifications ADD COLUMN IF NOT EXISTS target_role TEXT;
 ALTER TABLE public.notifications ADD COLUMN IF NOT EXISTS is_read BOOLEAN DEFAULT false;
+ALTER TABLE public.notifications ADD COLUMN IF NOT EXISTS type TEXT;
 ALTER TABLE public.notifications ALTER COLUMN user_id DROP NOT NULL;
 
 -- سياسات RLS للإشعارات

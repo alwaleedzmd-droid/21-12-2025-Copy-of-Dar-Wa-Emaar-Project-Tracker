@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Bell, CheckCircle2, Info } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import { useData } from '../contexts/DataContext';
@@ -7,6 +7,8 @@ const NotificationBell = () => {
   const { currentUser } = useData();
   const [notifications, setNotifications] = useState<any[]>([]);
   const [isOpen, setIsOpen] = useState(false);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const unreadCount = notifications.filter(n => !n.is_read).length;
 
   const fetchNotifications = useCallback(async () => {
@@ -42,15 +44,21 @@ const NotificationBell = () => {
 
     fetchNotifications();
 
-    // الاشتراك في التنبيهات اللحظية (Real-time)
+    // الاشتراك في التنبيهات اللحظية (Real-time) مع فلتر حسب الدور
     const channel = supabase
       .channel('realtime_notifications')
       .on('postgres_changes', { 
         event: 'INSERT', 
         schema: 'public', 
-        table: 'notifications'
+        table: 'notifications',
+        filter: `target_role=eq.${currentUser.role}`
       }, (payload) => {
-        setNotifications(prev => [payload.new as any, ...prev]);
+        const newNotif = payload.new as any;
+        // منع التكرار: تجاهل الإشعار إذا كان موجوداً مسبقاً
+        setNotifications(prev => {
+          if (prev.some(n => n.id === newNotif.id)) return prev;
+          return [newNotif, ...prev];
+        });
         try {
           new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3').play().catch(() => {});
         } catch {} 
@@ -81,9 +89,32 @@ const NotificationBell = () => {
     }
   };
 
+  // إغلاق تلقائي عند خروج الماوس
+  const handleMouseEnter = () => {
+    if (closeTimerRef.current) {
+      clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
+    }
+  };
+
+  const handleMouseLeave = () => {
+    if (isOpen) {
+      closeTimerRef.current = setTimeout(() => {
+        setIsOpen(false);
+      }, 400);
+    }
+  };
+
+  // تنظيف المؤقت عند إلغاء المكون
+  useEffect(() => {
+    return () => {
+      if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
+    };
+  }, []);
+
   return (
-    <div className="relative">
-      <button onClick={() => { setIsOpen(!isOpen); markAsRead(); }} className="relative p-2.5 text-gray-400 hover:bg-gray-100 rounded-2xl transition-all active:scale-95">
+    <div className="relative" onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave} ref={panelRef}>
+      <button onClick={() => { setIsOpen(!isOpen); if (!isOpen) markAsRead(); }} className="relative p-2.5 text-gray-400 hover:bg-gray-100 rounded-2xl transition-all active:scale-95">
         <Bell size={24} />
         {unreadCount > 0 && (
           <span className="absolute top-2 right-2 w-5 h-5 bg-[#E95D22] text-white text-[10px] font-black rounded-full border-2 border-white flex items-center justify-center animate-bounce">
@@ -98,7 +129,7 @@ const NotificationBell = () => {
             <h3 className="font-black text-sm text-[#1B2B48]">الإشعارات</h3>
             <span className="text-[10px] font-bold text-gray-400">آخر 10 تنبيهات</span>
           </div>
-          <div className="max-height-[400px] overflow-y-auto">
+          <div className="max-h-[400px] overflow-y-auto">
             {notifications.length === 0 ? (
               <div className="p-10 text-center text-gray-300">
                 <Info size={40} className="mx-auto mb-2 opacity-20" />
