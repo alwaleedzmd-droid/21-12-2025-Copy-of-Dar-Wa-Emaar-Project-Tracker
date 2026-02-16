@@ -1,11 +1,12 @@
 import React, { useMemo, useState, useEffect } from 'react';
+import { useNavigate } from 'react-router';
 import {
   PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, Legend, ResponsiveContainer
 } from 'recharts';
 import {
   Building2, Zap, FileStack, TrendingUp,
-  CheckCircle2, Clock, Activity, BarChart3
+  CheckCircle2, Clock, Activity, BarChart3, XCircle, AlertCircle, ArrowLeft
 } from 'lucide-react';
 import { useData } from '../contexts/DataContext';
 
@@ -24,6 +25,7 @@ const COLORS = {
 };
 
 const PIE_COLORS = [COLORS.green, COLORS.orange];
+const CLEARANCE_PIE_COLORS = [COLORS.green, COLORS.sky, COLORS.rose, COLORS.amber];
 const BAR_COLORS = [COLORS.navy, COLORS.orange, COLORS.green, COLORS.amber, COLORS.sky, COLORS.rose];
 
 // ─── ترجمة حالات الطلبات الفنية ───
@@ -49,9 +51,10 @@ interface StatCardProps {
   icon: React.ReactNode;
   color: string;
   delay: number;
+  onClick?: () => void;
 }
 
-const StatCard: React.FC<StatCardProps> = ({ title, value, subtitle, icon, color, delay }) => {
+const StatCard: React.FC<StatCardProps> = ({ title, value, subtitle, icon, color, delay, onClick }) => {
   const [displayValue, setDisplayValue] = useState(0);
   const [visible, setVisible] = useState(false);
 
@@ -81,7 +84,8 @@ const StatCard: React.FC<StatCardProps> = ({ title, value, subtitle, icon, color
 
   return (
     <div
-      className={`bg-white rounded-[35px] shadow-sm border border-gray-100 p-7 flex flex-col gap-4 transition-all duration-700 ${
+      onClick={onClick}
+      className={`bg-white rounded-[35px] shadow-sm border border-gray-100 p-7 flex flex-col gap-4 transition-all duration-700 ${onClick ? 'cursor-pointer hover:shadow-lg hover:border-gray-200 hover:scale-[1.02] active:scale-[0.98]' : ''} ${
         visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'
       }`}
     >
@@ -104,6 +108,12 @@ const StatCard: React.FC<StatCardProps> = ({ title, value, subtitle, icon, color
             {subtitle}
           </p>
         )}
+        {onClick && (
+          <div className="flex items-center gap-1 mt-2 text-[10px] font-bold text-gray-300">
+            <ArrowLeft size={10} />
+            <span>انقر للتفاصيل</span>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -116,9 +126,10 @@ interface ProgressBarProps {
   color: string;
   icon: React.ReactNode;
   delay: number;
+  onClick?: () => void;
 }
 
-const AnimatedProgressBar: React.FC<ProgressBarProps> = ({ label, percentage, color, icon, delay }) => {
+const AnimatedProgressBar: React.FC<ProgressBarProps> = ({ label, percentage, color, icon, delay, onClick }) => {
   const [width, setWidth] = useState(0);
   const [visible, setVisible] = useState(false);
 
@@ -135,7 +146,8 @@ const AnimatedProgressBar: React.FC<ProgressBarProps> = ({ label, percentage, co
 
   return (
     <div
-      className={`transition-all duration-700 ${
+      onClick={onClick}
+      className={`transition-all duration-700 ${onClick ? 'cursor-pointer hover:bg-gray-50 rounded-2xl p-3 -m-3 active:scale-[0.99]' : ''} ${
         visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
       }`}
     >
@@ -210,6 +222,7 @@ const CustomPieLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent, n
 //  المكون الرئيسي: لوحة الإحصائيات
 // ═══════════════════════════════════════════
 const StatisticsDashboard: React.FC = () => {
+  const navigate = useNavigate();
   const { projects, technicalRequests, clearanceRequests, projectWorks, isDbLoading } = useData();
   const [chartsVisible, setChartsVisible] = useState(false);
 
@@ -239,8 +252,21 @@ const StatisticsDashboard: React.FC = () => {
     const completedClearance = safeClearance.filter(
       (r: any) => COMPLETED_STATUSES.includes(r.status)
     ).length;
+    const inProgressClearance = safeClearance.filter(
+      (r: any) => r.status === 'قيد العمل' || r.status === 'in_progress' || r.status === 'pending' || r.status === 'جديد'
+    ).length;
+    const rejectedClearance = safeClearance.filter(
+      (r: any) => r.status === 'مرفوض' || r.status === 'rejected'
+    ).length;
     const clearanceCompletionRate =
       totalClearance > 0 ? (completedClearance / totalClearance) * 100 : 0;
+
+    // بيانات المخطط الدائري للإفراغات
+    const clearancePieData = [
+      { name: 'مكتمل', value: completedClearance },
+      { name: 'قيد العمل', value: inProgressClearance },
+      { name: 'مرفوض', value: rejectedClearance },
+    ].filter(d => d.value > 0);
 
     // بيانات المخطط الدائري (أعمال المشاريع)
     const completedWorks = safeWorks.filter(
@@ -275,7 +301,10 @@ const StatisticsDashboard: React.FC = () => {
       technicalCompletionRate,
       totalClearance,
       completedClearance,
+      inProgressClearance,
+      rejectedClearance,
       clearanceCompletionRate,
+      clearancePieData,
       pieData,
       barData,
       worksCompletionRate,
@@ -320,6 +349,7 @@ const StatisticsDashboard: React.FC = () => {
           icon={<Building2 size={26} />}
           color={COLORS.navy}
           delay={100}
+          onClick={() => navigate('/projects')}
         />
         <StatCard
           title="الطلبات الفنية"
@@ -328,6 +358,7 @@ const StatisticsDashboard: React.FC = () => {
           icon={<Zap size={26} />}
           color={COLORS.orange}
           delay={250}
+          onClick={() => navigate('/technical')}
         />
         <StatCard
           title="سجل الإفراغات"
@@ -336,6 +367,7 @@ const StatisticsDashboard: React.FC = () => {
           icon={<FileStack size={26} />}
           color={COLORS.green}
           delay={400}
+          onClick={() => navigate('/deeds')}
         />
       </div>
 
@@ -343,7 +375,8 @@ const StatisticsDashboard: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* المخطط الدائري - أعمال المشاريع */}
         <div
-          className={`bg-white rounded-[35px] shadow-sm border border-gray-100 p-8 transition-all duration-700 ${
+          onClick={() => navigate('/projects')}
+          className={`bg-white rounded-[35px] shadow-sm border border-gray-100 p-8 transition-all duration-700 cursor-pointer hover:shadow-lg hover:border-gray-200 ${
             chartsVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
           }`}
         >
@@ -405,7 +438,8 @@ const StatisticsDashboard: React.FC = () => {
 
         {/* المخطط العمودي - الطلبات الفنية حسب الحالة */}
         <div
-          className={`bg-white rounded-[35px] shadow-sm border border-gray-100 p-8 transition-all duration-700 delay-150 ${
+          onClick={() => navigate('/technical')}
+          className={`bg-white rounded-[35px] shadow-sm border border-gray-100 p-8 transition-all duration-700 delay-150 cursor-pointer hover:shadow-lg hover:border-gray-200 ${
             chartsVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
           }`}
         >
@@ -466,6 +500,105 @@ const StatisticsDashboard: React.FC = () => {
         </div>
       </div>
 
+      {/* ═══ قسم إحصائيات الإفراغات التفاعلي ═══ */}
+      <div
+        onClick={() => navigate('/deeds')}
+        className={`bg-white rounded-[35px] shadow-sm border border-gray-100 p-8 transition-all duration-700 delay-200 cursor-pointer hover:shadow-lg hover:border-gray-200 ${
+          chartsVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
+        }`}
+      >
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center">
+              <FileStack size={20} className="text-emerald-600" />
+            </div>
+            <div>
+              <h3 className="text-lg font-black text-[#1B2B48]">تفاصيل سجل الإفراغات</h3>
+              <p className="text-xs text-gray-400 font-bold">
+                توزيع طلبات الإفراغ حسب الحالة
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-1 text-[10px] font-bold text-gray-300">
+            <ArrowLeft size={12} />
+            <span>انقر للانتقال</span>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          {/* الرسم الدائري للإفراغات */}
+          <div>
+            {stats.clearancePieData.length === 0 ? (
+              <div className="h-64 flex items-center justify-center text-gray-300 font-bold">
+                لا توجد بيانات إفراغات حالياً
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height={260}>
+                <PieChart>
+                  <Pie
+                    data={stats.clearancePieData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={55}
+                    outerRadius={100}
+                    paddingAngle={4}
+                    dataKey="value"
+                    labelLine={false}
+                    label={CustomPieLabel}
+                    animationBegin={600}
+                    animationDuration={1200}
+                    animationEasing="ease-out"
+                  >
+                    {stats.clearancePieData.map((_, index) => (
+                      <Cell
+                        key={`clearance-cell-${index}`}
+                        fill={CLEARANCE_PIE_COLORS[index % CLEARANCE_PIE_COLORS.length]}
+                        stroke="none"
+                      />
+                    ))}
+                  </Pie>
+                  <Tooltip content={<CustomTooltip />} />
+                  <Legend
+                    verticalAlign="bottom"
+                    height={36}
+                    formatter={(value: string) => (
+                      <span className="font-bold text-sm text-gray-600 font-cairo">
+                        {value}
+                      </span>
+                    )}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+
+          {/* بطاقات تفصيلية للإفراغات */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 content-center">
+            <div className="bg-green-50 rounded-2xl p-5 text-center border border-green-100">
+              <div className="w-10 h-10 rounded-xl bg-green-100 flex items-center justify-center mx-auto mb-3">
+                <CheckCircle2 size={20} className="text-green-600" />
+              </div>
+              <p className="text-3xl font-black text-green-700">{stats.completedClearance.toLocaleString('ar-SA')}</p>
+              <p className="text-xs font-bold text-green-500 mt-1">مكتمل</p>
+            </div>
+            <div className="bg-sky-50 rounded-2xl p-5 text-center border border-sky-100">
+              <div className="w-10 h-10 rounded-xl bg-sky-100 flex items-center justify-center mx-auto mb-3">
+                <Clock size={20} className="text-sky-600" />
+              </div>
+              <p className="text-3xl font-black text-sky-700">{stats.inProgressClearance.toLocaleString('ar-SA')}</p>
+              <p className="text-xs font-bold text-sky-500 mt-1">تحت الإجراء</p>
+            </div>
+            <div className="bg-red-50 rounded-2xl p-5 text-center border border-red-100">
+              <div className="w-10 h-10 rounded-xl bg-red-100 flex items-center justify-center mx-auto mb-3">
+                <XCircle size={20} className="text-red-500" />
+              </div>
+              <p className="text-3xl font-black text-red-600">{stats.rejectedClearance.toLocaleString('ar-SA')}</p>
+              <p className="text-xs font-bold text-red-400 mt-1">مرفوض</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* ═══ قسم تحليل الإنجاز ═══ */}
       <div
         className={`bg-white rounded-[35px] shadow-sm border border-gray-100 p-8 transition-all duration-700 delay-300 ${
@@ -491,6 +624,7 @@ const StatisticsDashboard: React.FC = () => {
             color={COLORS.orange}
             icon={<Zap size={20} />}
             delay={800}
+            onClick={() => navigate('/technical')}
           />
           <AnimatedProgressBar
             label="إنجاز الإفراغات"
@@ -498,6 +632,7 @@ const StatisticsDashboard: React.FC = () => {
             color={COLORS.green}
             icon={<FileStack size={20} />}
             delay={1000}
+            onClick={() => navigate('/deeds')}
           />
           <AnimatedProgressBar
             label="إنجاز الأعمال الميدانية"
@@ -505,6 +640,7 @@ const StatisticsDashboard: React.FC = () => {
             color={COLORS.navy}
             icon={<CheckCircle2 size={20} />}
             delay={1200}
+            onClick={() => navigate('/projects')}
           />
         </div>
       </div>
@@ -521,29 +657,34 @@ const StatisticsDashboard: React.FC = () => {
             value: stats.completedTechnical,
             icon: <CheckCircle2 size={18} />,
             color: COLORS.green,
+            path: '/technical',
           },
           {
             label: 'طلبات فنية معلقة',
             value: stats.totalTechnical - stats.completedTechnical,
             icon: <Clock size={18} />,
             color: COLORS.amber,
+            path: '/technical',
           },
           {
             label: 'إفراغات مكتملة',
             value: stats.completedClearance,
             icon: <CheckCircle2 size={18} />,
             color: COLORS.emerald,
+            path: '/deeds',
           },
           {
             label: 'إفراغات معلقة',
             value: stats.totalClearance - stats.completedClearance,
             icon: <Clock size={18} />,
             color: COLORS.rose,
+            path: '/deeds',
           },
         ].map((item) => (
           <div
             key={item.label}
-            className="bg-white rounded-[25px] shadow-sm border border-gray-100 p-5 flex items-center gap-4"
+            onClick={() => navigate(item.path)}
+            className="bg-white rounded-[25px] shadow-sm border border-gray-100 p-5 flex items-center gap-4 cursor-pointer hover:shadow-lg hover:border-gray-200 hover:scale-[1.02] active:scale-[0.98] transition-all"
           >
             <div
               className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
