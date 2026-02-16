@@ -28,14 +28,17 @@ const BAR_COLORS = [COLORS.navy, COLORS.orange, COLORS.green, COLORS.amber, COLO
 
 // ─── ترجمة حالات الطلبات الفنية ───
 const STATUS_LABELS: Record<string, string> = {
-  pending: 'قيد الانتظار',
+  pending: 'متابعة',
   approved: 'معتمد',
-  completed: 'مكتمل',
+  completed: 'منجز',
   rejected: 'مرفوض',
   in_progress: 'قيد التنفيذ',
   new: 'جديد',
   cancelled: 'ملغى',
   under_review: 'تحت المراجعة',
+  pending_modification: 'بانتظار التعديل',
+  'منجز': 'منجز',
+  'مكتمل': 'منجز',
 };
 
 // ─── مكون البطاقة الإحصائية ───
@@ -225,22 +228,23 @@ const StatisticsDashboard: React.FC = () => {
     // إجماليات البطاقات
     const totalProjects = safeProjects.length;
     const totalTechnical = safeTechnical.length;
+    const COMPLETED_STATUSES = ['completed', 'done', 'منجز', 'مكتمل'];
     const completedTechnical = safeTechnical.filter(
-      (r) => r.status === 'completed'
+      (r) => COMPLETED_STATUSES.includes(r.status)
     ).length;
     const technicalCompletionRate =
       totalTechnical > 0 ? (completedTechnical / totalTechnical) * 100 : 0;
 
     const totalClearance = safeClearance.length;
     const completedClearance = safeClearance.filter(
-      (r: any) => r.status === 'completed' || r.status === 'done' || r.status === 'منجز'
+      (r: any) => COMPLETED_STATUSES.includes(r.status)
     ).length;
     const clearanceCompletionRate =
       totalClearance > 0 ? (completedClearance / totalClearance) * 100 : 0;
 
     // بيانات المخطط الدائري (أعمال المشاريع)
     const completedWorks = safeWorks.filter(
-      (w) => w.status === 'completed'
+      (w) => COMPLETED_STATUSES.includes(w.status)
     ).length;
     const inProgressWorks = safeWorks.length - completedWorks;
     const pieData = [

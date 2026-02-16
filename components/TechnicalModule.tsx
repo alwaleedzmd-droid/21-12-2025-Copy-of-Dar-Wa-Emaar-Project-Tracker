@@ -122,7 +122,7 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
       if (error) throw error;
 
       notificationService.send(
-        currentUser?.role === 'TECHNICAL' ? ['PR_MANAGER', 'ADMIN'] : ['TECHNICAL', 'ADMIN'],
+        ['TECHNICAL', 'PR_MANAGER', 'ADMIN'],
         `تم استيراد ${data.length} طلب فني جديد عبر إكسل`,
         '/technical',
         currentUser?.name || 'النظام'
@@ -178,16 +178,26 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
       if (techForm.id === 0) {
         const { error } = await supabase.from('technical_requests').insert([payload]);
         if (error) throw error;
-        // إشعار للأدوار المعنية (ليس المرسل نفسه)
-        const targetRoles = currentUser?.role === 'TECHNICAL' ? ['PR_MANAGER', 'ADMIN'] : ['TECHNICAL', 'ADMIN'];
-        notificationService.send(targetRoles, `طلب فني جديد: ${techForm.service_type} لمشروع ${selectedProj?.name}`, '/technical', currentUser?.name || 'الإدارة').catch(() => {});
+        // إشعار لجميع الأدوار المعنية
+        notificationService.send(
+          ['TECHNICAL', 'PR_MANAGER', 'ADMIN'],
+          `طلب فني جديد: ${techForm.service_type} لمشروع ${selectedProj?.name}`,
+          '/technical',
+          currentUser?.name || 'الإدارة'
+        ).catch(() => {});
       } else {
         const { error } = await supabase.from('technical_requests').update(payload).eq('id', Number(techForm.id));
         if (error) throw error;
-        if (currentUser?.role === 'TECHNICAL') {
-            notificationService.send('PR_MANAGER', `تحديث على طلب فني: ${techForm.service_type}`, '/technical', currentUser?.name).catch(() => {});
-        }
+        // إشعار تحديث لجميع المعنيين
+        notificationService.send(
+          ['TECHNICAL', 'PR_MANAGER', 'ADMIN'],
+          `تحديث على طلب فني: ${techForm.service_type}`,
+          '/technical',
+          currentUser?.name || 'الإدارة'
+        ).catch(() => {});
       }
+      // صوت تأكيد محلي عند نجاح الحفظ
+      try { new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3').play().catch(() => {}); } catch {}
       setIsAddModalOpen(false);
       await onRefresh();
       alert("تم حفظ البيانات بنجاح ✅");
@@ -205,8 +215,13 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
       const { error } = await supabase.from('technical_requests').update(updateData).eq('id', Number(activeRequest?.id));
       if (error) throw error;
       
-      const targetRole = currentUser?.role === 'TECHNICAL' ? ['PR_MANAGER', 'ADMIN'] : ['TECHNICAL', 'ADMIN'];
-      notificationService.send(targetRole, `تغيرت حالة العمل: ${activeRequest.service_type} إلى ${newStatus}`, '/technical', currentUser?.name || 'النظام');
+      // إشعار تغيير الحالة لجميع المعنيين
+      notificationService.send(
+        ['TECHNICAL', 'PR_MANAGER', 'ADMIN'],
+        `تغيرت حالة العمل: ${activeRequest.service_type} إلى ${newStatus}`,
+        '/technical',
+        currentUser?.name || 'النظام'
+      );
 
       setActiveRequest({ ...activeRequest, ...updateData });
       await onRefresh();
