@@ -185,7 +185,8 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
       await onRefresh();
       alert("تم حفظ البيانات بنجاح ✅");
     } catch (err: any) {
-        alert("حدث خطأ في قاعدة البيانات");
+        console.error("❌ خطأ قاعدة البيانات:", err);
+        alert("حدث خطأ في قاعدة البيانات:\n" + (err?.message || JSON.stringify(err)));
     } finally { setIsUploading(false); }
   };
 
@@ -305,12 +306,6 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
           <div>
             <label className="text-xs text-gray-400 font-bold block mb-1">وصف الطلب</label>
             <textarea className="w-full p-4 bg-gray-50 border rounded-2xl font-bold outline-none text-sm min-h-[100px] resize-none focus:border-[#1B2B48] transition-colors" placeholder="اكتب وصف أو تفاصيل الطلب..." value={techForm.details} onChange={e=>setTechForm({...techForm, details:e.target.value})}/>
-          </div>
-          <div>
-            <label className="text-xs text-gray-400 font-bold block mb-1">الحالة</label>
-            <select className="w-full p-4 bg-gray-50 border rounded-2xl font-bold outline-none" value={techForm.status} onChange={e=>setTechForm({...techForm, status:e.target.value})}>
-              {STATUS_OPTIONS.map(s=><option key={s.value} value={s.value}>{s.label}</option>)}
-            </select>
           </div>
           <button onClick={handleSubmit} disabled={isUploading} className="w-full bg-[#1B2B48] text-white py-5 rounded-[25px] font-black shadow-xl hover:brightness-110 transition-all">{isUploading ? 'جاري الحفظ...' : 'حفظ البيانات'}</button>
         </div>
