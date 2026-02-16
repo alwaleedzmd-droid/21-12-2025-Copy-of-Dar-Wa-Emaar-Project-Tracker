@@ -3,11 +3,13 @@ import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router';
 import { 
   LogOut, RefreshCw, Building2, 
-  Zap, FileStack, Menu, X, Users, BarChart3
+  Zap, FileStack, Menu, X, Users, BarChart3, KeyRound, Loader2, Eye, EyeOff
 } from 'lucide-react';
 import { useData } from '../contexts/DataContext';
 import { DAR_LOGO } from '../constants';
+import { supabase } from '../supabaseClient';
 import NotificationBell from '../components/NotificationBell';
+import Modal from '../components/Modal';
 
 interface MainLayoutProps {
   children: React.ReactNode;
@@ -21,6 +23,62 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => 
     localStorage.getItem('dar_sidebar_v2_collapsed') === 'true'
   );
+  const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
+  const [passwordForm, setPasswordForm] = useState({ current: '', new: '', confirm: '' });
+  const [passwordLoading, setPasswordLoading] = useState(false);
+  const [passwordError, setPasswordError] = useState('');
+  const [passwordSuccess, setPasswordSuccess] = useState('');
+  const [showCurrentPass, setShowCurrentPass] = useState(false);
+  const [showNewPass, setShowNewPass] = useState(false);
+
+  const handleChangePassword = async () => {
+    setPasswordError('');
+    setPasswordSuccess('');
+
+    if (!passwordForm.new || !passwordForm.confirm) {
+      setPasswordError('يرجى تعبئة جميع الحقول');
+      return;
+    }
+    if (passwordForm.new.length < 6) {
+      setPasswordError('كلمة المرور الجديدة يجب أن تكون 6 أحرف على الأقل');
+      return;
+    }
+    if (passwordForm.new !== passwordForm.confirm) {
+      setPasswordError('كلمة المرور الجديدة غير متطابقة');
+      return;
+    }
+
+    setPasswordLoading(true);
+    try {
+      // أولاً: التحقق من كلمة المرور الحالية عبر إعادة تسجيل الدخول
+      if (passwordForm.current && currentUser?.email) {
+        const { error: signInError } = await supabase.auth.signInWithPassword({
+          email: currentUser.email,
+          password: passwordForm.current
+        });
+        if (signInError) {
+          setPasswordError('كلمة المرور الحالية غير صحيحة');
+          setPasswordLoading(false);
+          return;
+        }
+      }
+
+      // تغيير كلمة المرور
+      const { error } = await supabase.auth.updateUser({ password: passwordForm.new });
+      if (error) throw error;
+
+      setPasswordSuccess('تم تغيير كلمة المرور بنجاح ✅');
+      setPasswordForm({ current: '', new: '', confirm: '' });
+      setTimeout(() => {
+        setIsChangePasswordOpen(false);
+        setPasswordSuccess('');
+      }, 2000);
+    } catch (err: any) {
+      setPasswordError('فشل تغيير كلمة المرور: ' + (err.message || 'خطأ غير معروف'));
+    } finally {
+      setPasswordLoading(false);
+    }
+  };
 
   if (!currentUser) return <>{children}</>;
 
@@ -98,8 +156,12 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
           })}
         </nav>
 
-        <div className="p-4 border-t border-white/5">
-          <button onClick={logout} className="w-full flex items-center gap-4 px-4 py-4 rounded-2xl text-red-400 hover:bg-red-500/10 transition-colors">
+        <div className="p-4 border-t border-white/5 space-y-1">
+          <button onClick={() => { setIsChangePasswordOpen(true); setPasswordError(''); setPasswordSuccess(''); }} className="w-full flex items-center gap-4 px-4 py-3 rounded-2xl text-amber-400 hover:bg-amber-500/10 transition-colors">
+            <KeyRound size={20}/> 
+            {!isSidebarCollapsed && <span className="font-bold text-sm">تغيير كلمة المرور</span>}
+          </button>
+          <button onClick={logout} className="w-full flex items-center gap-4 px-4 py-3 rounded-2xl text-red-400 hover:bg-red-500/10 transition-colors">
             <LogOut size={20}/> 
             {!isSidebarCollapsed && <span className="font-bold text-sm">تسجيل الخروج</span>}
           </button>
@@ -135,6 +197,59 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
           {children}
         </main>
       </div>
+      {/* مودال تغيير كلمة المرور */}
+      <Modal isOpen={isChangePasswordOpen} onClose={() => setIsChangePasswordOpen(false)} title="تغيير كلمة المرور">
+        <div className="space-y-4 pt-2" dir="rtl">
+          {passwordError && (
+            <div className="bg-red-50 text-red-600 p-4 rounded-2xl text-sm font-bold flex items-center gap-2">
+              <KeyRound size={16} /> {passwordError}
+            </div>
+          )}
+          {passwordSuccess && (
+            <div className="bg-green-50 text-green-600 p-4 rounded-2xl text-sm font-bold">
+              {passwordSuccess}
+            </div>
+          )}
+          <div className="relative">
+            <input
+              className="w-full p-4 bg-gray-50 border rounded-2xl font-bold outline-none focus:border-[#E95D22] pr-12"
+              type={showCurrentPass ? 'text' : 'password'}
+              placeholder="كلمة المرور الحالية"
+              value={passwordForm.current}
+              onChange={e => setPasswordForm({...passwordForm, current: e.target.value})}
+            />
+            <button type="button" onClick={() => setShowCurrentPass(!showCurrentPass)} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+              {showCurrentPass ? <EyeOff size={18} /> : <Eye size={18} />}
+            </button>
+          </div>
+          <div className="relative">
+            <input
+              className="w-full p-4 bg-gray-50 border rounded-2xl font-bold outline-none focus:border-[#E95D22] pr-12"
+              type={showNewPass ? 'text' : 'password'}
+              placeholder="كلمة المرور الجديدة (6 أحرف على الأقل)"
+              value={passwordForm.new}
+              onChange={e => setPasswordForm({...passwordForm, new: e.target.value})}
+            />
+            <button type="button" onClick={() => setShowNewPass(!showNewPass)} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+              {showNewPass ? <EyeOff size={18} /> : <Eye size={18} />}
+            </button>
+          </div>
+          <input
+            className="w-full p-4 bg-gray-50 border rounded-2xl font-bold outline-none focus:border-[#E95D22]"
+            type="password"
+            placeholder="تأكيد كلمة المرور الجديدة"
+            value={passwordForm.confirm}
+            onChange={e => setPasswordForm({...passwordForm, confirm: e.target.value})}
+          />
+          <button
+            onClick={handleChangePassword}
+            disabled={passwordLoading}
+            className="w-full bg-[#1B2B48] text-white py-4 rounded-2xl font-black shadow-xl hover:bg-[#2a3f63] transition-colors disabled:opacity-50"
+          >
+            {passwordLoading ? <Loader2 className="animate-spin mx-auto" size={20} /> : 'تحديث كلمة المرور'}
+          </button>
+        </div>
+      </Modal>
     </div>
   );
 };

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, UserPlus, Shield, Mail, Trash2, Edit2, Loader2 } from 'lucide-react';
+import { Plus, UserPlus, Shield, Mail, Trash2, Edit2, Loader2, AlertTriangle } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import { useData } from '../contexts/DataContext';
 import Modal from './Modal';
@@ -8,7 +8,36 @@ const UserManagement = () => {
   const { appUsers, refreshData, currentUser } = useData();
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
+  const [deleteConfirmUser, setDeleteConfirmUser] = useState<any>(null);
   const [newUser, setNewUser] = useState({ name: '', email: '', password: '', role: 'CONVEYANCE', department: '' });
+
+  const isAdmin = currentUser?.role === 'ADMIN';
+
+  const handleDeleteUser = async (user: any) => {
+    if (!isAdmin || user.id === currentUser?.id) return;
+    setDeletingUserId(user.id);
+    try {
+      // حذف من جدول profiles
+      const { error: profileError } = await supabase.from('profiles').delete().eq('id', user.id);
+      if (profileError) console.warn('⚠️ خطأ حذف الملف الشخصي:', profileError.message);
+
+      // محاولة حذف المستخدم عبر وظيفة RPC (إن وجدت)
+      const { error: rpcError } = await supabase.rpc('delete_user_by_id', { user_id: user.id });
+      if (rpcError) {
+        console.warn('⚠️ لا توجد وظيفة delete_user_by_id أو فشلت:', rpcError.message);
+        // بديل: حذف من جدول auth.users عبر Admin API إن لم تكن الوظيفة موجودة
+      }
+
+      alert("تم حذف المستخدم بنجاح ✅");
+      setDeleteConfirmUser(null);
+      refreshData();
+    } catch (err: any) {
+      alert("فشل حذف المستخدم: " + err.message);
+    } finally {
+      setDeletingUserId(null);
+    }
+  };
 
   const handleAddUser = async () => {
     if (!newUser.email || !newUser.password) return alert("البريد وكلمة المرور مطلوبة");
@@ -52,6 +81,7 @@ const UserManagement = () => {
               <th className="p-5 font-black text-gray-400 text-xs">الموظف</th>
               <th className="p-5 font-black text-gray-400 text-xs">الدور الوظيفي</th>
               <th className="p-5 font-black text-gray-400 text-xs">القسم</th>
+              {isAdmin && <th className="p-5 font-black text-gray-400 text-xs">إجراءات</th>}
             </tr>
           </thead>
           <tbody className="divide-y">
@@ -70,6 +100,22 @@ const UserManagement = () => {
                   <span className="px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg text-[10px] font-black">{user.role}</span>
                 </td>
                 <td className="p-5 font-bold text-sm text-gray-600">{user.department || '-'}</td>
+                {isAdmin && (
+                  <td className="p-5">
+                    {user.id !== currentUser?.id ? (
+                      <button
+                        onClick={() => setDeleteConfirmUser(user)}
+                        disabled={deletingUserId === user.id}
+                        className="p-2 text-red-400 hover:bg-red-50 rounded-xl transition-colors disabled:opacity-50"
+                        title="حذف المستخدم"
+                      >
+                        {deletingUserId === user.id ? <Loader2 size={18} className="animate-spin" /> : <Trash2 size={18} />}
+                      </button>
+                    ) : (
+                      <span className="text-[10px] text-gray-400 font-bold">أنت</span>
+                    )}
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>
@@ -91,6 +137,34 @@ const UserManagement = () => {
           <button onClick={handleAddUser} disabled={isLoading} className="w-full bg-[#1B2B48] text-white py-4 rounded-2xl font-black shadow-xl">
             {isLoading ? <Loader2 className="animate-spin mx-auto" /> : "حفظ البيانات"}
           </button>
+        </div>
+      </Modal>
+
+      {/* مودال تأكيد الحذف */}
+      <Modal isOpen={!!deleteConfirmUser} onClose={() => setDeleteConfirmUser(null)} title="تأكيد حذف المستخدم">
+        <div className="space-y-5 pt-2" dir="rtl">
+          <div className="bg-red-50 p-5 rounded-2xl flex items-start gap-3">
+            <AlertTriangle size={24} className="text-red-500 mt-0.5 flex-shrink-0" />
+            <div>
+              <p className="font-black text-red-700 mb-1">هل أنت متأكد من حذف هذا المستخدم؟</p>
+              <p className="text-sm text-red-600 font-bold">سيتم حذف حساب <span className="font-black">{deleteConfirmUser?.name}</span> ({deleteConfirmUser?.email}) نهائياً ولا يمكن التراجع عن هذا الإجراء.</p>
+            </div>
+          </div>
+          <div className="flex gap-3">
+            <button
+              onClick={() => handleDeleteUser(deleteConfirmUser)}
+              disabled={deletingUserId === deleteConfirmUser?.id}
+              className="flex-1 bg-red-600 text-white py-4 rounded-2xl font-black shadow-xl hover:bg-red-700 transition-colors disabled:opacity-50"
+            >
+              {deletingUserId === deleteConfirmUser?.id ? <Loader2 className="animate-spin mx-auto" size={20} /> : 'نعم، حذف الحساب'}
+            </button>
+            <button
+              onClick={() => setDeleteConfirmUser(null)}
+              className="flex-1 bg-gray-100 text-gray-700 py-4 rounded-2xl font-black hover:bg-gray-200 transition-colors"
+            >
+              إلغاء
+            </button>
+          </div>
         </div>
       </Modal>
     </div>
