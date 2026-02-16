@@ -35,8 +35,13 @@ const WORK_STATEMENTS = Array.from(new Set(RAW_WORK_STATEMENTS));
 const STATUS_OPTIONS = [
   { value: 'new', label: 'جديد' },
   { value: 'pending', label: 'متابعة' },
+  { value: 'in_progress', label: 'قيد التنفيذ' },
+  { value: 'pending_modification', label: 'بانتظار التعديل' },
+  { value: 'under_review', label: 'تحت المراجعة' },
+  { value: 'approved', label: 'معتمد' },
   { value: 'completed', label: 'منجز' },
-  { value: 'rejected', label: 'مرفوض' }
+  { value: 'rejected', label: 'مرفوض' },
+  { value: 'cancelled', label: 'ملغى' }
 ];
 
 interface TechnicalModuleProps {
@@ -278,7 +283,7 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
             <label className="text-xs text-gray-400 font-bold block mb-1">المشروع</label>
             <select className="w-full p-4 bg-gray-50 border rounded-2xl font-bold outline-none" value={techForm.project_id} onChange={e=>setTechForm({...techForm, project_id:e.target.value})} disabled={!!filteredByProject}>
               <option value="">اختر المشروع...</option>
-              {(projects || []).map(p=><option key={p?.id} value={p?.id}>{p?.name || p?.title}</option>)}
+              {(projects || []).map(p=><option key={p?.id} value={p?.id}>{p?.id} - {p?.name || p?.title}</option>)}
             </select>
           </div>
           <div className="grid grid-cols-2 gap-4">
@@ -296,6 +301,16 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
                 {REVIEW_ENTITIES.map(e=><option key={e} value={e}>{e}</option>)}
               </select>
             </div>
+          </div>
+          <div>
+            <label className="text-xs text-gray-400 font-bold block mb-1">وصف الطلب</label>
+            <textarea className="w-full p-4 bg-gray-50 border rounded-2xl font-bold outline-none text-sm min-h-[100px] resize-none focus:border-[#1B2B48] transition-colors" placeholder="اكتب وصف أو تفاصيل الطلب..." value={techForm.details} onChange={e=>setTechForm({...techForm, details:e.target.value})}/>
+          </div>
+          <div>
+            <label className="text-xs text-gray-400 font-bold block mb-1">الحالة</label>
+            <select className="w-full p-4 bg-gray-50 border rounded-2xl font-bold outline-none" value={techForm.status} onChange={e=>setTechForm({...techForm, status:e.target.value})}>
+              {STATUS_OPTIONS.map(s=><option key={s.value} value={s.value}>{s.label}</option>)}
+            </select>
           </div>
           <button onClick={handleSubmit} disabled={isUploading} className="w-full bg-[#1B2B48] text-white py-5 rounded-[25px] font-black shadow-xl hover:brightness-110 transition-all">{isUploading ? 'جاري الحفظ...' : 'حفظ البيانات'}</button>
         </div>

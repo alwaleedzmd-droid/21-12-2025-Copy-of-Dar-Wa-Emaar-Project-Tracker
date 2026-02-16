@@ -227,8 +227,8 @@ const ManageRequestModal: React.FC<ManageRequestModalProps> = ({
            </div>
         )}
 
-        {/* Fix: Cleaned up invalid role strings (e.g., PR_OFFICER) from the role-based action check. */}
-        {canAction(['ADMIN', 'PR_MANAGER', 'TECHNICAL', 'CONVEYANCE']) && (
+        {/* صلاحية تغيير الحالة: فقط العلاقات العامة ومدير النظام */}
+        {canAction(['ADMIN', 'PR_MANAGER']) && (
           <div className="grid grid-cols-4 gap-2">
             <button onClick={() => changeStatus('completed')} className={`p-3 rounded-xl font-black flex flex-col items-center justify-center gap-1 transition-all active:scale-95 ${currentStatus === 'completed' || currentStatus === 'منجز' ? 'bg-green-600 text-white shadow-lg ring-2 ring-green-200' : 'bg-green-50 text-green-700 hover:bg-green-100'}`}>
               <CheckCircle2 size={18}/> <span className="text-[10px]">منجز</span>
