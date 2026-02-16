@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router';
 import { 
-  LayoutDashboard, LogOut, RefreshCw, Building2, 
+  LogOut, RefreshCw, Building2, 
   Zap, FileStack, Menu, X, Users, BarChart3
 } from 'lucide-react';
 import { useData } from '../contexts/DataContext';
@@ -33,14 +33,8 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   const navItems = [
     { 
       label: 'لوحة التحكم', 
-      icon: <LayoutDashboard size={20} />, 
-      path: '/dashboard', 
-      roles: ['ADMIN', 'PR_MANAGER'] 
-    },
-    { 
-      label: 'لوحة الإحصائيات', 
       icon: <BarChart3 size={20} />, 
-      path: '/statistics', 
+      path: '/dashboard', 
       roles: ['ADMIN', 'PR_MANAGER'] 
     },
     { 
