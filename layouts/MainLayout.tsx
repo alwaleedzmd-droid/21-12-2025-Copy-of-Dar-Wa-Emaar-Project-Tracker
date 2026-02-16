@@ -35,6 +35,16 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
     setPasswordError('');
     setPasswordSuccess('');
 
+    // التحقق من أن المستخدم ليس في وضع تجريبي
+    if (currentUser?.id?.startsWith('demo-')) {
+      setPasswordError('تغيير كلمة المرور غير متاح في الوضع التجريبي. يرجى تسجيل الدخول بحساب حقيقي.');
+      return;
+    }
+
+    if (!passwordForm.current) {
+      setPasswordError('يرجى إدخال كلمة المرور الحالية');
+      return;
+    }
     if (!passwordForm.new || !passwordForm.confirm) {
       setPasswordError('يرجى تعبئة جميع الحقول');
       return;
@@ -47,23 +57,25 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
       setPasswordError('كلمة المرور الجديدة غير متطابقة');
       return;
     }
+    if (passwordForm.current === passwordForm.new) {
+      setPasswordError('كلمة المرور الجديدة يجب أن تكون مختلفة عن الحالية');
+      return;
+    }
 
     setPasswordLoading(true);
     try {
-      // أولاً: التحقق من كلمة المرور الحالية عبر إعادة تسجيل الدخول
-      if (passwordForm.current && currentUser?.email) {
-        const { error: signInError } = await supabase.auth.signInWithPassword({
-          email: currentUser.email,
-          password: passwordForm.current
-        });
-        if (signInError) {
-          setPasswordError('كلمة المرور الحالية غير صحيحة');
-          setPasswordLoading(false);
-          return;
-        }
+      // الخطوة ١: التحقق من كلمة المرور الحالية عبر إعادة تسجيل الدخول
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: currentUser!.email,
+        password: passwordForm.current
+      });
+
+      if (signInError) {
+        setPasswordError('كلمة المرور الحالية غير صحيحة');
+        return;
       }
 
-      // تغيير كلمة المرور
+      // الخطوة ٢: تغيير كلمة المرور (الآن لدينا جلسة صالحة بعد signIn الناجح)
       const { error } = await supabase.auth.updateUser({ password: passwordForm.new });
       if (error) throw error;
 

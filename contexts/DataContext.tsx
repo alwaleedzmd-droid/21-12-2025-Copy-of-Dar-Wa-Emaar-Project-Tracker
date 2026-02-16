@@ -244,7 +244,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const e = email.toLowerCase();
     console.log('🔐 محاولة تسجيل الدخول:', e);
 
-    // ١- للموظفين المعروفين: تسجيل دخول تجريبي فوري (بدون انتظار Supabase)
+    // ١- للموظفين المعروفين
     if (EMPLOYEES_DATA[e]) {
       // محاولة Supabase Auth مع timeout قصير (3 ثوانٍ)
       if (supabase && supabase.auth) {
@@ -257,12 +257,22 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             setCurrentUser({ id: data.user.id, email: e, ...EMPLOYEES_DATA[e] });
             return data;
           }
+          // إذا رفض Supabase Auth بسبب كلمة مرور خاطئة، لا ننتقل للوضع التجريبي
+          if (error && (error.message?.includes('Invalid login') || error.message?.includes('invalid') || error.status === 400)) {
+            console.warn('❌ Supabase Auth رفض بيانات الدخول:', error.message);
+            throw new Error('كلمة المرور غير صحيحة');
+          }
         } catch (err: any) {
-          console.warn('⚠️ Supabase Auth timeout/error، الانتقال للوضع التجريبي:', err?.message);
+          // إذا كان الخطأ رفض مصادقة صريح، نرميه للمستخدم
+          if (err.message === 'كلمة المرور غير صحيحة') {
+            throw err;
+          }
+          // فقط timeout أو خطأ شبكة → ننتقل للوضع التجريبي
+          console.warn('⚠️ Supabase Auth timeout/network error، الانتقال للوضع التجريبي:', err?.message);
         }
       }
 
-      // تسجيل دخول تجريبي
+      // تسجيل دخول تجريبي (فقط عند timeout أو عدم توفر Supabase)
       console.log('ℹ️ تسجيل دخول تجريبي (Demo):', e);
       const demoId = 'demo-' + e;
       const user = { id: demoId, email: e, ...EMPLOYEES_DATA[e] } as any;
