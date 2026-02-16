@@ -250,21 +250,64 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       throw new Error('خدمة المصادقة غير متاحة حالياً');
     }
 
-    // تسجيل الدخول عبر Supabase Auth فقط
-    const { data, error } = await supabase.auth.signInWithPassword({ email: e, password });
+    // المحاولة الأولى: تسجيل الدخول العادي
+    let { data, error } = await supabase.auth.signInWithPassword({ email: e, password });
     
     if (error) {
-      console.error('❌ فشل تسجيل الدخول:', error.message, 'status:', error.status);
+      console.warn('❌ فشل تسجيل الدخول (المحاولة الأولى):', error.message, 'status:', error.status);
       
-      // التفريق بين أنواع الأخطاء
-      if (error.message?.includes('Database error') || error.status === 500) {
-        throw new Error('خطأ في الخادم - يرجى التواصل مع مدير النظام أو المحاولة لاحقاً. قد يحتاج حسابك إلى إعادة إنشاء.');
-      } else if (error.message?.includes('Invalid login') || error.message?.includes('invalid_grant') || error.status === 400) {
-        throw new Error('البريد أو كلمة المرور غير صحيحة');
-      } else if (error.message?.includes('Email not confirmed')) {
-        throw new Error('لم يتم تأكيد البريد الإلكتروني');
-      } else {
-        throw new Error(error.message || 'فشل تسجيل الدخول');
+      // إذا كان الخطأ من الخادم (500) أو بيانات خاطئة (400) - محاولة إصلاح الحساب تلقائياً
+      const isServerError = error.message?.includes('Database error') || error.status === 500;
+      const isCredentialError = error.message?.includes('Invalid login') || error.message?.includes('invalid_grant') || error.status === 400;
+      
+      if ((isServerError || isCredentialError) && e.endsWith('@darwaemaar.com')) {
+        console.log('🔧 محاولة إصلاح الحساب تلقائياً عبر create_new_user...');
+        
+        // البحث عن بيانات الموظف
+        const empData = EMPLOYEES_DATA[e];
+        const empName = empData?.name || e.split('@')[0];
+        const empRole = empData?.role || 'CONVEYANCE';
+        
+        try {
+          const { data: rpcResult, error: rpcError } = await supabase.rpc('create_new_user', {
+            email: e,
+            password: password,
+            full_name: empName,
+            user_role: empRole,
+            user_dept: ''
+          });
+          
+          if (rpcError) {
+            console.warn('⚠️ فشل إصلاح الحساب:', rpcError.message);
+          } else {
+            console.log('✅ تم إصلاح/إنشاء الحساب:', rpcResult);
+            
+            // الانتظار قليلاً ثم إعادة محاولة تسجيل الدخول
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            
+            const retryResult = await supabase.auth.signInWithPassword({ email: e, password });
+            if (!retryResult.error && retryResult.data?.user) {
+              console.log('✅ تسجيل دخول ناجح بعد الإصلاح:', retryResult.data.user.id);
+              data = retryResult.data;
+              error = null;
+            } else {
+              console.error('❌ فشل تسجيل الدخول بعد الإصلاح:', retryResult.error?.message);
+            }
+          }
+        } catch (repairErr: any) {
+          console.warn('⚠️ خطأ أثناء محاولة الإصلاح:', repairErr?.message);
+        }
+      }
+      
+      // إذا لا يزال هناك خطأ بعد محاولة الإصلاح
+      if (error && !data?.user) {
+        if (error.message?.includes('Database error') || error.status === 500) {
+          throw new Error('خطأ في الخادم - الحساب يحتاج إصلاح من مدير النظام. شغّل ملف SQL في Supabase.');
+        } else if (error.message?.includes('Email not confirmed')) {
+          throw new Error('لم يتم تأكيد البريد الإلكتروني');
+        } else {
+          throw new Error('البريد أو كلمة المرور غير صحيحة');
+        }
       }
     }
     

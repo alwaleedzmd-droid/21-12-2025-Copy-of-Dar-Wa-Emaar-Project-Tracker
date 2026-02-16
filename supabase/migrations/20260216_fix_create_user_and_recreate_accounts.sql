@@ -28,6 +28,11 @@ DECLARE
   existing_user_id UUID;
   encrypted_pw TEXT;
 BEGIN
+  -- تقييد: فقط إيميلات الشركة مسموحة
+  IF create_new_user.email NOT LIKE '%@darwaemaar.com' THEN
+    RETURN json_build_object('error', 'Invalid email domain', 'status', 'failed');
+  END IF;
+
   -- تشفير كلمة المرور
   encrypted_pw := crypt(password, gen_salt('bf'));
 
@@ -137,9 +142,10 @@ EXCEPTION WHEN OTHERS THEN
 END;
 $$;
 
--- منح صلاحية التنفيذ
+-- منح صلاحية التنفيذ (بما في ذلك anon للإصلاح التلقائي من صفحة تسجيل الدخول)
 GRANT EXECUTE ON FUNCTION public.create_new_user(TEXT, TEXT, TEXT, TEXT, TEXT) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.create_new_user(TEXT, TEXT, TEXT, TEXT, TEXT) TO service_role;
+GRANT EXECUTE ON FUNCTION public.create_new_user(TEXT, TEXT, TEXT, TEXT, TEXT) TO anon;
 
 -- ============================================================
 -- ٣. إصلاح حسابات المستخدمين الحالية (تحديث كلمات المرور والأعمدة الناقصة)
