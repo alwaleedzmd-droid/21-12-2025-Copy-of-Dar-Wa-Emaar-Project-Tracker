@@ -127,7 +127,7 @@ const NotificationBell = () => {
         <div className="absolute left-0 mt-4 w-80 bg-white rounded-3xl shadow-2xl border border-gray-100 z-[100] overflow-hidden animate-in fade-in slide-in-from-top-2 duration-300">
           <div className="p-4 border-b flex justify-between items-center bg-gray-50/50">
             <h3 className="font-black text-sm text-[#1B2B48]">الإشعارات</h3>
-            <span className="text-[10px] font-bold text-gray-400">آخر 10 تنبيهات</span>
+            <span className="text-[10px] font-bold text-gray-400">آخر 15 تنبيه</span>
           </div>
           <div className="max-h-[400px] overflow-y-auto">
             {notifications.length === 0 ? (

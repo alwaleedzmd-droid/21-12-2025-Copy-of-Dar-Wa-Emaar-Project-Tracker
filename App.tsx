@@ -3,9 +3,9 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Routes, Route, useNavigate, useLocation, useParams, Navigate } from 'react-router-dom';
 import { 
   AlertTriangle, Loader2, Plus, 
-  CheckCircle2, Clock, Info, Lock,
+  CheckCircle2, Clock,
   ChevronLeft, ShieldAlert,
-  MessageSquare, Send, ArrowLeft, RefreshCcw, Sheet
+  MessageSquare, Send, Sheet
 } from 'lucide-react';
 import { supabase } from './supabaseClient';
 import { ProjectWork, UserRole, User } from './types';
@@ -512,7 +512,7 @@ const AppContent: React.FC = () => {
       
       {/* ظهور المساعد الذكي للمدير ومدير العلاقات فقط */}
       {['ADMIN', 'PR_MANAGER'].includes(currentUser.role) && (
-        <AIAssistant currentUser={currentUser} projects={projects} technicalRequests={technicalRequests} clearanceRequests={clearanceRequests} projectWorks={projectWorks} onNavigate={(type, data) => navigate(type === 'PROJECT' ? `/projects/${data.id}` : '/deeds')} />
+        <AIAssistant currentUser={currentUser} projects={projects} technicalRequests={technicalRequests} clearanceRequests={clearanceRequests} projectWorks={projectWorks} onNavigate={(type, data) => navigate(type === 'PROJECT' ? `/projects/${data?.id}` : '/deeds')} />
       )}
     </MainLayout>
   );

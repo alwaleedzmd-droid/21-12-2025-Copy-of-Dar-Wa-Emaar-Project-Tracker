@@ -176,17 +176,14 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
             if (resolved) {
                 setNewDeedForm((prev: any) => ({
                     ...prev,
-                    client_name: resolved.customer_name || resolved.full_name || prev.client_name,
+                    client_name: resolved.customer_name || prev.client_name,
                     project_name: resolved.project_name || prev.project_name,
                     unit_number: resolved.unit_number || prev.unit_number,
-                    unit_value: resolved.sale_price || resolved.unit_price || prev.unit_value,
+                    unit_value: resolved.sale_price || prev.unit_value,
                     bank_name: resolved.bank_name || prev.bank_name,
-                    sakani_support_number: resolved.housing_contract_number || resolved.support_contract_number || prev.sakani_support_number,
-                    dob_hijri: resolved.birth_date || resolved.dob_hijri || prev.dob_hijri,
-                    mobile: resolved.mobile_number || resolved.customer_mobile || prev.mobile,
-                    tax_number: resolved.tax_number || prev.tax_number,
-                    city: resolved.city || prev.city,
-                    region: resolved.region || prev.region
+                    sakani_support_number: resolved.housing_contract_number || prev.sakani_support_number,
+                    dob_hijri: resolved.birth_date || prev.dob_hijri,
+                    mobile: resolved.mobile_number || prev.mobile,
                 }));
                 setAutoFillSuccess(true);
                 setTimeout(() => setAutoFillSuccess(false), 3000);
@@ -319,6 +316,14 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
             logActivity?.('تسجيل إفراغ جديد', payload.client_name, 'text-green-500');
 
             setIsRegModalOpen(false);
+            setNewDeedForm({
+                region: 'الرياض', city: 'الرياض', project_name: filteredProjectName || '',
+                plan_number: '', unit_number: '', old_deed_number: '', deed_date: '',
+                client_name: '', id_number: '', mobile: '', dob_hijri: '', unit_value: '',
+                tax_number: '', bank_name: '', contract_type: 'تمويل عقاري',
+                new_deed_number: '', new_deed_date: '', sakani_support_number: '', status: 'جديد'
+            });
+            lastFetchedIdRef.current = '';
             fetchDeeds();
             refreshData();
         } catch (error: any) { 

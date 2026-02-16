@@ -228,11 +228,15 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
     } catch (err: any) { alert("فشل تحديث الحالة"); }
   };
 
-  const filteredRequests = (requests || []).filter(r => 
-    (r?.project_name?.toLowerCase()?.includes(searchTerm.toLowerCase()) || '') ||
-    (r?.service_type?.toLowerCase()?.includes(searchTerm.toLowerCase()) || '') ||
-    (r?.reviewing_entity?.toLowerCase()?.includes(searchTerm.toLowerCase()) || '')
-  );
+  const filteredRequests = (requests || []).filter(r => {
+    if (!searchTerm) return true;
+    const term = searchTerm.toLowerCase();
+    return (
+      r?.project_name?.toLowerCase()?.includes(term) ||
+      r?.service_type?.toLowerCase()?.includes(term) ||
+      r?.reviewing_entity?.toLowerCase()?.includes(term)
+    );
+  });
 
   // Fix: Removed 'PR_EMPLOYEE' as it is not a valid UserRole and caused type overlap errors.
   const canEdit = currentUser?.role === 'ADMIN' || currentUser?.role === 'PR_MANAGER' || currentUser?.role === 'TECHNICAL';

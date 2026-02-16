@@ -89,7 +89,7 @@ const DashboardModule: React.FC<DashboardProps> = ({
             break;
     }
 
-    return combined.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    return combined.sort((a, b) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime());
   }, [projectWorks, techRequests, clearanceRequests, activeFilter]);
 
   // حساب تقدم المشاريع الفردية للعرض الجانبي

@@ -16,7 +16,7 @@ export interface ClearanceImportData {
   client_name: string;
   id_number: string;
   mobile: string;
-  dob_hijri: string;
+  birth_date: string;
   unit_value: number;
   tax_number: string;
   bank_name: string;
@@ -88,8 +88,8 @@ export const parseClearanceExcel = (
           client_name: row['اسم المستفيد'] || '',
           id_number: String(row['هوية المستفيد'] || ''),
           mobile: String(row['رقم جوال المستفيد'] || ''),
-          dob_hijri: row['تاريخ الميلاد ( هجري )'] || '',
-          unit_value: parseFloat(row['قيمة الوحده']) || 0,
+          birth_date: row['تاريخ الميلاد ( هجري )'] || '',
+          unit_value: parseFloat(row['قيمة الوحدة'] || row['قيمة الوحده']) || 0,
           tax_number: String(row['الرقم الضريبي'] || ''),
           bank_name: row['الجهة التمويلية'] || '',
           contract_type: row['نوع العقد التمويلي'] || '',

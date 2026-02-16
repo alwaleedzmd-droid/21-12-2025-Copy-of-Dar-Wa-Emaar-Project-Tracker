@@ -58,17 +58,17 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onClick, onTogglePin
         <div className="grid grid-cols-3 gap-2 mb-4">
             <div className="bg-gray-50 rounded-xl p-2 flex flex-col items-center justify-center border border-gray-100/50">
                 <Building2 className="w-3.5 h-3.5 text-blue-600 mb-1" />
-                <span className="text-[10px] font-bold text-[#1B2B48]">{project.details?.unitsCount || 0}</span>
+                <span className="text-[10px] font-bold text-[#1B2B48]">{project.units_count || 0}</span>
                 <span className="text-[8px] text-gray-400 uppercase tracking-tighter">وحدة</span>
             </div>
             <div className="bg-gray-50 rounded-xl p-2 flex flex-col items-center justify-center border border-gray-100/50">
                 <Zap className="w-3.5 h-3.5 text-amber-500 mb-1" />
-                <span className="text-[10px] font-bold text-[#1B2B48]">{project.details?.electricityMetersCount || 0}</span>
+                <span className="text-[10px] font-bold text-[#1B2B48]">{project.electricity_meters || 0}</span>
                 <span className="text-[8px] text-gray-400 uppercase tracking-tighter">كهرباء</span>
             </div>
             <div className="bg-gray-50 rounded-xl p-2 flex flex-col items-center justify-center border border-gray-100/50">
                 <Droplets className="w-3.5 h-3.5 text-cyan-500 mb-1" />
-                <span className="text-[10px] font-bold text-[#1B2B48]">{project.details?.waterMetersCount || 0}</span>
+                <span className="text-[10px] font-bold text-[#1B2B48]">{project.water_meters || 0}</span>
                 <span className="text-[8px] text-gray-400 uppercase tracking-tighter">مياه</span>
             </div>
         </div>
@@ -88,11 +88,11 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onClick, onTogglePin
         <div className="flex justify-between items-center text-[10px] border-t border-gray-50 pt-3">
             <div className="flex items-center gap-1 text-green-700 bg-green-50 px-2.5 py-1 rounded-lg font-bold">
                 <CheckCircle2 className="w-3 h-3" />
-                <span>{project.completedTasks} منجز</span>
+                <span>{project.completedTasks || 0} منجز</span>
             </div>
             <div className="flex items-center gap-1 text-[#E95D22] bg-[#E95D22]/5 px-2.5 py-1 rounded-lg font-bold">
                 <Clock className="w-3 h-3" />
-                <span>{project.totalTasks - project.completedTasks} قيد العمل</span>
+                <span>{(project.totalTasks || 0) - (project.completedTasks || 0)} قيد العمل</span>
             </div>
         </div>
       </div>

@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router';
 import { 
   LogOut, RefreshCw, Building2, 
@@ -23,6 +23,11 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => 
     localStorage.getItem('dar_sidebar_v2_collapsed') === 'true'
   );
+
+  useEffect(() => {
+    localStorage.setItem('dar_sidebar_v2_collapsed', String(isSidebarCollapsed));
+  }, [isSidebarCollapsed]);
+
   const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
   const [passwordForm, setPasswordForm] = useState({ current: '', new: '', confirm: '' });
   const [passwordLoading, setPasswordLoading] = useState(false);

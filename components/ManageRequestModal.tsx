@@ -131,8 +131,18 @@ const ManageRequestModal: React.FC<ManageRequestModalProps> = ({
       case 'pending': 
       case 'متابعة':
         return { label: 'قيد المتابعة ⏳', color: 'bg-blue-100 text-blue-700 border-blue-200' };
+      case 'in_progress':
+        return { label: 'قيد التنفيذ 🔄', color: 'bg-blue-100 text-blue-700 border-blue-200' };
+      case 'under_review':
+        return { label: 'قيد المراجعة 🔍', color: 'bg-purple-100 text-purple-700 border-purple-200' };
+      case 'approved':
+      case 'معتمد':
+        return { label: 'معتمد ✅', color: 'bg-green-100 text-green-700 border-green-200' };
+      case 'cancelled':
+      case 'ملغي':
+        return { label: 'ملغي 🚫', color: 'bg-gray-100 text-gray-700 border-gray-200' };
       default: 
-        return { label: 'جديد / قيد المراجعة 🆕', color: 'bg-gray-100 text-gray-700 border-gray-200' };
+        return { label: 'جديد 🆕', color: 'bg-gray-100 text-gray-700 border-gray-200' };
     }
   };
 
