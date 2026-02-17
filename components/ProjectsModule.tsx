@@ -40,45 +40,44 @@ const ProjectsModule: React.FC<ProjectsModuleProps> = ({
 
   const isAdmin = currentUser?.role === 'ADMIN';
 
-  // دالة تصدير المشاريع وأعمالها إلى Excel
+  // دالة تصدير المشاريع وأعمالها إلى Excel - صفحة واحدة
   const exportProjectsToExcel = () => {
     try {
       setIsExporting(true);
-      const wb = XLSX.utils.book_new();
       const timestamp = new Date().toLocaleString('ar-SA', { timeZone: 'Asia/Riyadh' });
 
-      // إنشاء ورقة ملخص الإحصائيات
-      const summaryData = [
-        ['لوحة إحصائيات', 'تاريخ التصدير: ' + timestamp],
-        [],
-        ['البيان', 'العدد'],
-        ['إجمالي المشاريع', projects.length],
-        ['إجمالي الأعمال', projectWorks.length],
-        ['الأعمال المنجزة', projectWorks.filter(w => w.status === 'completed' || w.status === 'منجز' || w.status === 'مكتمل').length]
+      // إنشاء البيانات - جميع المشاريع في صفحة واحدة
+      const excelData: any[] = [
+        ['تقرير المشاريع والأعمال - دار وإعمار', '', '', '', '', ''],
+        ['تاريخ التصدير: ' + timestamp, '', '', '', '', ''],
+        []
       ];
-      const wsSummary = XLSX.utils.aoa_to_sheet(summaryData);
-      wsSummary['!cols'] = [{ wch: 25 }, { wch: 30 }];
-      XLSX.utils.book_append_sheet(wb, wsSummary, 'ملخص الإحصائيات');
 
-      // إنشاء ورقة لكل مشروع
-      projects.forEach((project, projectIndex) => {
-        const projectData: any[] = [
-          [`المشروع: ${project.name || project.title}`],
-          ['الموقع', project.location || '-', 'عدد الوحدات', project.units_count || '-'],
-          []
-        ];
+      projects.forEach((project) => {
+        // معلومات المشروع
+        excelData.push([
+          `المشروع: ${project.name || project.title}`,
+          `الموقع: ${project.location || '-'}`,
+          `عدد الوحدات: ${project.units_count || '-'}`,
+          `الحالة: ${project.status || 'active'}`,
+          '',
+          ''
+        ]);
 
+        // الأعمال المسجلة
         const projectTasksList = projectWorks.filter((w: ProjectWork) => {
           const wId = w.projectId ?? (w as any).projectid ?? (w as any).project_id;
           return Number(wId) === project.id;
         });
 
         if (projectTasksList.length > 0) {
-          projectData.push(['#', 'اسم العمل', 'الحالة', 'الجهة', 'القسم', 'الملاحظات']);
+          excelData.push(['#', 'اسم العمل', 'الحالة', 'الجهة', 'القسم', 'الملاحظات']);
 
           projectTasksList.forEach((work: ProjectWork, index: number) => {
-            const statusLabel = work.status === 'completed' || work.status === 'منجز' || work.status === 'مكتمل' ? 'منجز' : 'قيد الإنجاز';
-            projectData.push([
+            const statusLabel = work.status === 'completed' || work.status === 'منجز' || work.status === 'مكتمل' 
+              ? 'منجز' 
+              : 'قيد الإنجاز';
+            excelData.push([
               index + 1,
               work.task_name || '-',
               statusLabel,
@@ -93,28 +92,35 @@ const ProjectsModule: React.FC<ProjectsModuleProps> = ({
           ).length;
           const completionRate = ((completedCount / projectTasksList.length) * 100).toFixed(1);
 
-          projectData.push(
-            [],
-            ['الإجمالي', projectTasksList.length, 'منجز', completedCount, 'نسبة الإنجاز', `${completionRate}%`]
-          );
+          excelData.push(['', 'الإجمالي', projectTasksList.length, 'منجز', completedCount, `${completionRate}%`]);
         } else {
-          projectData.push(['لا توجد أعمال مسجلة']);
+          excelData.push(['', 'لا توجد أعمال مسجلة', '', '', '', '']);
         }
 
-        const ws = XLSX.utils.aoa_to_sheet(projectData);
-        ws['!cols'] = [
-          { wch: 5 },
-          { wch: 30 },
-          { wch: 12 },
-          { wch: 20 },
-          { wch: 15 },
-          { wch: 25 }
-        ];
-        
-        const sheetName = `${projectIndex + 1}-${(project.name || project.title).substring(0, 20)}`;
-        XLSX.utils.book_append_sheet(wb, ws, sheetName);
+        excelData.push([]); // سطر فارغ بين المشاريع
       });
 
+      // إنشاء ورقة العمل
+      const ws = XLSX.utils.aoa_to_sheet(excelData);
+      
+      // ضبط عرض الأعمدة
+      ws['!cols'] = [
+        { wch: 5 },   // #
+        { wch: 30 },  // اسم العمل/المشروع
+        { wch: 15 },  // الحالة
+        { wch: 20 },  // الجهة
+        { wch: 15 },  // القسم
+        { wch: 25 }   // الملاحظات
+      ];
+
+      // ضبط لتوافق RTL
+      ws['!rtl'] = true;
+
+      // إنشاء الملف
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'المشاريع والأعمال');
+
+      // تحميل الملف
       const fileName = `المشاريع_والأعمال_${new Date().toISOString().split('T')[0]}.xlsx`;
       XLSX.writeFile(wb, fileName);
 

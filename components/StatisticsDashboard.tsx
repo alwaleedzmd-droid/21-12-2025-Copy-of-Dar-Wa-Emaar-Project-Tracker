@@ -435,9 +435,21 @@ const StatisticsDashboard: React.FC = () => {
     try {
       setIsExporting(true);
       
-      // تحميل المكتبات ديناميكياً
-      const html2canvas = (await import('html2canvas')).default;
-      const jsPDF = (await import('jspdf')).default;
+      // تحميل المكتبات
+      let html2canvas: any;
+      let jsPDF: any;
+
+      try {
+        html2canvas = (await import('html2canvas')).default;
+      } catch {
+        throw new Error('فشل في تحميل مكتبة html2canvas. تأكد من: npm install html2canvas');
+      }
+
+      try {
+        jsPDF = (await import('jspdf')).default;
+      } catch {
+        throw new Error('فشل في تحميل مكتبة jspdf. تأكد من: npm install jspdf');
+      }
 
       const element = document.querySelector('[data-export-target]') as HTMLElement;
       if (!element) {
@@ -463,17 +475,8 @@ const StatisticsDashboard: React.FC = () => {
       const pdf = new jsPDF({
         orientation: 'portrait',
         unit: 'mm',
-        format: 'a4',
-        compress: true
+        format: 'a4'
       });
-      
-      // تفعيل عرض RTL من اليمين للیسار
-      (pdf as any).setDisplayMode('pagefit');
-      if ((pdf as any).viewerPreferences) {
-        (pdf as any).viewerPreferences({
-          Direction: 'R2L'
-        });
-      }
 
       const pageWidth = pdf.internal.pageSize.getWidth();
       const pageHeight = pdf.internal.pageSize.getHeight();
@@ -504,7 +507,8 @@ const StatisticsDashboard: React.FC = () => {
     } catch (error) {
       console.error('خطأ في تصدير PDF:', error);
       setIsExporting(false);
-      alert('حدث خطأ أثناء تصدير PDF. تأكد من تثبيت المكتبات المطلوبة: npm install jspdf html2canvas');
+      const errorMessage = error instanceof Error ? error.message : 'خطأ غير معروف';
+      alert(`حدث خطأ أثناء تصدير PDF:\n\n${errorMessage}\n\nالحل: تأكد من تثبيت المكتبات:\nnpm install jspdf html2canvas`);
     }
   };
 
