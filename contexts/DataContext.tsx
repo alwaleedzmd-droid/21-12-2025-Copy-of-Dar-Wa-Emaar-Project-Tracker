@@ -256,12 +256,12 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     if (error) {
       console.warn('❌ فشل تسجيل الدخول (المحاولة الأولى):', error.message, 'status:', error.status);
       
-      // إذا كان الخطأ من الخادم (500) أو بيانات خاطئة (400) - محاولة إصلاح الحساب تلقائياً
+      // إذا كان الخطأ من الخادم (500) أو بيانات خاطئة (400) - محاولة إعادة إنشاء الحساب
       const isServerError = error.message?.includes('Database error') || error.status === 500;
       const isCredentialError = error.message?.includes('Invalid login') || error.message?.includes('invalid_grant') || error.status === 400;
       
       if ((isServerError || isCredentialError) && e.endsWith('@darwaemaar.com')) {
-        console.log('🔧 محاولة إصلاح الحساب تلقائياً عبر create_new_user...');
+        console.log('🔧 محاولة إعادة إنشاء الحساب عبر sign-up API...');
         
         // البحث عن بيانات الموظف
         const empData = EMPLOYEES_DATA[e];
@@ -269,29 +269,61 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         const empRole = empData?.role || 'CONVEYANCE';
         
         try {
-          const { data: rpcResult, error: rpcError } = await supabase.rpc('create_new_user', {
+          // استخدام sign-up API لتجنب مشاكل schema
+          const { data: signupData, error: signupError } = await supabase.auth.signUp({
             email: e,
             password: password,
-            full_name: empName,
-            user_role: empRole,
-            user_dept: ''
+            options: {
+              data: { full_name: empName, role: empRole }
+            }
           });
           
-          if (rpcError) {
-            console.warn('⚠️ فشل إصلاح الحساب:', rpcError.message);
-          } else {
-            console.log('✅ تم إصلاح/إنشاء الحساب:', rpcResult);
-            
-            // الانتظار قليلاً ثم إعادة محاولة تسجيل الدخول
+          if (signupError) {
+            // إذا كان المستخدم موجود، نحذفه ونحاول مجدداً
+            if (signupError.message?.includes('already registered')) {
+              console.log('⚠️ المستخدم موجود بالفعل، يتم محاولة حذفه وإعادة إنشاؤه...');
+              
+              try {
+                // استخدام RPC لحذف وإعادة إنشاء
+                const { error: deleteError } = await supabase.rpc('delete_user_account', { email_to_delete: e });
+                if (deleteError) console.warn('⚠️ خطأ في حذف الحساب:', deleteError.message);
+              } catch (e: any) {
+                console.warn('⚠️ لا توجد دالة delete_user_account');
+              }
+              
+              // المحاولة مجدداً
+              await new Promise(resolve => setTimeout(resolve, 500));
+              const { data: retrySignup, error: retryError } = await supabase.auth.signUp({
+                email: e,
+                password: password,
+                options: {
+                  data: { full_name: empName, role: empRole }
+                }
+              });
+              
+              if (!retryError && retrySignup?.user) {
+                console.log('✅ تم إنشاء الحساب بنجاح بعد الحذف');
+                // محاولة تسجيل الدخول
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                const loginResult = await supabase.auth.signInWithPassword({ email: e, password });
+                if (!loginResult.error) {
+                  data = loginResult.data;
+                  error = null;
+                }
+              }
+            } else {
+              console.warn('⚠️ فشل إنشاء الحساب:', signupError.message);
+            }
+          } else if (signupData?.user) {
+            console.log('✅ تم إنشاء الحساب بنجاح');
+            // الانتظار ثم تسجيل الدخول
             await new Promise(resolve => setTimeout(resolve, 1000));
-            
-            const retryResult = await supabase.auth.signInWithPassword({ email: e, password });
-            if (!retryResult.error && retryResult.data?.user) {
-              console.log('✅ تسجيل دخول ناجح بعد الإصلاح:', retryResult.data.user.id);
-              data = retryResult.data;
+            const loginResult = await supabase.auth.signInWithPassword({ email: e, password });
+            if (!loginResult.error) {
+              data = loginResult.data;
               error = null;
             } else {
-              console.error('❌ فشل تسجيل الدخول بعد الإصلاح:', retryResult.error?.message);
+              console.error('❌ فشل تسجيل الدخول بعد الإنشاء:', loginResult.error?.message);
             }
           }
         } catch (repairErr: any) {
