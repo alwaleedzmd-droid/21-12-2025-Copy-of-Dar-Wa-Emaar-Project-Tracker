@@ -73,12 +73,12 @@ const LoginPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen relative overflow-hidden bg-[#0D0D0D] flex items-center justify-center p-4 font-cairo" dir="rtl">
-      <div className="absolute -top-32 -left-24 w-[420px] h-[420px] rounded-full bg-[#E95D22]/25 blur-3xl" />
-      <div className="absolute top-1/3 right-1/4 w-[300px] h-[300px] rounded-full bg-white/5 blur-3xl" />
-      <div className="absolute -bottom-32 -right-20 w-[360px] h-[360px] rounded-full bg-[#E95D22]/15 blur-3xl" />
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_rgba(233,93,34,0.08),_#0D0D0D_70%)]" />
-      <div className="relative bg-white rounded-[28px] shadow-2xl p-8 md:p-12 max-w-md w-full border border-gray-100">
+    <div className="min-h-screen relative overflow-hidden bg-white flex items-center justify-center p-4 font-cairo" dir="rtl">
+      <div className="absolute -top-32 -left-24 w-[420px] h-[420px] rounded-full bg-[#E95D22]/10 blur-3xl" />
+      <div className="absolute top-1/3 right-1/4 w-[300px] h-[300px] rounded-full bg-gray-100/80 blur-3xl" />
+      <div className="absolute -bottom-32 -right-20 w-[360px] h-[360px] rounded-full bg-[#E95D22]/8 blur-3xl" />
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_rgba(233,93,34,0.03),_white_70%)]" />
+      <div className="relative bg-white rounded-[28px] shadow-2xl p-8 md:p-12 max-w-md w-full border border-gray-200">
         {/* Logo */}
         <div className="flex justify-center mb-6">
           <div className="w-20 h-20 rounded-2xl bg-white border border-gray-200 flex items-center justify-center shadow-sm">
