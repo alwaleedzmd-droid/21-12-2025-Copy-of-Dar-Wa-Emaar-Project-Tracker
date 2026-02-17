@@ -263,10 +263,13 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         console.log('🔧 تفعيل Demo Mode - البيانات موجودة في النظام');
         // Demo mode - استخدم بيانات الموظف المحفوظة
         const empData = EMPLOYEES_DATA[e];
-        // يمكنك إضافة تحقق من كلمة المرور إذا أردت، لكن في demo نسمح بأي كلمة
         
-        // إنشاء user ID وهمي من البريد
-        const userId = Buffer.from(e).toString('base64').substring(0, 36);
+        // إنشاء UUID عشوائي للـ Demo Mode
+        const userId = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+          const r = Math.random() * 16 | 0;
+          const v = c === 'x' ? r : (r & 0x3 | 0x8);
+          return v.toString(16);
+        });
         
         setCurrentUser({
           id: userId,
