@@ -2,13 +2,19 @@ import React, { useState } from 'react';
 import { LogIn, Loader2, AlertCircle } from 'lucide-react';
 import { useData } from '../contexts/DataContext';
 import { DAR_LOGO } from '../constants';
+import Modal from './Modal';
 
 const LoginPage: React.FC = () => {
-  const { login } = useData();
+  const { login, setTempPassword } = useData();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [isTempModalOpen, setIsTempModalOpen] = useState(false);
+  const [tempPassword, setTempPasswordInput] = useState('');
+  const [tempConfirm, setTempConfirm] = useState('');
+  const [tempError, setTempError] = useState('');
+  const [tempLoading, setTempLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -20,9 +26,44 @@ const LoginPage: React.FC = () => {
       // لا حاجة لإعادة تحميل الصفحة - React يعيد الرسم تلقائياً عند تغيير currentUser
     } catch (err: any) {
       console.error('Login error:', err);
-      setError(err.message || 'فشل تسجيل الدخول. تحقق من البريد الإلكتروني وكلمة المرور.');
+      if (err?.code === 'TEMP_PASSWORD_REQUIRED') {
+        setIsTempModalOpen(true);
+        setTempError('');
+      } else {
+        setError(err.message || 'فشل تسجيل الدخول. تحقق من البريد الإلكتروني وكلمة المرور.');
+      }
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSetTempPassword = async () => {
+    setTempError('');
+    if (!tempPassword || !tempConfirm) {
+      setTempError('يرجى تعبئة جميع الحقول');
+      return;
+    }
+    if (tempPassword.length < 6) {
+      setTempError('كلمة المرور يجب أن تكون 6 أحرف على الأقل');
+      return;
+    }
+    if (tempPassword !== tempConfirm) {
+      setTempError('كلمتا المرور غير متطابقتين');
+      return;
+    }
+
+    setTempLoading(true);
+    try {
+      const normalizedEmail = email.toLowerCase().trim();
+      await setTempPassword(normalizedEmail, tempPassword);
+      await login(normalizedEmail, tempPassword);
+      setIsTempModalOpen(false);
+      setTempPasswordInput('');
+      setTempConfirm('');
+    } catch (err: any) {
+      setTempError(err.message || 'فشل حفظ كلمة المرور المؤقتة');
+    } finally {
+      setTempLoading(false);
     }
   };
 
@@ -114,6 +155,40 @@ const LoginPage: React.FC = () => {
           © 2026 دار وإعمار للتطوير العقاري
         </p>
       </div>
+
+      <Modal isOpen={isTempModalOpen} onClose={() => setIsTempModalOpen(false)} title="إعداد كلمة مرور مؤقتة">
+        <div className="space-y-4 pt-2" dir="rtl">
+          <p className="text-sm text-gray-500 font-bold">
+            لم يتم إعداد كلمة مرور لهذا الحساب. الرجاء إنشاء كلمة مرور مؤقتة.
+          </p>
+          {tempError && (
+            <div className="bg-red-50 border-2 border-red-200 rounded-xl p-4">
+              <p className="text-red-700 text-sm font-bold">{tempError}</p>
+            </div>
+          )}
+          <input
+            type="password"
+            value={tempPassword}
+            onChange={(e) => setTempPasswordInput(e.target.value)}
+            className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-[#1B2B48] font-bold"
+            placeholder="كلمة المرور المؤقتة"
+          />
+          <input
+            type="password"
+            value={tempConfirm}
+            onChange={(e) => setTempConfirm(e.target.value)}
+            className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-[#1B2B48] font-bold"
+            placeholder="تأكيد كلمة المرور"
+          />
+          <button
+            onClick={handleSetTempPassword}
+            disabled={tempLoading}
+            className="w-full bg-[#1B2B48] text-white py-3 rounded-xl font-black shadow-lg disabled:opacity-50"
+          >
+            {tempLoading ? <Loader2 className="animate-spin mx-auto" size={18} /> : 'حفظ والمتابعة'}
+          </button>
+        </div>
+      </Modal>
     </div>
   );
 };

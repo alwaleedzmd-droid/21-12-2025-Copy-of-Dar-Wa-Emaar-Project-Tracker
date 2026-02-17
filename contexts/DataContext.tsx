@@ -12,6 +12,7 @@ interface DataContextType {
   isDbLoading: boolean;
   isAuthLoading: boolean;
   login: (email: string, password: string) => Promise<any>;
+  setTempPassword: (email: string, tempPassword: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshData: () => Promise<void>;
   logActivity: (action: string, target: string, color?: string) => void;
@@ -21,6 +22,14 @@ const DataContext = createContext<DataContextType | undefined>(undefined);
 
 // Global flag لتتبع Demo Mode - متاح في جميع الدوال
 let GlobalDemoModeActive = false;
+
+const hashPassword = async (password: string) => {
+  const data = new TextEncoder().encode(password);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  return Array.from(new Uint8Array(hashBuffer))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+};
 
 // --- تعريف الموظفين حسب البيانات المحدثة ---
 const EMPLOYEES_DATA: Record<string, { name: string; role: UserRole }> = {
@@ -141,6 +150,27 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setIsDbLoading(false);
     }
   }, [currentUser]);
+
+  const setTempPassword = useCallback(async (email: string, tempPassword: string) => {
+    if (!supabase) throw new Error('خدمة المصادقة غير متاحة حالياً');
+    const hashed = await hashPassword(tempPassword);
+    const { data, error } = await supabase
+      .from('profiles')
+      .update({
+        temp_password_hash: hashed,
+        temp_password_set_at: new Date().toISOString(),
+        must_change_password: false
+      })
+      .select('id')
+      .eq('email', email.toLowerCase());
+
+    if (error) {
+      throw new Error('فشل حفظ كلمة المرور المؤقتة');
+    }
+    if (!data || data.length === 0) {
+      throw new Error('لا يوجد ملف مستخدم لهذا البريد');
+    }
+  }, []);
 
   useEffect(() => {
     const initAuth = async () => {
@@ -282,6 +312,27 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     // قائمة المستخدمين المعروفة (Demo Mode Fast Track) - لا تتفاعل مع GoTrue
     if (EMPLOYEES_DATA[e]) {
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('id, email, name, role, temp_password_hash, must_change_password')
+        .eq('email', e)
+        .maybeSingle();
+
+      if (profileError) {
+        throw new Error('تعذر التحقق من كلمة المرور حاليا');
+      }
+
+      if (!profile?.temp_password_hash) {
+        const err: any = new Error('يجب إعداد كلمة مرور مؤقتة');
+        err.code = 'TEMP_PASSWORD_REQUIRED';
+        throw err;
+      }
+
+      const inputHash = await hashPassword(password);
+      if (inputHash !== profile.temp_password_hash) {
+        throw new Error('البريد أو كلمة المرور غير صحيحة');
+      }
+
       console.log('🔧 تفعيل Demo Mode المباشر - تجاوز GoTrue تماماً');
       
       // حذف جميع جلسات Supabase من localStorage لمنع أي تدخل من GoTrue
@@ -305,8 +356,8 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const demoUser = {
         id: userId,
         email: e,
-        name: empData.name,
-        role: empData.role,
+        name: profile?.name || empData.name,
+        role: (profile?.role as UserRole) || empData.role,
         isDemoMode: true  // Mark as demo mode
       };
       
@@ -368,7 +419,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   return (
     <DataContext.Provider value={{
       projects, technicalRequests, clearanceRequests, projectWorks, appUsers,
-      currentUser, isDbLoading, isAuthLoading, login, logout, refreshData, logActivity
+      currentUser, isDbLoading, isAuthLoading, login, setTempPassword, logout, refreshData, logActivity
     }}>
       {children}
     </DataContext.Provider>

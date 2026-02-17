@@ -39,102 +39,13 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   const [showCurrentPass, setShowCurrentPass] = useState(false);
   const [showNewPass, setShowNewPass] = useState(false);
 
-  // منع فتح modal في Demo Mode بقوة - أغلق أي محاولة للفتح
-  useEffect(() => {
-    if (isDemoMode) {
-      console.log('🔒 Demo Mode نشط:', isDemoMode, 'Modal مفتوحه:', isChangePasswordOpen);
-      if (isChangePasswordOpen) {
-        console.log('🔒 Demo Mode نشط - إغلاق modal تغيير كلمة المرور بقوة');
-        setIsChangePasswordOpen(false);
-      }
-    }
-  }, [isDemoMode, isChangePasswordOpen]);
-
-  // منع فتح modal منفصل - مراقب isDemoMode فقط
-  useEffect(() => {
-    if (isDemoMode) {
-      console.log('✅ useEffect منفصل: إغلاق أي modal عند Demo Mode');
-      setIsChangePasswordOpen(false);
-      
-      // إضافة style global لإخفاء أي fixed modal عند Demo Mode
-      const style = document.createElement('style');
-      style.id = 'demo-modal-block';
-      style.innerHTML = `
-        /* منع أي fixed modal من الظهور في Demo Mode */
-        .fixed.inset-0.z-50 { display: none !important; visibility: hidden !important; }
-        dialog { display: none !important; visibility: hidden !important; }
-        [role="dialog"] { display: none !important; visibility: hidden !important; }
-        [role="alertdialog"] { display: none !important; visibility: hidden !important; }
-        body.modal-open { overflow: auto !important; }
-        
-        /* منع backdrop أو overlay من الظهور */
-        .bg-black\/50 { display: none !important; }
-        [class*="backdrop"] { display: none !important; }
-        [class*="overlay"] { display: none !important; }
-      `;
-      if (!document.getElementById('demo-modal-block')) {
-        document.head.appendChild(style);
-        console.log('🛡️ أضفنا CSS protection لمنع modals');
-      }
-      
-      // منع أي alert/confirm/prompt من browser
-      if (typeof window !== 'undefined') {
-        window.alert = function(...args: any[]) {
-          console.log('🚫 منع alert في Demo Mode:', args[0]);
-          return undefined;
-        };
-        window.confirm = function(...args: any[]) {
-          console.log('🚫 منع confirm في Demo Mode:', args[0]);
-          return false;
-        };
-        window.prompt = function(...args: any[]) {
-          console.log('🚫 منع prompt في Demo Mode:', args[0]);
-          return null;
-        };
-      }
-    } else {
-      // إزالة الـ style عند عدم وجود Demo Mode
-      const style = document.getElementById('demo-modal-block');
-      if (style) style.remove();
-    }
-  }, [isDemoMode]);
-
-  // حماية استباقية - اغلق Modal إذا حاولت الفتح
-  useEffect(() => {
-    if (isDemoMode && isChangePasswordOpen === true) {
-      console.log('⚠️ محاولة فتح Modal في Demo Mode - إغلاق فوراً');
-      setIsChangePasswordOpen(false);
-    }
-  }, [isChangePasswordOpen, isDemoMode]);
-
-  // منع أي استدعاءات من Supabase المخفية عند Demo Mode
-  useEffect(() => {
-    if (!isDemoMode) return;
-
-    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      // منع أي unsaved changes warning من popup
-      if (isDemoMode) {
-        e.preventDefault();
-        e.returnValue = '';
-      }
-    };
-
-    const handleUnhandledRejection = (e: PromiseRejectionEvent) => {
-      // منع أي unhandled promise rejections من Supabase
-      if (isDemoMode && (e.reason?.message?.includes('password') || e.reason?.message?.includes('auth'))) {
-        console.log('🚫 منع unhandled rejection في Demo Mode:', e.reason);
-        e.preventDefault();
-      }
-    };
-
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    window.addEventListener('unhandledrejection', handleUnhandledRejection);
-
-    return () => {
-      window.removeEventListener('beforeunload', handleBeforeUnload);
-      window.removeEventListener('unhandledrejection', handleUnhandledRejection);
-    };
-  }, [isDemoMode]);
+  const hashPassword = async (value: string) => {
+    const data = new TextEncoder().encode(value);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    return Array.from(new Uint8Array(hashBuffer))
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join('');
+  };
 
   const handleChangePassword = async () => {
     setPasswordError('');
@@ -163,20 +74,48 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
 
     setPasswordLoading(true);
     try {
-      // الخطوة ١: التحقق من كلمة المرور الحالية عبر تسجيل الدخول
-      const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
-        email: currentUser!.email,
-        password: passwordForm.current
-      });
+      if (isDemoMode) {
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('temp_password_hash')
+          .eq('email', currentUser!.email)
+          .maybeSingle();
 
-      if (signInError || !signInData?.user) {
-        setPasswordError('كلمة المرور الحالية غير صحيحة');
-        return;
+        if (profileError) throw profileError;
+
+        const currentHash = await hashPassword(passwordForm.current);
+        if (!profile?.temp_password_hash || currentHash !== profile.temp_password_hash) {
+          setPasswordError('كلمة المرور الحالية غير صحيحة');
+          return;
+        }
+
+        const newHash = await hashPassword(passwordForm.new);
+        const { error } = await supabase
+          .from('profiles')
+          .update({
+            temp_password_hash: newHash,
+            temp_password_set_at: new Date().toISOString(),
+            must_change_password: false
+          })
+          .eq('email', currentUser!.email);
+
+        if (error) throw error;
+      } else {
+        // الخطوة ١: التحقق من كلمة المرور الحالية عبر تسجيل الدخول
+        const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+          email: currentUser!.email,
+          password: passwordForm.current
+        });
+
+        if (signInError || !signInData?.user) {
+          setPasswordError('كلمة المرور الحالية غير صحيحة');
+          return;
+        }
+
+        // الخطوة ٢: تغيير كلمة المرور
+        const { error } = await supabase.auth.updateUser({ password: passwordForm.new });
+        if (error) throw error;
       }
-
-      // الخطوة ٢: تغيير كلمة المرور
-      const { error } = await supabase.auth.updateUser({ password: passwordForm.new });
-      if (error) throw error;
 
       setPasswordSuccess('تم تغيير كلمة المرور بنجاح ✅');
       setPasswordForm({ current: '', new: '', confirm: '' });
@@ -192,15 +131,6 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   };
 
   if (!currentUser) return <>{children}</>;
-
-  // إذا كان في Demo Mode، منع Modal تماماً وإغلاق أي محاولة
-  if (isDemoMode) {
-    console.log('🔒 Demo Mode نشط - حماية MainLayout من Modal: isChangePasswordOpen =', isChangePasswordOpen);
-    if (isChangePasswordOpen) {
-      console.log('⚠️ حاولت Modal الفتح في Demo Mode - إغلاق فوراً');
-      // لا تُرجع، فقط استمر مع guard في الـ JSX
-    }
-  }
 
   /**
    * تعريف صلاحيات القائمة الجانبية حسب كل دور
@@ -277,18 +207,14 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
         </nav>
 
         <div className="p-4 border-t border-white/5 space-y-1">
-          {!isDemoMode && (
-            <button onClick={() => { 
-              if (!isDemoMode) {
-                setIsChangePasswordOpen(true); 
-                setPasswordError(''); 
-                setPasswordSuccess(''); 
-              }
-            }} className="w-full flex items-center gap-4 px-4 py-3 rounded-2xl text-amber-400 hover:bg-amber-500/10 transition-colors">
-              <KeyRound size={20}/> 
-              {!isSidebarCollapsed && <span className="font-bold text-sm">تغيير كلمة المرور</span>}
-            </button>
-          )}
+          <button onClick={() => { 
+            setIsChangePasswordOpen(true); 
+            setPasswordError(''); 
+            setPasswordSuccess(''); 
+          }} className="w-full flex items-center gap-4 px-4 py-3 rounded-2xl text-amber-400 hover:bg-amber-500/10 transition-colors">
+            <KeyRound size={20}/> 
+            {!isSidebarCollapsed && <span className="font-bold text-sm">تغيير كلمة المرور</span>}
+          </button>
           <button onClick={logout} className="w-full flex items-center gap-4 px-4 py-3 rounded-2xl text-red-400 hover:bg-red-500/10 transition-colors">
             <LogOut size={20}/> 
             {!isSidebarCollapsed && <span className="font-bold text-sm">تسجيل الخروج</span>}
@@ -325,10 +251,10 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
           {children}
         </main>
       </div>
-      {/* مودال تغيير كلمة المرور - محمي بـ Demo Mode */}
-      {!isDemoMode && isChangePasswordOpen && (
+      {/* مودال تغيير كلمة المرور */}
+      {isChangePasswordOpen && (
         <Modal isOpen={true} onClose={() => { 
-          if (!isDemoMode) setIsChangePasswordOpen(false); 
+          setIsChangePasswordOpen(false); 
         }} title="تغيير كلمة المرور">
         <div className="space-y-4 pt-2" dir="rtl">
           {passwordError && (
