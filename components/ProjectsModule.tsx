@@ -32,14 +32,14 @@ const ProjectsModule: React.FC<ProjectsModuleProps> = ({
   selectedProject
 }) => {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  const [addForm, setAddForm] = useState({ name: '', location: '', client: '' });
+  const [addForm, setAddForm] = useState({ name: '', location: '' });
 
   const isAdmin = currentUser?.role === 'ADMIN';
 
   const handleAddProject = async () => {
     if (!addForm.name) return alert("اسم المشروع مطلوب");
     const { error } = await supabase.from('projects').insert([{ 
-      client: addForm.client || addForm.name, 
+      name: addForm.name,
       title: addForm.name, 
       status: 'active', 
       location: addForm.location 
@@ -49,7 +49,7 @@ const ProjectsModule: React.FC<ProjectsModuleProps> = ({
     else {
       alert("تم إنشاء المشروع بنجاح ✅");
       setIsAddModalOpen(false);
-      setAddForm({ name: '', location: '', client: '' });
+      setAddForm({ name: '', location: '' });
       onRefresh();
     }
   };
@@ -115,7 +115,6 @@ const ProjectsModule: React.FC<ProjectsModuleProps> = ({
       <Modal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} title="إضافة مشروع جديد">
         <div className="space-y-5 text-right font-cairo">
           <InputText label="اسم المشروع" value={addForm.name} onChange={(v: string) => setAddForm({...addForm, name: v})} icon={<Building2 size={20}/>} />
-          <InputText label="اسم العميل (اختياري)" value={addForm.client} onChange={(v: string) => setAddForm({...addForm, client: v})} icon={<UserIcon size={20}/>} />
           <InputText label="الموقع" value={addForm.location} onChange={(v: string) => setAddForm({...addForm, location: v})} icon={<MapPin size={20}/>} />
           <button onClick={handleAddProject} className="w-full bg-[#1B2B48] text-white py-5 rounded-[22px] font-black shadow-xl mt-4 hover:brightness-110 active:scale-95 transition">
             حفظ المشروع
