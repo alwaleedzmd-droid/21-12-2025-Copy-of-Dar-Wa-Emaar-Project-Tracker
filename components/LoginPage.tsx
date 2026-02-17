@@ -73,14 +73,15 @@ const LoginPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen relative overflow-hidden bg-[#132338] flex items-center justify-center p-4 font-cairo" dir="rtl">
-      <div className="absolute -top-32 -left-24 w-[420px] h-[420px] rounded-full bg-[#E95D22]/20 blur-3xl" />
-      <div className="absolute -bottom-32 -right-20 w-[360px] h-[360px] rounded-full bg-[#2c4362]/40 blur-3xl" />
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_#2c4362,_#1B2B48_55%,_#132338_100%)]" />
-      <div className="relative bg-white/95 backdrop-blur rounded-[28px] shadow-2xl p-8 md:p-12 max-w-md w-full border border-white/40">
+    <div className="min-h-screen relative overflow-hidden bg-[#0D0D0D] flex items-center justify-center p-4 font-cairo" dir="rtl">
+      <div className="absolute -top-32 -left-24 w-[420px] h-[420px] rounded-full bg-[#E95D22]/25 blur-3xl" />
+      <div className="absolute top-1/3 right-1/4 w-[300px] h-[300px] rounded-full bg-white/5 blur-3xl" />
+      <div className="absolute -bottom-32 -right-20 w-[360px] h-[360px] rounded-full bg-[#E95D22]/15 blur-3xl" />
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_rgba(233,93,34,0.08),_#0D0D0D_70%)]" />
+      <div className="relative bg-white rounded-[28px] shadow-2xl p-8 md:p-12 max-w-md w-full border border-gray-100">
         {/* Logo */}
         <div className="flex justify-center mb-6">
-          <div className="w-20 h-20 rounded-2xl bg-[#FDF3EE] border border-[#F8D5C7] flex items-center justify-center">
+          <div className="w-20 h-20 rounded-2xl bg-white border border-gray-200 flex items-center justify-center shadow-sm">
             <img src={DAR_LOGO} alt="Dar Wa Emaar" className="h-14 object-contain" />
           </div>
         </div>
@@ -89,7 +90,7 @@ const LoginPage: React.FC = () => {
         <h1 className="text-3xl font-black text-[#1B2B48] text-center mb-2">
           نظام متابعة المشاريع
         </h1>
-        <p className="text-gray-500 text-center mb-8 font-bold">
+        <p className="text-gray-600 text-center mb-8 font-bold">
           دار وإعمار للتطوير العقاري
         </p>
 
