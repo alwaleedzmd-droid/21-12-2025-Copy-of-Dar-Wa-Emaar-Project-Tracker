@@ -278,6 +278,42 @@ const StatisticsDashboard: React.FC = () => {
       { name: 'قيد الإنجاز', value: inProgressWorks },
     ];
 
+    // تفاصيل الأعمال لكل مشروع
+    const projectWorksDetails = safeProjects.map(project => {
+      const projectId = project.id;
+      const projectTasks = safeWorks.filter((w: any) => {
+        const wId = w.projectId ?? w.projectid ?? w.project_id;
+        return Number(wId) === projectId;
+      });
+      const completed = projectTasks.filter(w => COMPLETED_STATUSES.includes(w.status)).length;
+      const inProgress = projectTasks.length - completed;
+      const completionRate = projectTasks.length > 0 ? (completed / projectTasks.length) * 100 : 0;
+      
+      return {
+        id: projectId,
+        name: project.name || project.title || 'مشروع',
+        totalWorks: projectTasks.length,
+        completed,
+        inProgress,
+        completionRate
+      };
+    }).filter(p => p.totalWorks > 0).sort((a, b) => b.totalWorks - a.totalWorks);
+
+    // بيانات الطلبات الفنية التفصيلية
+    const inProgressTechnical = safeTechnical.filter(
+      (r) => r.status === 'in_progress' || r.status === 'pending' || r.status === 'new' || r.status === 'جديد' || r.status === 'متابعة' || r.status === 'under_review' || r.status === 'pending_modification'
+    ).length;
+    const rejectedTechnical = safeTechnical.filter(
+      (r) => r.status === 'rejected' || r.status === 'مرفوض' || r.status === 'cancelled'
+    ).length;
+
+    // بيانات المخطط الدائري للطلبات الفنية
+    const technicalPieData = [
+      { name: 'منجز', value: completedTechnical },
+      { name: 'قيد العمل', value: inProgressTechnical },
+      { name: 'مرفوض', value: rejectedTechnical },
+    ].filter(d => d.value > 0);
+
     // بيانات المخطط العمودي (الطلبات الفنية حسب الحالة)
     const techByStatus = safeTechnical.reduce<Record<string, number>>((acc, r) => {
       const status = r.status || 'unknown';
@@ -298,7 +334,10 @@ const StatisticsDashboard: React.FC = () => {
       totalProjects,
       totalTechnical,
       completedTechnical,
+      inProgressTechnical,
+      rejectedTechnical,
       technicalCompletionRate,
+      technicalPieData,
       totalClearance,
       completedClearance,
       inProgressClearance,
@@ -308,6 +347,7 @@ const StatisticsDashboard: React.FC = () => {
       pieData,
       barData,
       worksCompletionRate,
+      projectWorksDetails,
     };
   }, [projects, technicalRequests, clearanceRequests, projectWorks]);
 
@@ -380,15 +420,21 @@ const StatisticsDashboard: React.FC = () => {
             chartsVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
           }`}
         >
-          <div className="flex items-center gap-3 mb-6">
-            <div className="w-10 h-10 rounded-xl bg-green-50 flex items-center justify-center">
-              <Activity size={20} className="text-green-600" />
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-green-50 flex items-center justify-center">
+                <Activity size={20} className="text-green-600" />
+              </div>
+              <div>
+                <h3 className="text-lg font-black text-[#1B2B48]">توزيع أعمال المشاريع</h3>
+                <p className="text-xs text-gray-400 font-bold">
+                  منجز مقابل قيد الإنجاز
+                </p>
+              </div>
             </div>
-            <div>
-              <h3 className="text-lg font-black text-[#1B2B48]">توزيع أعمال المشاريع</h3>
-              <p className="text-xs text-gray-400 font-bold">
-                منجز مقابل قيد الإنجاز
-              </p>
+            <div className="flex items-center gap-1 text-[10px] font-bold text-gray-300">
+              <ArrowLeft size={12} />
+              <span>انقر للانتقال</span>
             </div>
           </div>
 
@@ -397,106 +443,214 @@ const StatisticsDashboard: React.FC = () => {
               لا توجد بيانات أعمال حالياً
             </div>
           ) : (
-            <ResponsiveContainer width="100%" height={300}>
-              <PieChart>
-                <Pie
-                  data={stats.pieData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={70}
-                  outerRadius={120}
-                  paddingAngle={4}
-                  dataKey="value"
-                  labelLine={false}
-                  label={CustomPieLabel}
-                  animationBegin={400}
-                  animationDuration={1200}
-                  animationEasing="ease-out"
-                >
-                  {stats.pieData.map((_, index) => (
-                    <Cell
-                      key={`cell-${index}`}
-                      fill={PIE_COLORS[index]}
-                      stroke="none"
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              {/* المخطط الدائري */}
+              <div>
+                <ResponsiveContainer width="100%" height={260}>
+                  <PieChart>
+                    <Pie
+                      data={stats.pieData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={55}
+                      outerRadius={100}
+                      paddingAngle={4}
+                      dataKey="value"
+                      labelLine={false}
+                      label={CustomPieLabel}
+                      animationBegin={400}
+                      animationDuration={1200}
+                      animationEasing="ease-out"
+                    >
+                      {stats.pieData.map((_, index) => (
+                        <Cell
+                          key={`cell-${index}`}
+                          fill={PIE_COLORS[index]}
+                          stroke="none"
+                        />
+                      ))}
+                    </Pie>
+                    <Tooltip content={<CustomTooltip />} />
+                    <Legend
+                      verticalAlign="bottom"
+                      height={36}
+                      formatter={(value: string) => (
+                        <span className="font-bold text-sm text-gray-600 font-cairo">
+                          {value}
+                        </span>
+                      )}
                     />
-                  ))}
-                </Pie>
-                <Tooltip content={<CustomTooltip />} />
-                <Legend
-                  verticalAlign="bottom"
-                  height={36}
-                  formatter={(value: string) => (
-                    <span className="font-bold text-sm text-gray-600 font-cairo">
-                      {value}
-                    </span>
-                  )}
-                />
-              </PieChart>
-            </ResponsiveContainer>
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+
+              {/* قائمة المشاريع مع التفاصيل */}
+              <div className="space-y-3 max-h-[260px] overflow-y-auto pr-2 custom-scrollbar">
+                {stats.projectWorksDetails.slice(0, 5).map((project: any) => (
+                  <div
+                    key={project.id}
+                    className="group relative bg-gradient-to-l from-gray-50 to-white rounded-xl p-4 border border-gray-100 hover:border-green-200 hover:shadow-md transition-all duration-300 cursor-pointer"
+                    onClick={(e) => { e.stopPropagation(); navigate(`/projects/${project.id}`); }}
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <h4 className="font-bold text-sm text-[#1B2B48] truncate flex-1">{project.name}</h4>
+                      <div className="text-xs font-black text-gray-400 bg-gray-100 px-2 py-1 rounded-lg">
+                        {project.totalWorks} عمل
+                      </div>
+                    </div>
+                    
+                    {/* شريط التقدم */}
+                    <div className="relative h-2 bg-gray-100 rounded-full overflow-hidden mb-2">
+                      <div
+                        className="absolute top-0 right-0 h-full bg-gradient-to-l from-green-500 to-emerald-400 transition-all duration-1000 ease-out rounded-full"
+                        style={{ width: `${project.completionRate}%` }}
+                      />
+                    </div>
+
+                    {/* التفاصيل الأساسية */}
+                    <div className="flex items-center justify-between text-[10px]">
+                      <div className="flex items-center gap-3">
+                        <span className="flex items-center gap-1 text-green-600 font-bold">
+                          <CheckCircle2 size={12} />
+                          {project.completed}
+                        </span>
+                        <span className="flex items-center gap-1 text-orange-600 font-bold">
+                          <Clock size={12} />
+                          {project.inProgress}
+                        </span>
+                      </div>
+                      <span className="font-black text-gray-500">
+                        {project.completionRate.toFixed(0)}%
+                      </span>
+                    </div>
+
+                    {/* التفاصيل الموسعة عند الـ hover */}
+                    <div className="absolute top-0 left-0 right-0 bottom-0 bg-white/95 backdrop-blur-sm rounded-xl p-4 opacity-0 group-hover:opacity-100 transition-opacity duration-300 border border-green-200 shadow-lg z-10">
+                      <div className="h-full flex flex-col justify-center">
+                        <p className="font-black text-[#1B2B48] text-center mb-3">{project.name}</p>
+                        <div className="grid grid-cols-3 gap-2 text-center">
+                          <div className="bg-green-50 rounded-lg p-2 border border-green-100">
+                            <CheckCircle2 size={16} className="text-green-600 mx-auto mb-1" />
+                            <p className="text-xl font-black text-green-700">{project.completed}</p>
+                            <p className="text-[9px] font-bold text-green-500">منجز</p>
+                          </div>
+                          <div className="bg-orange-50 rounded-lg p-2 border border-orange-100">
+                            <Clock size={16} className="text-orange-600 mx-auto mb-1" />
+                            <p className="text-xl font-black text-orange-700">{project.inProgress}</p>
+                            <p className="text-[9px] font-bold text-orange-500">قيد العمل</p>
+                          </div>
+                          <div className="bg-blue-50 rounded-lg p-2 border border-blue-100">
+                            <Activity size={16} className="text-blue-600 mx-auto mb-1" />
+                            <p className="text-xl font-black text-blue-700">{project.totalWorks}</p>
+                            <p className="text-[9px] font-bold text-blue-500">الإجمالي</p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
           )}
         </div>
 
-        {/* المخطط العمودي - الطلبات الفنية حسب الحالة */}
+        {/* المخطط الدائري - الطلبات الفنية حسب الحالة */}
         <div
           onClick={() => navigate('/technical')}
           className={`bg-white rounded-[35px] shadow-sm border border-gray-100 p-8 transition-all duration-700 delay-150 cursor-pointer hover:shadow-lg hover:border-gray-200 ${
             chartsVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
           }`}
         >
-          <div className="flex items-center gap-3 mb-6">
-            <div className="w-10 h-10 rounded-xl bg-orange-50 flex items-center justify-center">
-              <BarChart3 size={20} className="text-orange-600" />
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-orange-50 flex items-center justify-center">
+                <Zap size={20} className="text-orange-600" />
+              </div>
+              <div>
+                <h3 className="text-lg font-black text-[#1B2B48]">الطلبات الفنية حسب الحالة</h3>
+                <p className="text-xs text-gray-400 font-bold">
+                  توزيع الطلبات وفقاً لمراحل المعالجة
+                </p>
+              </div>
             </div>
-            <div>
-              <h3 className="text-lg font-black text-[#1B2B48]">الطلبات الفنية حسب الحالة</h3>
-              <p className="text-xs text-gray-400 font-bold">
-                تصنيف الطلبات وفقاً لمراحل المعالجة
-              </p>
+            <div className="flex items-center gap-1 text-[10px] font-bold text-gray-300">
+              <ArrowLeft size={12} />
+              <span>انقر للانتقال</span>
             </div>
           </div>
 
-          {stats.barData.length === 0 ? (
-            <div className="h-72 flex items-center justify-center text-gray-300 font-bold">
-              لا توجد طلبات فنية حالياً
-            </div>
-          ) : (
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart
-                data={stats.barData}
-                margin={{ top: 10, right: 10, left: 0, bottom: 10 }}
-                barCategoryGap="25%"
-              >
-                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                <XAxis
-                  dataKey="name"
-                  tick={{ fontSize: 12, fontFamily: 'Cairo', fontWeight: 700, fill: '#64748B' }}
-                  axisLine={false}
-                  tickLine={false}
-                />
-                <YAxis
-                  tick={{ fontSize: 12, fontFamily: 'Cairo', fontWeight: 700, fill: '#64748B' }}
-                  axisLine={false}
-                  tickLine={false}
-                  allowDecimals={false}
-                />
-                <Tooltip content={<CustomTooltip />} cursor={{ fill: '#f8f9fa' }} />
-                <Bar
-                  dataKey="العدد"
-                  radius={[12, 12, 0, 0]}
-                  animationBegin={600}
-                  animationDuration={1200}
-                  animationEasing="ease-out"
-                >
-                  {stats.barData.map((_, index) => (
-                    <Cell
-                      key={`bar-${index}`}
-                      fill={BAR_COLORS[index % BAR_COLORS.length]}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            {/* الرسم الدائري للطلبات الفنية */}
+            <div>
+              {stats.technicalPieData.length === 0 ? (
+                <div className="h-64 flex items-center justify-center text-gray-300 font-bold">
+                  لا توجد طلبات فنية حالياً
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height={260}>
+                  <PieChart>
+                    <Pie
+                      data={stats.technicalPieData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={55}
+                      outerRadius={100}
+                      paddingAngle={4}
+                      dataKey="value"
+                      labelLine={false}
+                      label={CustomPieLabel}
+                      animationBegin={600}
+                      animationDuration={1200}
+                      animationEasing="ease-out"
+                    >
+                      {stats.technicalPieData.map((_, index) => (
+                        <Cell
+                          key={`technical-cell-${index}`}
+                          fill={CLEARANCE_PIE_COLORS[index % CLEARANCE_PIE_COLORS.length]}
+                          stroke="none"
+                        />
+                      ))}
+                    </Pie>
+                    <Tooltip content={<CustomTooltip />} />
+                    <Legend
+                      verticalAlign="bottom"
+                      height={36}
+                      formatter={(value: string) => (
+                        <span className="font-bold text-sm text-gray-600 font-cairo">
+                          {value}
+                        </span>
+                      )}
                     />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          )}
+                  </PieChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+
+            {/* بطاقات تفصيلية للطلبات الفنية */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 content-center">
+              <div className="bg-green-50 rounded-2xl p-5 text-center border border-green-100">
+                <div className="w-10 h-10 rounded-xl bg-green-100 flex items-center justify-center mx-auto mb-3">
+                  <CheckCircle2 size={20} className="text-green-600" />
+                </div>
+                <p className="text-3xl font-black text-green-700">{stats.completedTechnical.toLocaleString('ar-SA')}</p>
+                <p className="text-xs font-bold text-green-500 mt-1">منجز</p>
+              </div>
+              <div className="bg-sky-50 rounded-2xl p-5 text-center border border-sky-100">
+                <div className="w-10 h-10 rounded-xl bg-sky-100 flex items-center justify-center mx-auto mb-3">
+                  <Clock size={20} className="text-sky-600" />
+                </div>
+                <p className="text-3xl font-black text-sky-700">{stats.inProgressTechnical.toLocaleString('ar-SA')}</p>
+                <p className="text-xs font-bold text-sky-500 mt-1">قيد العمل</p>
+              </div>
+              <div className="bg-red-50 rounded-2xl p-5 text-center border border-red-100">
+                <div className="w-10 h-10 rounded-xl bg-red-100 flex items-center justify-center mx-auto mb-3">
+                  <XCircle size={20} className="text-red-500" />
+                </div>
+                <p className="text-3xl font-black text-red-600">{stats.rejectedTechnical.toLocaleString('ar-SA')}</p>
+                <p className="text-xs font-bold text-red-400 mt-1">مرفوض</p>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
