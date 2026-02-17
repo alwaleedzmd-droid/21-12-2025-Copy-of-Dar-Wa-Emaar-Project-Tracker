@@ -177,12 +177,10 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
     <div className="flex min-h-screen bg-[#F8F9FA] font-cairo" dir="rtl">
       <aside className={`fixed inset-y-0 right-0 z-40 bg-[#1B2B48] text-white transition-all duration-300 flex flex-col ${isSidebarCollapsed ? 'w-20' : 'w-72 shadow-2xl'}`}>
         <div className="p-6 flex items-center justify-between border-b border-white/5">
-          {!isSidebarCollapsed && (
-            <div className="flex items-center gap-3">
-              <img src={DAR_LOGO} className="w-10 h-10 rounded-xl" alt="Logo" /> 
-              <span className="font-black text-xl tracking-tight">دار وإعمار</span>
-            </div>
-          )}
+          <div className="flex items-center gap-3">
+            <img src={DAR_LOGO} className="w-10 h-10 rounded-xl" alt="Logo" /> 
+            {!isSidebarCollapsed && <span className="font-black text-xl tracking-tight">دار وإعمار</span>}
+          </div>
           <button onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)} className="p-2 hover:bg-white/10 rounded-xl">
             {isSidebarCollapsed ? <Menu size={20} /> : <X size={20} />}
           </button>
@@ -234,14 +232,18 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
              </div>
           </div>
           <div className="flex items-center gap-6">
+            <div className="hidden md:flex items-center gap-2">
+              <img src={DAR_LOGO} className="w-8 h-8 rounded-lg" alt="Dar Wa Emaar" />
+              <span className="text-xs font-black text-[#1B2B48]">دار وإعمار</span>
+            </div>
             <NotificationBell />
             <div className="flex items-center gap-3">
               <div className="text-left">
                 <p className="text-sm font-black text-[#1B2B48]">{currentUser.name}</p>
                 <p className="text-[10px] text-gray-400 font-bold text-right uppercase tracking-tighter">{ROLE_CONFIG[currentUser.role]?.label || currentUser.role}</p>
               </div>
-              <div className="w-12 h-12 rounded-2xl bg-[#1B2B48] text-white flex items-center justify-center font-black shadow-sm">
-                {currentUser.name[0]}
+              <div className="w-12 h-12 rounded-2xl bg-white border border-gray-100 flex items-center justify-center shadow-sm">
+                <img src={DAR_LOGO} className="w-7 h-7" alt="Dar Wa Emaar" />
               </div>
             </div>
           </div>

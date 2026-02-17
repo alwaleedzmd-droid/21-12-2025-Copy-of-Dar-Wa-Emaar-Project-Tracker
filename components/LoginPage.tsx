@@ -73,11 +73,16 @@ const LoginPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#1B2B48] to-[#2c4362] flex items-center justify-center p-4 font-cairo" dir="rtl">
-      <div className="bg-white rounded-3xl shadow-2xl p-8 md:p-12 max-w-md w-full">
+    <div className="min-h-screen relative overflow-hidden bg-[#132338] flex items-center justify-center p-4 font-cairo" dir="rtl">
+      <div className="absolute -top-32 -left-24 w-[420px] h-[420px] rounded-full bg-[#E95D22]/20 blur-3xl" />
+      <div className="absolute -bottom-32 -right-20 w-[360px] h-[360px] rounded-full bg-[#2c4362]/40 blur-3xl" />
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_#2c4362,_#1B2B48_55%,_#132338_100%)]" />
+      <div className="relative bg-white/95 backdrop-blur rounded-[28px] shadow-2xl p-8 md:p-12 max-w-md w-full border border-white/40">
         {/* Logo */}
-        <div className="flex justify-center mb-8">
-          <img src={DAR_LOGO} alt="Dar Wa Emaar" className="h-20 object-contain" />
+        <div className="flex justify-center mb-6">
+          <div className="w-20 h-20 rounded-2xl bg-[#FDF3EE] border border-[#F8D5C7] flex items-center justify-center">
+            <img src={DAR_LOGO} alt="Dar Wa Emaar" className="h-14 object-contain" />
+          </div>
         </div>
 
         {/* Title */}
@@ -134,7 +139,7 @@ const LoginPage: React.FC = () => {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-[#1B2B48] text-white py-4 rounded-xl font-black text-lg shadow-lg hover:bg-[#2c4362] transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            className="w-full bg-[#E95D22] text-white py-4 rounded-xl font-black text-lg shadow-lg hover:brightness-110 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
             {loading ? (
               <>
