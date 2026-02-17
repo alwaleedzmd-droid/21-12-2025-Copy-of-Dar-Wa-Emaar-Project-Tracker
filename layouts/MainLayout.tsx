@@ -39,11 +39,32 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   const [showCurrentPass, setShowCurrentPass] = useState(false);
   const [showNewPass, setShowNewPass] = useState(false);
 
-  // منع فتح modal في Demo Mode تماماً
+  // منع فتح modal في Demo Mode بقوة - أغلق أي محاولة للفتح
   useEffect(() => {
     if (isDemoMode) {
-      console.log('🔒 Demo Mode نشط - غلق modal تغيير كلمة المرور');
+      console.log('🔒 Demo Mode نشط:', isDemoMode, 'Modal مفتوحه:', isChangePasswordOpen);
+      if (isChangePasswordOpen) {
+        console.log('🔒 Demo Mode نشط - إغلاق modal تغيير كلمة المرور بقوة');
+        setIsChangePasswordOpen(false);
+      }
+    }
+  }, [isDemoMode, isChangePasswordOpen]);
+
+  // منع فتح modal منفصل - مراقب isDemoMode فقط
+  useEffect(() => {
+    if (isDemoMode) {
+      console.log('✅ useEffect منفصل: إغلاق أي modal عند Demo Mode');
       setIsChangePasswordOpen(false);
+      
+      // حماية DOM - حذف أي dialog أو modal غير متوقعة
+      const dialogs = document.querySelectorAll('dialog, [role="dialog"], [role="alertdialog"]');
+      if (dialogs.length > 0) {
+        console.log('🚨 وجدنا dialogs غير متوقعة:', dialogs.length);
+        dialogs.forEach(dialog => {
+          // لا تحذف - قد تكون مؤثرة
+          console.log('⚠️ dialog غير متوقع:\n', dialog.getAttribute('title'), '\n', dialog.outerHTML.substring(0, 100));
+        });
+      }
     }
   }, [isDemoMode]);
 
@@ -103,6 +124,15 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   };
 
   if (!currentUser) return <>{children}</>;
+
+  // إذا كان في Demo Mode، منع Modal تماماً وإغلاق أي محاولة
+  if (isDemoMode) {
+    console.log('🔒 Demo Mode نشط - حماية MainLayout من Modal: isChangePasswordOpen =', isChangePasswordOpen);
+    if (isChangePasswordOpen) {
+      console.log('⚠️ حاولت Modal الفتح في Demo Mode - إغلاق فوراً');
+      // لا تُرجع، فقط استمر مع guard في الـ JSX
+    }
+  }
 
   /**
    * تعريف صلاحيات القائمة الجانبية حسب كل دور
@@ -227,9 +257,11 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
           {children}
         </main>
       </div>
-      {/* مودال تغيير كلمة المرور - مخفي في Demo Mode */}
-      {!isDemoMode && (
-        <Modal isOpen={isChangePasswordOpen} onClose={() => setIsChangePasswordOpen(false)} title="تغيير كلمة المرور">
+      {/* مودال تغيير كلمة المرور - محمي بـ Demo Mode */}
+      {!isDemoMode && isChangePasswordOpen && (
+        <Modal isOpen={true} onClose={() => { 
+          if (!isDemoMode) setIsChangePasswordOpen(false); 
+        }} title="تغيير كلمة المرور">
         <div className="space-y-4 pt-2" dir="rtl">
           {passwordError && (
             <div className="bg-red-50 text-red-600 p-4 rounded-2xl text-sm font-bold flex items-center gap-2">

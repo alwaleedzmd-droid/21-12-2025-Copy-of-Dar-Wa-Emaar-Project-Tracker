@@ -208,6 +208,12 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       console.log('🔐 Auth state changed:', event);
       
+      // إذا كان في Demo Mode، تجاهل جميع أحداث Supabase
+      if ((currentUser as any)?.isDemoMode === true) {
+        console.log('🔒 Demo Mode نشط - تجاهل حدث Auth:', event);
+        return; // توقف تام - لا تعدل state
+      }
+      
       // عند تحديث المستخدم (مثل تغيير كلمة المرور) أو تحديث التوكن، نحافظ على المستخدم الحالي
       if ((event === 'USER_UPDATED' || event === 'TOKEN_REFRESHED') && session?.user?.email && currentUser) {
         // لا نفعل شيئاً - فقط نحافظ على المستخدم الحالي
