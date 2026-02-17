@@ -38,7 +38,11 @@ const ProjectDetailView: React.FC<ProjectDetailViewProps> = ({
       consultant_engineer: project['consultant_engineer'] || '',
       consultant_mobile: project['consultant_mobile'] || '',
       water_contractor: project['water_contractor'] || '',
-      electricity_contractor: project['electricity_contractor'] || ''
+      water_contractor_engineer: project['water_contractor_engineer'] || '',
+      water_contractor_mobile: project['water_contractor_mobile'] || '',
+      electricity_contractor: project['electricity_contractor'] || '',
+      electricity_contractor_engineer: project['electricity_contractor_engineer'] || '',
+      electricity_contractor_mobile: project['electricity_contractor_mobile'] || ''
     });
     setError(null);
     setIsEditModalOpen(true);
@@ -137,9 +141,10 @@ const ProjectDetailView: React.FC<ProjectDetailViewProps> = ({
             <div className="p-3 bg-yellow-50 text-yellow-600 rounded-2xl"><Zap size={22} /></div>
             <h3 className="font-bold text-lg text-gray-800">مقاول الكهرباء</h3>
           </div>
-          <div className="mt-2">
-             <p className="text-gray-400 text-xs font-bold mb-1">الجهة المنفذة</p>
-             <p className="text-xl font-black text-[#1B2B48]">{project['electricity_contractor'] || '-'}</p>
+          <div className="space-y-4">
+             <InfoRow label="اسم الشركة" value={project['electricity_contractor']} />
+             <InfoRow label="المهندس المسؤول" value={project['electricity_contractor_engineer']} />
+             <InfoRow label="رقم التواصل" value={project['electricity_contractor_mobile']} isLtr />
           </div>
         </div>
 
@@ -149,9 +154,10 @@ const ProjectDetailView: React.FC<ProjectDetailViewProps> = ({
             <div className="p-3 bg-cyan-50 text-cyan-600 rounded-2xl"><Droplet size={22} /></div>
             <h3 className="font-bold text-lg text-gray-800">مقاول المياه</h3>
           </div>
-          <div className="mt-2">
-             <p className="text-gray-400 text-xs font-bold mb-1">الجهة المنفذة</p>
-             <p className="text-xl font-black text-[#1B2B48]">{project['water_contractor'] || '-'}</p>
+          <div className="space-y-4">
+             <InfoRow label="اسم الشركة" value={project['water_contractor']} />
+             <InfoRow label="المهندس المسؤول" value={project['water_contractor_engineer']} />
+             <InfoRow label="رقم التواصل" value={project['water_contractor_mobile']} isLtr />
           </div>
         </div>
       </div>
@@ -189,10 +195,24 @@ const ProjectDetailView: React.FC<ProjectDetailViewProps> = ({
           </div>
           
           <div>
-            <h4 className="text-xs font-black text-gray-400 mb-3 uppercase tracking-wider">بيانات المقاولين</h4>
-            <div className="grid grid-cols-2 gap-3">
-               <InputText label="مقاول الكهرباء" value={editForm.electricity_contractor} onChange={v => setEditForm({...editForm, electricity_contractor: v})} icon={<Zap size={16}/>} />
-               <InputText label="مقاول المياه" value={editForm.water_contractor} onChange={v => setEditForm({...editForm, water_contractor: v})} icon={<Droplet size={16}/>} />
+            <h4 className="text-xs font-black text-gray-400 mb-3 uppercase tracking-wider">بيانات مقاول الكهرباء</h4>
+            <div className="space-y-3">
+               <InputText label="اسم الشركة" value={editForm.electricity_contractor} onChange={v => setEditForm({...editForm, electricity_contractor: v})} icon={<Zap size={16}/>} />
+               <div className="grid grid-cols-2 gap-3">
+                  <InputText label="المهندس المسؤول" value={editForm.electricity_contractor_engineer} onChange={v => setEditForm({...editForm, electricity_contractor_engineer: v})} icon={<UserIcon size={16}/>} />
+                  <InputText label="رقم التواصل" value={editForm.electricity_contractor_mobile} onChange={v => setEditForm({...editForm, electricity_contractor_mobile: v})} icon={<Phone size={16}/>} />
+               </div>
+            </div>
+          </div>
+          
+          <div>
+            <h4 className="text-xs font-black text-gray-400 mb-3 uppercase tracking-wider">بيانات مقاول المياه</h4>
+            <div className="space-y-3">
+               <InputText label="اسم الشركة" value={editForm.water_contractor} onChange={v => setEditForm({...editForm, water_contractor: v})} icon={<Droplet size={16}/>} />
+               <div className="grid grid-cols-2 gap-3">
+                  <InputText label="المهندس المسؤول" value={editForm.water_contractor_engineer} onChange={v => setEditForm({...editForm, water_contractor_engineer: v})} icon={<UserIcon size={16}/>} />
+                  <InputText label="رقم التواصل" value={editForm.water_contractor_mobile} onChange={v => setEditForm({...editForm, water_contractor_mobile: v})} icon={<Phone size={16}/>} />
+               </div>
             </div>
           </div>
           

@@ -295,6 +295,7 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
             
             setSelectedDeed({ ...selectedDeed, status, updated_at: new Date().toISOString() });
             fetchDeeds();
+            refreshData(); // تحديث البيانات في DataContext والإحصائيات
             logActivity?.('تحديث حالة إفراغ', `${selectedDeed.client_name} -> ${status}`, 'text-blue-500');
         } catch (err: any) {
             alert("خطأ: " + err.message);
