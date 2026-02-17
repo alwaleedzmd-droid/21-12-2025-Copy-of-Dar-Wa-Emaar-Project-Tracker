@@ -265,51 +265,51 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       throw new Error('خدمة المصادقة غير متاحة حالياً');
     }
 
-    // محاولة تسجيل الدخول عبر GoTrue
+    // قائمة المستخدمين المعروفة (Demo Mode Fast Track)
+    if (EMPLOYEES_DATA[e]) {
+      console.log('🔧 تفعيل Demo Mode مباشرة - المستخدم معروف');
+      
+      // تنظيف أي جلسة GoTrue قديمة
+      try {
+        await supabase.auth.signOut();
+        console.log('✅ تم تنظيف جلسة GoTrue القديمة');
+      } catch (err) {
+        console.warn('⚠️ خطأ في تنظيف جلسة GoTrue (متوقع):', err);
+      }
+      
+      const empData = EMPLOYEES_DATA[e];
+      
+      const userId = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+        const r = Math.random() * 16 | 0;
+        const v = c === 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+      });
+      
+      const demoUser = {
+        id: userId,
+        email: e,
+        name: empData.name,
+        role: empData.role,
+        isDemoMode: true  // Mark as demo mode
+      };
+      
+      // تعيين المستخدم مباشرة
+      setCurrentUser(demoUser);
+      console.log('✅ تم تفعيل Demo Mode بنجاح');
+      
+      // حفظ الجلسة التجريبية
+      localStorage.setItem('dar_demo_session', JSON.stringify(demoUser));
+      
+      // إرجاع user object بصيغة Supabase
+      return { user: { id: userId, email: e, user_metadata: { isDemoMode: true, ...empData } } };
+    }
+
+    // محاولة تسجيل الدخول عبر GoTrue فقط للمستخدمين الجدد
     const { data, error } = await supabase.auth.signInWithPassword({ email: e, password });
     
     if (error) {
       console.warn('❌ فشل تسجيل الدخول عبر GoTrue:', error.message);
-      
-      // إذا فشل بسبب Database error أو Server error، استخدم Demo Mode
-      const isDBError = error.message?.includes('Database error') || error.status === 500;
-      
-      if (isDBError && EMPLOYEES_DATA[e]) {
-        console.log('🔧 تفعيل Demo Mode - البيانات موجودة في النظام');
-        const empData = EMPLOYEES_DATA[e];
-        
-        const userId = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-          const r = Math.random() * 16 | 0;
-          const v = c === 'x' ? r : (r & 0x3 | 0x8);
-          return v.toString(16);
-        });
-        
-        const demoUser = {
-          id: userId,
-          email: e,
-          name: empData.name,
-          role: empData.role
-        };
-        
-        // تعيين المستخدم مباشرة
-        setCurrentUser(demoUser);
-        console.log('✅ تم تفعيل Demo Mode بنجاح');
-        
-        // حفظ الجلسة التجريبية
-        localStorage.setItem('dar_demo_session', JSON.stringify(demoUser));
-        
-        // إرجاع user object بصيغة Supabase
-        return { user: { id: userId, email: e, user_metadata: empData } };
-      }
-      
-      // إذا لم يكن Database error أو لا توجد بيانات، اعرض رسالة خطأ
-      if (error.message?.includes('Database error') || error.status === 500) {
-        throw new Error('خطأ في الخادم - جاري استخدام Demo Mode للمستخدمين المعروفين');
-      } else if (error.message?.includes('Email not confirmed')) {
-        throw new Error('لم يتم تأكيد البريد الإلكتروني');
-      } else {
-        throw new Error('البريد أو كلمة المرور غير صحيحة');
-      }
+      throw new Error('البريد أو كلمة المرور غير صحيحة');
     }
     
     if (!data?.user) {
@@ -318,16 +318,12 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     console.log('✅ تسجيل دخول ناجح عبر GoTrue:', data.user.id);
     
-    // جلب بيانات الموظف من EMPLOYEES_DATA أو profiles
-    if (EMPLOYEES_DATA[e]) {
-      setCurrentUser({ id: data.user.id, email: e, ...EMPLOYEES_DATA[e] });
+    // جلب بيانات الموظف من profiles
+    const { data: profile } = await supabase.from('profiles').select('*').eq('id', data.user.id).maybeSingle();
+    if (profile) {
+      setCurrentUser(profile);
     } else {
-      const { data: profile } = await supabase.from('profiles').select('*').eq('id', data.user.id).maybeSingle();
-      if (profile) {
-        setCurrentUser(profile);
-      } else {
-        setCurrentUser({ id: data.user.id, email: e, name: e.split('@')[0], role: 'PR_MANAGER' });
-      }
+      setCurrentUser({ id: data.user.id, email: e, name: e.split('@')[0], role: 'PR_MANAGER' });
     }
     
     return data;

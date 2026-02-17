@@ -20,6 +20,9 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   const location = useLocation();
   const { currentUser, logout, refreshData } = useData();
 
+  // منع فتح modal تغيير كلمة المرور للمستخدمين في Demo Mode
+  const isDemoMode = (currentUser as any)?.isDemoMode === true;
+
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => 
     localStorage.getItem('dar_sidebar_v2_collapsed') === 'true'
   );
@@ -168,10 +171,12 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
         </nav>
 
         <div className="p-4 border-t border-white/5 space-y-1">
-          <button onClick={() => { setIsChangePasswordOpen(true); setPasswordError(''); setPasswordSuccess(''); }} className="w-full flex items-center gap-4 px-4 py-3 rounded-2xl text-amber-400 hover:bg-amber-500/10 transition-colors">
-            <KeyRound size={20}/> 
-            {!isSidebarCollapsed && <span className="font-bold text-sm">تغيير كلمة المرور</span>}
-          </button>
+          {!isDemoMode && (
+            <button onClick={() => { setIsChangePasswordOpen(true); setPasswordError(''); setPasswordSuccess(''); }} className="w-full flex items-center gap-4 px-4 py-3 rounded-2xl text-amber-400 hover:bg-amber-500/10 transition-colors">
+              <KeyRound size={20}/> 
+              {!isSidebarCollapsed && <span className="font-bold text-sm">تغيير كلمة المرور</span>}
+            </button>
+          )}
           <button onClick={logout} className="w-full flex items-center gap-4 px-4 py-3 rounded-2xl text-red-400 hover:bg-red-500/10 transition-colors">
             <LogOut size={20}/> 
             {!isSidebarCollapsed && <span className="font-bold text-sm">تسجيل الخروج</span>}
@@ -208,8 +213,9 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
           {children}
         </main>
       </div>
-      {/* مودال تغيير كلمة المرور */}
-      <Modal isOpen={isChangePasswordOpen} onClose={() => setIsChangePasswordOpen(false)} title="تغيير كلمة المرور">
+      {/* مودال تغيير كلمة المرور - مخفي في Demo Mode */}
+      {!isDemoMode && (
+        <Modal isOpen={isChangePasswordOpen} onClose={() => setIsChangePasswordOpen(false)} title="تغيير كلمة المرور">
         <div className="space-y-4 pt-2" dir="rtl">
           {passwordError && (
             <div className="bg-red-50 text-red-600 p-4 rounded-2xl text-sm font-bold flex items-center gap-2">
@@ -260,7 +266,8 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
             {passwordLoading ? <Loader2 className="animate-spin mx-auto" size={20} /> : 'تحديث كلمة المرور'}
           </button>
         </div>
-      </Modal>
+        </Modal>
+      )}
     </div>
   );
 };

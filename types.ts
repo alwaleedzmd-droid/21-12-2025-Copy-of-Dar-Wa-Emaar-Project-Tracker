@@ -8,6 +8,7 @@ export interface User {
   name: string;
   department?: string;
   created_at?: string;
+  isDemoMode?: boolean; // Flag to indicate if using Demo Mode
 }
 
 export interface UnitDetail {
