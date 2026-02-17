@@ -250,97 +250,23 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       throw new Error('خدمة المصادقة غير متاحة حالياً');
     }
 
-    // المحاولة الأولى: تسجيل الدخول العادي
-    let { data, error } = await supabase.auth.signInWithPassword({ email: e, password });
+    // تسجيل الدخول العادي
+    const { data, error } = await supabase.auth.signInWithPassword({ email: e, password });
     
     if (error) {
-      console.warn('❌ فشل تسجيل الدخول (المحاولة الأولى):', error.message, 'status:', error.status);
+      console.error('❌ فشل تسجيل الدخول:', error.message);
       
-      // إذا كان الخطأ من الخادم (500) أو بيانات خاطئة (400) - محاولة إعادة إنشاء الحساب
-      const isServerError = error.message?.includes('Database error') || error.status === 500;
-      const isCredentialError = error.message?.includes('Invalid login') || error.message?.includes('invalid_grant') || error.status === 400;
-      
-      if ((isServerError || isCredentialError) && e.endsWith('@darwaemaar.com')) {
-        console.log('🔧 محاولة إعادة إنشاء الحساب عبر sign-up API...');
-        
-        // البحث عن بيانات الموظف
-        const empData = EMPLOYEES_DATA[e];
-        const empName = empData?.name || e.split('@')[0];
-        const empRole = empData?.role || 'CONVEYANCE';
-        
-        try {
-          // استخدام sign-up API لتجنب مشاكل schema
-          const { data: signupData, error: signupError } = await supabase.auth.signUp({
-            email: e,
-            password: password,
-            options: {
-              data: { full_name: empName, role: empRole }
-            }
-          });
-          
-          if (signupError) {
-            // إذا كان المستخدم موجود، نحذفه ونحاول مجدداً
-            if (signupError.message?.includes('already registered')) {
-              console.log('⚠️ المستخدم موجود بالفعل، يتم محاولة حذفه وإعادة إنشاؤه...');
-              
-              try {
-                // استخدام RPC لحذف وإعادة إنشاء
-                const { error: deleteError } = await supabase.rpc('delete_user_account', { email_to_delete: e });
-                if (deleteError) console.warn('⚠️ خطأ في حذف الحساب:', deleteError.message);
-              } catch (e: any) {
-                console.warn('⚠️ لا توجد دالة delete_user_account');
-              }
-              
-              // المحاولة مجدداً
-              await new Promise(resolve => setTimeout(resolve, 500));
-              const { data: retrySignup, error: retryError } = await supabase.auth.signUp({
-                email: e,
-                password: password,
-                options: {
-                  data: { full_name: empName, role: empRole }
-                }
-              });
-              
-              if (!retryError && retrySignup?.user) {
-                console.log('✅ تم إنشاء الحساب بنجاح بعد الحذف');
-                // محاولة تسجيل الدخول
-                await new Promise(resolve => setTimeout(resolve, 1000));
-                const loginResult = await supabase.auth.signInWithPassword({ email: e, password });
-                if (!loginResult.error) {
-                  data = loginResult.data;
-                  error = null;
-                }
-              }
-            } else {
-              console.warn('⚠️ فشل إنشاء الحساب:', signupError.message);
-            }
-          } else if (signupData?.user) {
-            console.log('✅ تم إنشاء الحساب بنجاح');
-            // الانتظار ثم تسجيل الدخول
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            const loginResult = await supabase.auth.signInWithPassword({ email: e, password });
-            if (!loginResult.error) {
-              data = loginResult.data;
-              error = null;
-            } else {
-              console.error('❌ فشل تسجيل الدخول بعد الإنشاء:', loginResult.error?.message);
-            }
-          }
-        } catch (repairErr: any) {
-          console.warn('⚠️ خطأ أثناء محاولة الإصلاح:', repairErr?.message);
-        }
+      if (error.message?.includes('Database error') || error.status === 500) {
+        throw new Error('خطأ في الخادم - تم الإبلاغ عن المشكلة لمدير النظام');
+      } else if (error.message?.includes('Email not confirmed')) {
+        throw new Error('لم يتم تأكيد البريد الإلكتروني');
+      } else {
+        throw new Error('البريد أو كلمة المرور غير صحيحة');
       }
-      
-      // إذا لا يزال هناك خطأ بعد محاولة الإصلاح
-      if (error && !data?.user) {
-        if (error.message?.includes('Database error') || error.status === 500) {
-          throw new Error('خطأ في الخادم - الحساب يحتاج إصلاح من مدير النظام. شغّل ملف SQL في Supabase.');
-        } else if (error.message?.includes('Email not confirmed')) {
-          throw new Error('لم يتم تأكيد البريد الإلكتروني');
-        } else {
-          throw new Error('البريد أو كلمة المرور غير صحيحة');
-        }
-      }
+    }
+    
+    if (!data?.user) {
+      throw new Error('فشل تسجيل الدخول - لا توجد بيانات مستخدم');
     }
     
     if (!data?.user) {
