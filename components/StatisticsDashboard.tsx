@@ -463,55 +463,33 @@ const StatisticsDashboard: React.FC = () => {
       const pdf = new jsPDF({
         orientation: 'portrait',
         unit: 'mm',
-        format: 'a4'
+        format: 'a4',
+        compress: true
       });
+      
+      // تفعيل عرض RTL من اليمين للیسار
+      (pdf as any).setDisplayMode('pagefit');
+      if ((pdf as any).viewerPreferences) {
+        (pdf as any).viewerPreferences({
+          Direction: 'R2L'
+        });
+      }
 
       const pageWidth = pdf.internal.pageSize.getWidth();
       const pageHeight = pdf.internal.pageSize.getHeight();
       
-      // إضافة الشعار والعنوان
-      const timestamp = new Date().toLocaleString('ar-SA', { 
-        timeZone: 'Asia/Riyadh',
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric'
-      });
-      
-      // إضافة صورة الشعار
-      try {
-        const logo = new Image();
-        logo.src = '/brand/dar-logo.png';
-        await new Promise((resolve) => {
-          logo.onload = resolve;
-          logo.onerror = resolve;
-        });
-        if (logo.complete && logo.naturalHeight !== 0) {
-          pdf.addImage(logo, 'PNG', 15, 10, 30, 15);
-        }
-      } catch (err) {
-        console.log('تعذر تحميل الشعار');
-      }
-
-      // إضافة العنوان والتاريخ
-      pdf.setFontSize(18);
-      pdf.setTextColor(27, 43, 72);
-      pdf.text('لوحة الإحصائيات - دار وإعمار', pageWidth / 2, 20, { align: 'center' });
-      
-      pdf.setFontSize(10);
-      pdf.setTextColor(100, 100, 100);
-      pdf.text(`تاريخ التصدير: ${timestamp}`, pageWidth / 2, 28, { align: 'center' });
-
-      // إضافة المحتوى
+      // حساب أبعاد الصورة
       const imgWidth = pageWidth - 20;
       const imgHeight = (canvas.height * imgWidth) / canvas.width;
-      const startY = 35;
 
       let heightLeft = imgHeight;
-      let position = startY;
+      let position = 10;
 
+      // إضافة الصفحة الأولى
       pdf.addImage(imgData, 'PNG', 10, position, imgWidth, imgHeight);
-      heightLeft -= (pageHeight - startY);
+      heightLeft -= (pageHeight - 20);
 
+      // إضافة الصفحات التالية إذا لزم الأمر
       while (heightLeft > 0) {
         pdf.addPage();
         position = heightLeft - imgHeight + 10;
@@ -546,6 +524,39 @@ const StatisticsDashboard: React.FC = () => {
 
   return (
     <div className="space-y-8 font-cairo" dir="rtl" data-export-target>
+      {/* رأسية التقرير - تظهر في التصدير */}
+      <div className="bg-gradient-to-r from-[#1B2B48] to-[#2a4068] rounded-3xl p-8 shadow-lg">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <img 
+              src="/brand/dar-logo.png" 
+              alt="دار وإعمار" 
+              className="h-16 bg-white rounded-xl p-2" 
+              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} 
+            />
+            <div>
+              <h2 className="text-2xl font-black text-white">تقرير الإحصائيات الشامل</h2>
+              <p className="text-sm text-gray-200 font-bold mt-1">
+                شركة دار وإعمار للتطوير العقاري
+              </p>
+            </div>
+          </div>
+          <div className="text-left bg-white/10 backdrop-blur-sm rounded-xl p-4">
+            <p className="text-xs text-gray-200 font-bold mb-1">تاريخ التقرير</p>
+            <p className="text-sm text-white font-black">
+              {new Date().toLocaleDateString('ar-SA', { 
+                year: 'numeric', 
+                month: 'long', 
+                day: 'numeric'
+              })}
+            </p>
+            <p className="text-xs text-gray-300 font-bold mt-1">
+              {new Date().toLocaleDateString('ar-SA', { weekday: 'long' })}
+            </p>
+          </div>
+        </div>
+      </div>
+
       {/* ═══ العنوان الرئيسي مع أزرار التصدير ═══ */}
       <div className="flex items-center justify-between gap-4">
         <div className="flex items-center gap-4">
