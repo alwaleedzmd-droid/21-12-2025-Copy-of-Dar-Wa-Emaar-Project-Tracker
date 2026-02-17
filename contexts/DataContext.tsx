@@ -19,6 +19,9 @@ interface DataContextType {
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
 
+// Global flag لتتبع Demo Mode - متاح في جميع الدوال
+let GlobalDemoModeActive = false;
+
 // --- تعريف الموظفين حسب البيانات المحدثة ---
 const EMPLOYEES_DATA: Record<string, { name: string; role: UserRole }> = {
   // المدير العام
@@ -151,6 +154,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             const demoUser = JSON.parse(demoSessionStr);
             console.log('✅ استرجاع جلسة Demo من localStorage:', demoUser.email);
             setCurrentUser(demoUser);
+            GlobalDemoModeActive = true;  // تعيين global flag
             setIsAuthLoading(false);
             return; // توقف - استخدم Demo Mode فقط
           } catch (e) {
@@ -208,10 +212,11 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       console.log('🔐 Auth state changed:', event);
       
-      // إذا كان في Demo Mode، تجاهل جميع أحداث Supabase
-      if ((currentUser as any)?.isDemoMode === true) {
-        console.log('🔒 Demo Mode نشط - تجاهل حدث Auth:', event);
-        return; // توقف تام - لا تعدل state
+      // إذا كان في Demo Mode، تجاهل جميع أحداث Supabase تماماً - بما فيها PASSWORD_RECOVERY, MFA, إلخ
+      const isDemoMode = GlobalDemoModeActive || (currentUser as any)?.isDemoMode === true;
+      if (isDemoMode) {
+        console.log('🔒 Demo Mode نشط (global flag) - تجاهل حدث Auth بقوة:', event);
+        return; // توقف تام - لا تعدل state على الإطلاق
       }
       
       // عند تحديث المستخدم (مثل تغيير كلمة المرور) أو تحديث التوكن، نحافظ على المستخدم الحالي
@@ -300,6 +305,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       
       // تعيين المستخدم مباشرة - هذا يجب أن يشغل App immediately
       setCurrentUser(demoUser);
+      GlobalDemoModeActive = true;  // تعيين global flag
       console.log('✅ تم تفعيل Demo Mode بنجاح - المستخدم:', demoUser.email, demoUser.role);
       
       // حفظ الجلسة التجريبية فقط (بدون Supabase session)
@@ -347,6 +353,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     );
     keysToDelete.forEach(key => localStorage.removeItem(key));
     
+    GlobalDemoModeActive = false;  // إعادة تعيين global flag
     setCurrentUser(null);
     window.location.href = '/';
   };

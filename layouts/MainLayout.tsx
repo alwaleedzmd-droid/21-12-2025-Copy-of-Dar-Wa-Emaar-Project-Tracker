@@ -56,17 +56,34 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
       console.log('✅ useEffect منفصل: إغلاق أي modal عند Demo Mode');
       setIsChangePasswordOpen(false);
       
-      // حماية DOM - حذف أي dialog أو modal غير متوقعة
-      const dialogs = document.querySelectorAll('dialog, [role="dialog"], [role="alertdialog"]');
-      if (dialogs.length > 0) {
-        console.log('🚨 وجدنا dialogs غير متوقعة:', dialogs.length);
-        dialogs.forEach(dialog => {
-          // لا تحذف - قد تكون مؤثرة
-          console.log('⚠️ dialog غير متوقع:\n', dialog.getAttribute('title'), '\n', dialog.outerHTML.substring(0, 100));
-        });
+      // إضافة style global لإخفاء أي fixed modal عند Demo Mode
+      const style = document.createElement('style');
+      style.id = 'demo-modal-block';
+      style.innerHTML = `
+        /* منع أي fixed modal من الظهور في Demo Mode */
+        .fixed.inset-0.z-50 { display: none !important; }
+        dialog { display: none !important; }
+        [role="dialog"] { display: none !important; }
+        [role="alertdialog"] { display: none !important; }
+        body.modal-open { overflow: auto !important; }
+      `;
+      if (!document.getElementById('demo-modal-block')) {
+        document.head.appendChild(style);
       }
+    } else {
+      // إزالة الـ style عند عدم وجود Demo Mode
+      const style = document.getElementById('demo-modal-block');
+      if (style) style.remove();
     }
   }, [isDemoMode]);
+
+  // حماية استباقية - اغلق Modal إذا حاولت الفتح
+  useEffect(() => {
+    if (isDemoMode && isChangePasswordOpen === true) {
+      console.log('⚠️ محاولة فتح Modal في Demo Mode - إغلاق فوراً');
+      setIsChangePasswordOpen(false);
+    }
+  }, [isChangePasswordOpen, isDemoMode]);
 
   const handleChangePassword = async () => {
     setPasswordError('');

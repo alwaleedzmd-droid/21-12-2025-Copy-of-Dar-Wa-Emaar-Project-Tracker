@@ -54,7 +54,7 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     persistSession: true,
     autoRefreshToken: true,
-    detectSessionInUrl: true,
+    detectSessionInUrl: false,  // تعطيل detection من URL لمنع popup passwords
     storageKey: 'dar-wa-emaar-auth',
     storage: typeof window !== 'undefined' ? window.localStorage : undefined
   }
