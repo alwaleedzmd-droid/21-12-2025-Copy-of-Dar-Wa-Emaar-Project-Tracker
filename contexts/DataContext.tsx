@@ -176,8 +176,23 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             }
           }
         } else {
-          console.log('ℹ️ لا توجد جلسة نشطة');
-          setCurrentUser(null);
+          console.log('ℹ️ لا توجد جلسة نشطة - فحص Demo Mode');
+          
+          // فحص وجود جلسة تجريبية في localStorage
+          const demoSessionStr = localStorage.getItem('dar_demo_session');
+          if (demoSessionStr) {
+            try {
+              const demoUser = JSON.parse(demoSessionStr);
+              console.log('✅ استرجاع جلسة Demo من localStorage:', demoUser.email);
+              setCurrentUser(demoUser);
+            } catch (e) {
+              console.warn('⚠️ فشل استرجاع جلسة Demo:', e);
+              setCurrentUser(null);
+            }
+          } else {
+            console.log('ℹ️ لا توجد جلسة تجريبية');
+            setCurrentUser(null);
+          }
         }
       } catch (e) { 
         console.error('❌ خطأ في تهيئة المصادقة:', e); 
@@ -261,25 +276,30 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       
       if (isDBError && EMPLOYEES_DATA[e]) {
         console.log('🔧 تفعيل Demo Mode - البيانات موجودة في النظام');
-        // Demo mode - استخدم بيانات الموظف المحفوظة
         const empData = EMPLOYEES_DATA[e];
         
-        // إنشاء UUID عشوائي للـ Demo Mode
         const userId = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
           const r = Math.random() * 16 | 0;
           const v = c === 'x' ? r : (r & 0x3 | 0x8);
           return v.toString(16);
         });
         
-        setCurrentUser({
+        const demoUser = {
           id: userId,
           email: e,
           name: empData.name,
           role: empData.role
-        });
+        };
         
+        // تعيين المستخدم مباشرة
+        setCurrentUser(demoUser);
         console.log('✅ تم تفعيل Demo Mode بنجاح');
-        return { user: { id: userId, email: e } };
+        
+        // حفظ الجلسة التجريبية
+        localStorage.setItem('dar_demo_session', JSON.stringify(demoUser));
+        
+        // إرجاع user object بصيغة Supabase
+        return { user: { id: userId, email: e, user_metadata: empData } };
       }
       
       // إذا لم يكن Database error أو لا توجد بيانات، اعرض رسالة خطأ
@@ -317,6 +337,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     try {
       if (supabase && supabase.auth) await supabase.auth.signOut();
     } catch (e) { /* ignore */ }
+    localStorage.removeItem('dar_demo_session');
     setCurrentUser(null);
     window.location.href = '/';
   };
