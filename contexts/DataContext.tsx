@@ -144,8 +144,20 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       try {
         console.log('🔐 بدء تهيئة المصادقة...');
         
-        // تنظيف أي جلسة تجريبية قديمة
-        localStorage.removeItem('dar_demo_session');
+        // فحص جلسة Demo أولاً - إذا وجدنا واحدة، استخدمها وتوقف
+        const demoSessionStr = localStorage.getItem('dar_demo_session');
+        if (demoSessionStr) {
+          try {
+            const demoUser = JSON.parse(demoSessionStr);
+            console.log('✅ استرجاع جلسة Demo من localStorage:', demoUser.email);
+            setCurrentUser(demoUser);
+            setIsAuthLoading(false);
+            return; // توقف - استخدم Demo Mode فقط
+          } catch (e) {
+            console.warn('⚠️ فشل استرجاع جلسة Demo:', e);
+            localStorage.removeItem('dar_demo_session');
+          }
+        }
         
         if (!supabase || !supabase.auth) {
           console.error('❌ Supabase auth غير متاح.');
@@ -162,10 +174,10 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
         if (session?.user?.email) {
           const email = session.user.email.toLowerCase();
-          console.log('✅ مستخدم مسجل:', email);
+          console.log('✅ مستخدم مسجل من GoTrue:', email);
           
           if (EMPLOYEES_DATA[email]) {
-            setCurrentUser({ id: session.user.id, email, ...EMPLOYEES_DATA[email] });
+            setCurrentUser({ id: session.user.id, email, ...EMPLOYEES_DATA[email], isDemoMode: false });
           } else {
             const { data: profile } = await supabase.from('profiles').select('*').eq('id', session.user.id).maybeSingle();
             if (profile) setCurrentUser(profile);
@@ -176,23 +188,8 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             }
           }
         } else {
-          console.log('ℹ️ لا توجد جلسة نشطة - فحص Demo Mode');
-          
-          // فحص وجود جلسة تجريبية في localStorage
-          const demoSessionStr = localStorage.getItem('dar_demo_session');
-          if (demoSessionStr) {
-            try {
-              const demoUser = JSON.parse(demoSessionStr);
-              console.log('✅ استرجاع جلسة Demo من localStorage:', demoUser.email);
-              setCurrentUser(demoUser);
-            } catch (e) {
-              console.warn('⚠️ فشل استرجاع جلسة Demo:', e);
-              setCurrentUser(null);
-            }
-          } else {
-            console.log('ℹ️ لا توجد جلسة تجريبية');
-            setCurrentUser(null);
-          }
+          console.log('ℹ️ لا توجد جلسة GoTrue ولا Demo');
+          setCurrentUser(null);
         }
       } catch (e) { 
         console.error('❌ خطأ في تهيئة المصادقة:', e); 
@@ -265,18 +262,20 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       throw new Error('خدمة المصادقة غير متاحة حالياً');
     }
 
-    // قائمة المستخدمين المعروفة (Demo Mode Fast Track)
+    // قائمة المستخدمين المعروفة (Demo Mode Fast Track) - لا تتفاعل مع GoTrue
     if (EMPLOYEES_DATA[e]) {
-      console.log('🔧 تفعيل Demo Mode مباشرة - المستخدم معروف');
+      console.log('🔧 تفعيل Demo Mode المباشر - تجاوز GoTrue تماماً');
       
-      // تنظيف أي جلسة GoTrue قديمة
-      try {
-        await supabase.auth.signOut();
-        console.log('✅ تم تنظيف جلسة GoTrue القديمة');
-      } catch (err) {
-        console.warn('⚠️ خطأ في تنظيف جلسة GoTrue (متوقع):', err);
-      }
+      // حذف جميع جلسات Supabase من localStorage لمنع أي تدخل من GoTrue
+      const keysToDelete = Object.keys(localStorage).filter(key => 
+        key.includes('supabase') || key.includes('auth') || key.includes('sb-')
+      );
+      keysToDelete.forEach(key => {
+        console.log('🗑️ حذف جلسة قديمة:', key);
+        localStorage.removeItem(key);
+      });
       
+      // NÃO تحاول حتى signOut - فقط تجاوز تماماً
       const empData = EMPLOYEES_DATA[e];
       
       const userId = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
@@ -293,22 +292,23 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         isDemoMode: true  // Mark as demo mode
       };
       
-      // تعيين المستخدم مباشرة
+      // تعيين المستخدم مباشرة - هذا يجب أن يشغل App immediately
       setCurrentUser(demoUser);
-      console.log('✅ تم تفعيل Demo Mode بنجاح');
+      console.log('✅ تم تفعيل Demo Mode بنجاح - المستخدم:', demoUser.email, demoUser.role);
       
-      // حفظ الجلسة التجريبية
+      // حفظ الجلسة التجريبية فقط (بدون Supabase session)
       localStorage.setItem('dar_demo_session', JSON.stringify(demoUser));
       
-      // إرجاع user object بصيغة Supabase
+      // إرجاع success object بدون أي تفاعل GoTrue
       return { user: { id: userId, email: e, user_metadata: { isDemoMode: true, ...empData } } };
     }
 
     // محاولة تسجيل الدخول عبر GoTrue فقط للمستخدمين الجدد
+    console.log('📡 محاولة الاتصال بـ GoTrue...');
     const { data, error } = await supabase.auth.signInWithPassword({ email: e, password });
     
     if (error) {
-      console.warn('❌ فشل تسجيل الدخول عبر GoTrue:', error.message);
+      console.warn('❌ فشل GoTrue:', error.message);
       throw new Error('البريد أو كلمة المرور غير صحيحة');
     }
     
@@ -316,7 +316,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       throw new Error('فشل تسجيل الدخول - لا توجد بيانات مستخدم');
     }
 
-    console.log('✅ تسجيل دخول ناجح عبر GoTrue:', data.user.id);
+    console.log('✅ تسجيل دخول GoTrue ناجح:', data.user.id);
     
     // جلب بيانات الموظف من profiles
     const { data: profile } = await supabase.from('profiles').select('*').eq('id', data.user.id).maybeSingle();
@@ -333,7 +333,14 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     try {
       if (supabase && supabase.auth) await supabase.auth.signOut();
     } catch (e) { /* ignore */ }
+    // حذف جميع بيانات الجلسة
     localStorage.removeItem('dar_demo_session');
+    // حذف جميع جلسات Supabase
+    const keysToDelete = Object.keys(localStorage).filter(key => 
+      key.includes('supabase') || key.includes('auth') || key.includes('sb-')
+    );
+    keysToDelete.forEach(key => localStorage.removeItem(key));
+    
     setCurrentUser(null);
     window.location.href = '/';
   };

@@ -39,6 +39,14 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   const [showCurrentPass, setShowCurrentPass] = useState(false);
   const [showNewPass, setShowNewPass] = useState(false);
 
+  // منع فتح modal في Demo Mode تماماً
+  useEffect(() => {
+    if (isDemoMode) {
+      console.log('🔒 Demo Mode نشط - غلق modal تغيير كلمة المرور');
+      setIsChangePasswordOpen(false);
+    }
+  }, [isDemoMode]);
+
   const handleChangePassword = async () => {
     setPasswordError('');
     setPasswordSuccess('');
@@ -172,7 +180,13 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
 
         <div className="p-4 border-t border-white/5 space-y-1">
           {!isDemoMode && (
-            <button onClick={() => { setIsChangePasswordOpen(true); setPasswordError(''); setPasswordSuccess(''); }} className="w-full flex items-center gap-4 px-4 py-3 rounded-2xl text-amber-400 hover:bg-amber-500/10 transition-colors">
+            <button onClick={() => { 
+              if (!isDemoMode) {
+                setIsChangePasswordOpen(true); 
+                setPasswordError(''); 
+                setPasswordSuccess(''); 
+              }
+            }} className="w-full flex items-center gap-4 px-4 py-3 rounded-2xl text-amber-400 hover:bg-amber-500/10 transition-colors">
               <KeyRound size={20}/> 
               {!isSidebarCollapsed && <span className="font-bold text-sm">تغيير كلمة المرور</span>}
             </button>
