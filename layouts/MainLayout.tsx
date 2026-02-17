@@ -61,14 +61,36 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
       style.id = 'demo-modal-block';
       style.innerHTML = `
         /* منع أي fixed modal من الظهور في Demo Mode */
-        .fixed.inset-0.z-50 { display: none !important; }
-        dialog { display: none !important; }
-        [role="dialog"] { display: none !important; }
-        [role="alertdialog"] { display: none !important; }
+        .fixed.inset-0.z-50 { display: none !important; visibility: hidden !important; }
+        dialog { display: none !important; visibility: hidden !important; }
+        [role="dialog"] { display: none !important; visibility: hidden !important; }
+        [role="alertdialog"] { display: none !important; visibility: hidden !important; }
         body.modal-open { overflow: auto !important; }
+        
+        /* منع backdrop أو overlay من الظهور */
+        .bg-black\/50 { display: none !important; }
+        [class*="backdrop"] { display: none !important; }
+        [class*="overlay"] { display: none !important; }
       `;
       if (!document.getElementById('demo-modal-block')) {
         document.head.appendChild(style);
+        console.log('🛡️ أضفنا CSS protection لمنع modals');
+      }
+      
+      // منع أي alert/confirm/prompt من browser
+      if (typeof window !== 'undefined') {
+        window.alert = function(...args: any[]) {
+          console.log('🚫 منع alert في Demo Mode:', args[0]);
+          return undefined;
+        };
+        window.confirm = function(...args: any[]) {
+          console.log('🚫 منع confirm في Demo Mode:', args[0]);
+          return false;
+        };
+        window.prompt = function(...args: any[]) {
+          console.log('🚫 منع prompt في Demo Mode:', args[0]);
+          return null;
+        };
       }
     } else {
       // إزالة الـ style عند عدم وجود Demo Mode
@@ -84,6 +106,35 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
       setIsChangePasswordOpen(false);
     }
   }, [isChangePasswordOpen, isDemoMode]);
+
+  // منع أي استدعاءات من Supabase المخفية عند Demo Mode
+  useEffect(() => {
+    if (!isDemoMode) return;
+
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      // منع أي unsaved changes warning من popup
+      if (isDemoMode) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+
+    const handleUnhandledRejection = (e: PromiseRejectionEvent) => {
+      // منع أي unhandled promise rejections من Supabase
+      if (isDemoMode && (e.reason?.message?.includes('password') || e.reason?.message?.includes('auth'))) {
+        console.log('🚫 منع unhandled rejection في Demo Mode:', e.reason);
+        e.preventDefault();
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    window.addEventListener('unhandledrejection', handleUnhandledRejection);
+
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      window.removeEventListener('unhandledrejection', handleUnhandledRejection);
+    };
+  }, [isDemoMode]);
 
   const handleChangePassword = async () => {
     setPasswordError('');

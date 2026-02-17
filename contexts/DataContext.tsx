@@ -147,7 +147,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       try {
         console.log('🔐 بدء تهيئة المصادقة...');
         
-        // فحص جلسة Demo أولاً - إذا وجدنا واحدة، استخدمها وتوقف
+        // فحص جلسة Demo أولاً - إذا وجدنا واحدة، استخدمها وتوقف تماماً عن Supabase
         const demoSessionStr = localStorage.getItem('dar_demo_session');
         if (demoSessionStr) {
           try {
@@ -156,13 +156,14 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             setCurrentUser(demoUser);
             GlobalDemoModeActive = true;  // تعيين global flag
             setIsAuthLoading(false);
-            return; // توقف - استخدم Demo Mode فقط
+            return; // توقف تماماً - لا تستدعي أي Supabase
           } catch (e) {
             console.warn('⚠️ فشل استرجاع جلسة Demo:', e);
             localStorage.removeItem('dar_demo_session');
           }
         }
         
+        // فقط حاول Supabase إذا لم نجد Demo session
         if (!supabase || !supabase.auth) {
           console.error('❌ Supabase auth غير متاح.');
           setIsAuthLoading(false);
@@ -209,10 +210,16 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   useEffect(() => {
     if (!supabase || !supabase.auth) return;
 
+    // إذا كنا في Demo Mode، لا نستمع لـ auth events على الإطلاق
+    if (GlobalDemoModeActive || (currentUser as any)?.isDemoMode === true) {
+      console.log('🔒 Demo Mode نشط - تخطي onAuthStateChange listener تماماً');
+      return;
+    }
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       console.log('🔐 Auth state changed:', event);
       
-      // إذا كان في Demo Mode، تجاهل جميع أحداث Supabase تماماً - بما فيها PASSWORD_RECOVERY, MFA, إلخ
+      // تحقق مجددة من Demo Mode
       const isDemoMode = GlobalDemoModeActive || (currentUser as any)?.isDemoMode === true;
       if (isDemoMode) {
         console.log('🔒 Demo Mode نشط (global flag) - تجاهل حدث Auth بقوة:', event);
