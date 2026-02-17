@@ -2,16 +2,18 @@
 import React, { useState } from 'react';
 import { 
   Plus, PieChart, Zap, FileText, Trash2, Building2, MapPin, 
-  User as UserIcon 
+  User as UserIcon, FileSpreadsheet 
 } from 'lucide-react';
 import { supabase } from '../supabaseClient';
-import { ProjectSummary, User } from '../types';
+import { ProjectSummary, User, ProjectWork } from '../types';
 import ProjectCard from './ProjectCard';
 import Modal from './Modal';
 import ProjectDetailView from './ProjectDetailView';
+import * as XLSX from 'xlsx';
 
 interface ProjectsModuleProps {
   projects: ProjectSummary[];
+  projectWorks?: ProjectWork[];
   stats: {
     projects: number;
     techRequests: number;
@@ -25,6 +27,7 @@ interface ProjectsModuleProps {
 
 const ProjectsModule: React.FC<ProjectsModuleProps> = ({
   projects,
+  projectWorks = [],
   stats,
   currentUser,
   onProjectClick,
@@ -33,8 +36,105 @@ const ProjectsModule: React.FC<ProjectsModuleProps> = ({
 }) => {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [addForm, setAddForm] = useState({ name: '', location: '' });
+  const [isExporting, setIsExporting] = useState(false);
 
   const isAdmin = currentUser?.role === 'ADMIN';
+
+  // دالة تصدير المشاريع وأعمالها إلى Excel
+  const exportProjectsToExcel = () => {
+    try {
+      setIsExporting(true);
+      const timestamp = new Date().toLocaleString('ar-SA', { timeZone: 'Asia/Riyadh' });
+
+      // إنشاء البيانات لكل مشروع مع أعماله
+      const excelData: any[] = [
+        ['تقرير المشاريع والأعمال - دار وإعمار'],
+        ['تاريخ التصدير:', timestamp],
+        [],
+      ];
+
+      projects.forEach((project) => {
+        // عنوان المشروع
+        excelData.push(
+          [`المشروع: ${project.name || project.title}`, '', '', '', '', ''],
+          ['الموقع:', project.location || '-', 'عدد الوحدات:', project.units_count || '-', 'الحالة:', project.status || 'active'],
+          []
+        );
+
+        // الأعمال المسجلة في المشروع
+        const projectTasksList = projectWorks.filter((w: ProjectWork) => {
+          const wId = w.projectId ?? (w as any).projectid ?? (w as any).project_id;
+          return Number(wId) === project.id;
+        });
+
+        if (projectTasksList.length > 0) {
+          excelData.push(
+            ['الأعمال المسجلة:'],
+            ['#', 'اسم العمل', 'الحالة', 'الجهة', 'القسم', 'الملاحظات', 'تاريخ الإنشاء']
+          );
+
+          projectTasksList.forEach((work: ProjectWork, index: number) => {
+            const statusLabel = work.status === 'completed' || work.status === 'منجز' || work.status === 'مكتمل' ? 'منجز' : 'قيد الإنجاز';
+            excelData.push([
+              index + 1,
+              work.task_name || '-',
+              statusLabel,
+              work.authority || '-',
+              work.department || '-',
+              work.notes || '-',
+              work.created_at ? new Date(work.created_at).toLocaleDateString('ar-SA') : '-'
+            ]);
+          });
+
+          const completedCount = projectTasksList.filter(w => 
+            w.status === 'completed' || w.status === 'منجز' || w.status === 'مكتمل'
+          ).length;
+          const completionRate = projectTasksList.length > 0 
+            ? ((completedCount / projectTasksList.length) * 100).toFixed(1)
+            : '0';
+
+          excelData.push(
+            [],
+            ['الإجمالي:', projectTasksList.length, 'منجز:', completedCount, 'نسبة الإنجاز:', `${completionRate}%`]
+          );
+        } else {
+          excelData.push(['لا توجد أعمال مسجلة في هذا المشروع']);
+        }
+
+        excelData.push([], ['─'.repeat(50)]);
+        excelData.push([]);
+      });
+
+      // إنشاء ورقة العمل
+      const ws = XLSX.utils.aoa_to_sheet(excelData);
+      
+      // تنسيق العرض
+      const wscols = [
+        { wch: 5 },   // #
+        { wch: 35 },  // اسم العمل/المشروع
+        { wch: 15 },  // الحالة
+        { wch: 25 },  // الجهة
+        { wch: 20 },  // القسم
+        { wch: 30 },  // الملاحظات
+        { wch: 15 }   // تاريخ الإنشاء
+      ];
+      ws['!cols'] = wscols;
+
+      // إنشاء الملف
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'المشاريع والأعمال');
+
+      // تحميل الملف
+      const fileName = `المشاريع_والأعمال_${new Date().toISOString().split('T')[0]}.xlsx`;
+      XLSX.writeFile(wb, fileName);
+
+      setIsExporting(false);
+    } catch (error) {
+      console.error('خطأ في تصدير Excel:', error);
+      setIsExporting(false);
+      alert('حدث خطأ أثناء تصدير الملف');
+    }
+  };
 
   const handleAddProject = async () => {
     if (!addForm.name) return alert("اسم المشروع مطلوب");
@@ -82,11 +182,21 @@ const ProjectsModule: React.FC<ProjectsModuleProps> = ({
       <div className="space-y-6">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 px-2">
           <h2 className="text-2xl font-black text-[#1B2B48]">المشاريع القائمة</h2>
-          {isAdmin && (
-            <button onClick={() => setIsAddModalOpen(true)} className="w-full md:w-auto bg-[#1B2B48] text-white px-8 py-4 rounded-[22px] font-bold shadow-xl hover:scale-105 transition-all active:scale-95 flex items-center justify-center gap-2">
-              <Plus size={20} /> إضافة مشروع جديد
+          <div className="flex flex-col md:flex-row w-full md:w-auto gap-3">
+            <button 
+              onClick={exportProjectsToExcel} 
+              disabled={isExporting || projects.length === 0}
+              className="w-full md:w-auto bg-green-600 hover:bg-green-700 text-white px-6 py-4 rounded-[22px] font-bold shadow-xl hover:scale-105 transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <FileSpreadsheet size={20} /> 
+              {isExporting ? 'جاري التصدير...' : 'تصدير المشاريع Excel'}
             </button>
-          )}
+            {isAdmin && (
+              <button onClick={() => setIsAddModalOpen(true)} className="w-full md:w-auto bg-[#1B2B48] text-white px-8 py-4 rounded-[22px] font-bold shadow-xl hover:scale-105 transition-all active:scale-95 flex items-center justify-center gap-2">
+                <Plus size={20} /> إضافة مشروع جديد
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">

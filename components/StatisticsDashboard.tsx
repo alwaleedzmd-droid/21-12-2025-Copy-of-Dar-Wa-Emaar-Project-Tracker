@@ -376,8 +376,8 @@ const StatisticsDashboard: React.FC = () => {
         ['تفاصيل الطلبات الفنية'],
         [],
         ['الحالة', 'العدد'],
-        ...stats.technicalStatusData.map((item: any) => [
-          STATUS_LABELS[item.name] || item.name,
+        ...stats.technicalPieData.map((item: any) => [
+          item.name,
           item.value
         ])
       ];
@@ -399,7 +399,7 @@ const StatisticsDashboard: React.FC = () => {
           item.name,
           item.completed,
           item.inProgress,
-          item.total
+          item.totalWorks
         ])
       ];
 
@@ -452,7 +452,8 @@ const StatisticsDashboard: React.FC = () => {
         scale: 2,
         useCORS: true,
         logging: false,
-        backgroundColor: '#ffffff'
+        backgroundColor: '#ffffff',
+        allowTaint: true
       });
 
       // إظهار الأزرار مرة أخرى
@@ -467,20 +468,55 @@ const StatisticsDashboard: React.FC = () => {
 
       const pageWidth = pdf.internal.pageSize.getWidth();
       const pageHeight = pdf.internal.pageSize.getHeight();
-      const imgWidth = pageWidth;
-      const imgHeight = (canvas.height * pageWidth) / canvas.width;
+      
+      // إضافة الشعار والعنوان
+      const timestamp = new Date().toLocaleString('ar-SA', { 
+        timeZone: 'Asia/Riyadh',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      });
+      
+      // إضافة صورة الشعار
+      try {
+        const logo = new Image();
+        logo.src = '/brand/dar-logo.png';
+        await new Promise((resolve) => {
+          logo.onload = resolve;
+          logo.onerror = resolve;
+        });
+        if (logo.complete && logo.naturalHeight !== 0) {
+          pdf.addImage(logo, 'PNG', 15, 10, 30, 15);
+        }
+      } catch (err) {
+        console.log('تعذر تحميل الشعار');
+      }
+
+      // إضافة العنوان والتاريخ
+      pdf.setFontSize(18);
+      pdf.setTextColor(27, 43, 72);
+      pdf.text('لوحة الإحصائيات - دار وإعمار', pageWidth / 2, 20, { align: 'center' });
+      
+      pdf.setFontSize(10);
+      pdf.setTextColor(100, 100, 100);
+      pdf.text(`تاريخ التصدير: ${timestamp}`, pageWidth / 2, 28, { align: 'center' });
+
+      // إضافة المحتوى
+      const imgWidth = pageWidth - 20;
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      const startY = 35;
 
       let heightLeft = imgHeight;
-      let position = 0;
+      let position = startY;
 
-      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
-      heightLeft -= pageHeight;
+      pdf.addImage(imgData, 'PNG', 10, position, imgWidth, imgHeight);
+      heightLeft -= (pageHeight - startY);
 
       while (heightLeft > 0) {
-        position = heightLeft - imgHeight;
         pdf.addPage();
-        pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
-        heightLeft -= pageHeight;
+        position = heightLeft - imgHeight + 10;
+        pdf.addImage(imgData, 'PNG', 10, position, imgWidth, imgHeight);
+        heightLeft -= (pageHeight - 20);
       }
 
       const fileName = `احصائيات_دار_وإعمار_${new Date().toISOString().split('T')[0]}.pdf`;
