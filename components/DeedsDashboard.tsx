@@ -686,13 +686,62 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
             {selectedDeed && (
                 <Modal isOpen={isManageModalOpen} onClose={() => setIsManageModalOpen(false)} title="تدقيق ومتابعة طلب الإفراغ">
                     <div className="space-y-6 text-right overflow-y-auto max-h-[85vh] p-1 custom-scrollbar">
-                        <div className="bg-gray-50 p-6 rounded-[30px] border border-gray-100 grid grid-cols-2 gap-6 shadow-inner">
-                            <Detail label="المستفيد" value={selectedDeed.client_name} icon={<UserIcon size={14}/>} />
-                            <Detail label="الهوية" value={selectedDeed.id_number} icon={<FileText size={14}/>} />
-                            <Detail label="المشروع" value={selectedDeed.project_name} icon={<Building2 size={14}/>} />
-                            <Detail label="القيمة" value={`${parseFloat(selectedDeed.unit_value || 0).toLocaleString()} ر.س`} icon={<CreditCard size={14}/>} />
-                            <Detail label="البنك" value={selectedDeed.bank_name} icon={<Landmark size={14}/>} />
-                            <Detail label="رقم الصك الجديد" value={selectedDeed.new_deed_number} icon={<FileText size={14}/>} />
+                        {/* بيانات المستفيد */}
+                        <div className="bg-gradient-to-br from-blue-50 to-indigo-50 p-6 rounded-[30px] border border-blue-100 shadow-sm">
+                            <h3 className="text-sm font-black text-[#1B2B48] mb-4 flex items-center gap-2">
+                                <UserIcon size={16} className="text-blue-600" />
+                                بيانات المستفيد
+                            </h3>
+                            <div className="grid grid-cols-2 gap-6">
+                                <Detail label="اسم المستفيد" value={selectedDeed.client_name} icon={<UserIcon size={14}/>} />
+                                <Detail label="رقم الهوية" value={selectedDeed.id_number} icon={<FileText size={14}/>} />
+                                <Detail label="جوال المستفيد" value={selectedDeed.mobile} icon={<Phone size={14}/>} />
+                                <Detail label="تاريخ الميلاد" value={selectedDeed.dob_hijri} icon={<Calendar size={14}/>} />
+                            </div>
+                        </div>
+
+                        {/* بيانات العقار والصفقة */}
+                        <div className="bg-gradient-to-br from-orange-50 to-amber-50 p-6 rounded-[30px] border border-orange-100 shadow-sm">
+                            <h3 className="text-sm font-black text-[#1B2B48] mb-4 flex items-center gap-2">
+                                <Building2 size={16} className="text-orange-600" />
+                                بيانات العقار والصفقة
+                            </h3>
+                            <div className="grid grid-cols-2 gap-6">
+                                <Detail label="المنطقة" value={selectedDeed.region} icon={<MapPin size={14}/>} />
+                                <Detail label="مدينة العقار" value={selectedDeed.city} icon={<MapPin size={14}/>} />
+                                <Detail label="اسم المشروع" value={selectedDeed.project_name} icon={<Building2 size={14}/>} />
+                                <Detail label="رقم المخطط" value={selectedDeed.plan_number} icon={<Sheet size={14}/>} />
+                                <Detail label="رقم الوحدة" value={selectedDeed.unit_number} icon={<Sheet size={14}/>} />
+                                <Detail label="قيمة الوحدة" value={selectedDeed.unit_value ? `${parseFloat(selectedDeed.unit_value).toLocaleString()} ر.س` : '-'} icon={<CreditCard size={14}/>} />
+                                <Detail label="الرقم الضريبي" value={selectedDeed.tax_number} icon={<FileText size={14}/>} />
+                                <Detail label="نوع العقد" value={selectedDeed.contract_type} icon={<FileText size={14}/>} />
+                            </div>
+                        </div>
+
+                        {/* بيانات التمويل */}
+                        <div className="bg-gradient-to-br from-green-50 to-emerald-50 p-6 rounded-[30px] border border-green-100 shadow-sm">
+                            <h3 className="text-sm font-black text-[#1B2B48] mb-4 flex items-center gap-2">
+                                <Landmark size={16} className="text-green-600" />
+                                بيانات التمويل
+                            </h3>
+                            <div className="grid grid-cols-2 gap-6">
+                                <Detail label="اسم البنك" value={selectedDeed.bank_name} icon={<Landmark size={14}/>} />
+                                <Detail label="الدفعة التمويلية سكني" value={selectedDeed.sakani_support_number} icon={<CreditCard size={14}/>} />
+                            </div>
+                        </div>
+
+                        {/* بيانات الصك */}
+                        <div className="bg-gradient-to-br from-purple-50 to-pink-50 p-6 rounded-[30px] border border-purple-100 shadow-sm">
+                            <h3 className="text-sm font-black text-[#1B2B48] mb-4 flex items-center gap-2">
+                                <FileText size={16} className="text-purple-600" />
+                                بيانات الصك
+                            </h3>
+                            <div className="grid grid-cols-2 gap-6">
+                                <Detail label="رقم الصك القديم" value={selectedDeed.old_deed_number} icon={<FileText size={14}/>} />
+                                <Detail label="تاريخ الصك" value={selectedDeed.deed_date} icon={<Calendar size={14}/>} />
+                                <Detail label="رقم الملك الجديد" value={selectedDeed.new_deed_number} icon={<FileText size={14}/>} />
+                                <Detail label="تاريخ الملك الجديد" value={selectedDeed.new_deed_date} icon={<Calendar size={14}/>} />
+                            </div>
                         </div>
 
                         {isAuthorizedToManage && (

@@ -6,9 +6,11 @@ import {
 } from 'recharts';
 import {
   Building2, Zap, FileStack, TrendingUp,
-  CheckCircle2, Clock, Activity, BarChart3, XCircle, AlertCircle, ArrowLeft
+  CheckCircle2, Clock, Activity, BarChart3, XCircle, AlertCircle, ArrowLeft,
+  Download, FileSpreadsheet, FileText
 } from 'lucide-react';
 import { useData } from '../contexts/DataContext';
+import * as XLSX from 'xlsx';
 
 // ─── ألوان هوية دار وإعمار ───
 const NAVY = '#1B2B48';
@@ -225,6 +227,7 @@ const StatisticsDashboard: React.FC = () => {
   const navigate = useNavigate();
   const { projects, technicalRequests, clearanceRequests, projectWorks, isDbLoading } = useData();
   const [chartsVisible, setChartsVisible] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
 
   useEffect(() => {
     const timer = setTimeout(() => setChartsVisible(true), 600);
@@ -351,6 +354,146 @@ const StatisticsDashboard: React.FC = () => {
     };
   }, [projects, technicalRequests, clearanceRequests, projectWorks]);
 
+  // ─── دالة تصدير Excel ───
+  const exportToExcel = () => {
+    try {
+      setIsExporting(true);
+      const timestamp = new Date().toLocaleString('ar-SA', { timeZone: 'Asia/Riyadh' });
+
+      // ملخص الإحصائيات
+      const summaryData = [
+        ['لوحة إحصائيات دار وإعمار'],
+        ['تاريخ التصدير:', timestamp],
+        [],
+        ['البند', 'العدد', 'نسبة الإنجاز'],
+        ['المشاريع النشطة', stats.totalProjects, '-'],
+        ['الطلبات الفنية', stats.totalTechnical, `${stats.technicalCompletionRate.toFixed(1)}%`],
+        ['سجل الإفراغات', stats.totalClearance, `${stats.clearanceCompletionRate.toFixed(1)}%`],
+      ];
+
+      // تفاصيل الطلبات الفنية
+      const technicalData = [
+        ['تفاصيل الطلبات الفنية'],
+        [],
+        ['الحالة', 'العدد'],
+        ...stats.technicalStatusData.map((item: any) => [
+          STATUS_LABELS[item.name] || item.name,
+          item.value
+        ])
+      ];
+
+      // تفاصيل الإفراغات
+      const clearanceData = [
+        ['تفاصيل طلبات الإفراغات'],
+        [],
+        ['الحالة', 'العدد'],
+        ...stats.clearancePieData.map((item: any) => [item.name, item.value])
+      ];
+
+      // تفاصيل توزيع أعمال المشاريع
+      const worksData = [
+        ['تفاصيل توزيع أعمال المشاريع'],
+        [],
+        ['اسم المشروع', 'الأعمال المكتملة', 'الأعمال قيد الإنجاز', 'الإجمالي'],
+        ...stats.projectWorksDetails.map((item: any) => [
+          item.name,
+          item.completed,
+          item.inProgress,
+          item.total
+        ])
+      ];
+
+      // إنشاء Workbook
+      const wb = XLSX.utils.book_new();
+
+      const ws1 = XLSX.utils.aoa_to_sheet(summaryData);
+      XLSX.utils.book_append_sheet(wb, ws1, 'ملخص الإحصائيات');
+
+      const ws2 = XLSX.utils.aoa_to_sheet(technicalData);
+      XLSX.utils.book_append_sheet(wb, ws2, 'الطلبات الفنية');
+
+      const ws3 = XLSX.utils.aoa_to_sheet(clearanceData);
+      XLSX.utils.book_append_sheet(wb, ws3, 'طلبات الإفراغات');
+
+      const ws4 = XLSX.utils.aoa_to_sheet(worksData);
+      XLSX.utils.book_append_sheet(wb, ws4, 'توزيع الأعمال');
+
+      // تحميل الملف
+      const fileName = `احصائيات_دار_وإعمار_${new Date().toISOString().split('T')[0]}.xlsx`;
+      XLSX.writeFile(wb, fileName);
+
+      setIsExporting(false);
+    } catch (error) {
+      console.error('خطأ في تصدير Excel:', error);
+      setIsExporting(false);
+      alert('حدث خطأ أثناء تصدير الملف');
+    }
+  };
+
+  // ─── دالة تصدير PDF ───
+  const exportToPDF = async () => {
+    try {
+      setIsExporting(true);
+      
+      // تحميل المكتبات ديناميكياً
+      const html2canvas = (await import('html2canvas')).default;
+      const jsPDF = (await import('jspdf')).default;
+
+      const element = document.querySelector('[data-export-target]') as HTMLElement;
+      if (!element) {
+        throw new Error('لم يتم العثور على العنصر المراد تصديره');
+      }
+
+      // إخفاء أزرار التصدير مؤقتاً
+      const exportButtons = document.querySelector('[data-export-buttons]') as HTMLElement;
+      if (exportButtons) exportButtons.style.display = 'none';
+
+      const canvas = await html2canvas(element, {
+        scale: 2,
+        useCORS: true,
+        logging: false,
+        backgroundColor: '#ffffff'
+      });
+
+      // إظهار الأزرار مرة أخرى
+      if (exportButtons) exportButtons.style.display = 'flex';
+
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4'
+      });
+
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      const imgWidth = pageWidth;
+      const imgHeight = (canvas.height * pageWidth) / canvas.width;
+
+      let heightLeft = imgHeight;
+      let position = 0;
+
+      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+      heightLeft -= pageHeight;
+
+      while (heightLeft > 0) {
+        position = heightLeft - imgHeight;
+        pdf.addPage();
+        pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+        heightLeft -= pageHeight;
+      }
+
+      const fileName = `احصائيات_دار_وإعمار_${new Date().toISOString().split('T')[0]}.pdf`;
+      pdf.save(fileName);
+
+      setIsExporting(false);
+    } catch (error) {
+      console.error('خطأ في تصدير PDF:', error);
+      setIsExporting(false);
+      alert('حدث خطأ أثناء تصدير PDF. تأكد من تثبيت المكتبات المطلوبة: npm install jspdf html2canvas');
+    }
+  };
+
   // ─── حالة التحميل ───
   if (isDbLoading) {
     return (
@@ -366,17 +509,39 @@ const StatisticsDashboard: React.FC = () => {
   }
 
   return (
-    <div className="space-y-8 font-cairo" dir="rtl">
-      {/* ═══ العنوان الرئيسي ═══ */}
-      <div className="flex items-center gap-4">
-        <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#1B2B48] to-[#2a4068] flex items-center justify-center shadow-lg">
-          <BarChart3 size={26} className="text-white" />
+    <div className="space-y-8 font-cairo" dir="rtl" data-export-target>
+      {/* ═══ العنوان الرئيسي مع أزرار التصدير ═══ */}
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center gap-4">
+          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#1B2B48] to-[#2a4068] flex items-center justify-center shadow-lg">
+            <BarChart3 size={26} className="text-white" />
+          </div>
+          <div>
+            <h1 className="text-3xl font-black text-[#1B2B48]">لوحة الإحصائيات</h1>
+            <p className="text-sm text-gray-400 font-bold">
+              نظرة شاملة على أداء المشاريع والإنجاز
+            </p>
+          </div>
         </div>
-        <div>
-          <h1 className="text-3xl font-black text-[#1B2B48]">لوحة الإحصائيات</h1>
-          <p className="text-sm text-gray-400 font-bold">
-            نظرة شاملة على أداء المشاريع والإنجاز
-          </p>
+        
+        {/* أزرار التصدير */}
+        <div className="flex items-center gap-3" data-export-buttons>
+          <button
+            onClick={exportToExcel}
+            disabled={isExporting}
+            className="flex items-center gap-2 px-4 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-xl font-bold text-sm transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-md hover:shadow-lg"
+          >
+            <FileSpreadsheet size={18} />
+            <span>تصدير Excel</span>
+          </button>
+          <button
+            onClick={exportToPDF}
+            disabled={isExporting}
+            className="flex items-center gap-2 px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl font-bold text-sm transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-md hover:shadow-lg"
+          >
+            <FileText size={18} />
+            <span>تصدير PDF</span>
+          </button>
         </div>
       </div>
 
