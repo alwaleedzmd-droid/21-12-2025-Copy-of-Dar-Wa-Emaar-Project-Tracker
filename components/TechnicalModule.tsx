@@ -3,7 +3,7 @@ import { useLocation } from 'react-router';
 import { 
   Plus, MoreHorizontal, Trash2, Edit, FileText, 
   Building2, AlignLeft, CheckCircle2, Paperclip, 
-  FileUp, Sheet, Search, Filter, Zap, ChevronLeft, Loader2, Clock, XCircle
+  FileUp, Sheet, Search, Filter, Zap, ChevronLeft, Loader2, Clock, XCircle, Download
 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
 import { supabase } from '../supabaseClient';
@@ -158,6 +158,45 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
     }
   };
 
+  const handleExportExcel = () => {
+    if (scopedRequests.length === 0) {
+      alert('لا توجد بيانات للتصدير');
+      return;
+    }
+
+    const exportData = scopedRequests.map((req, index) => ({
+      '#': index + 1,
+      'المشروع': req?.project_name || '',
+      'بيان العمل': req?.service_type || '',
+      'جهة المراجعة': req?.reviewing_entity || '',
+      'الجهة الطالبة': req?.requesting_entity || '',
+      'الوصف': req?.details || '',
+      'الحالة': STATUS_OPTIONS.find(o => o.value === req?.status)?.label || req?.status || '',
+      'نسبة الانجاز': req?.progress ?? 0,
+      'نطاق العمل': req?.scope || '',
+      'تاريخ الاضافة': req?.created_at || ''
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(exportData);
+    worksheet['!cols'] = [
+      { wch: 5 },  // #
+      { wch: 20 }, // المشروع
+      { wch: 20 }, // بيان العمل
+      { wch: 20 }, // جهة المراجعة
+      { wch: 18 }, // الجهة الطالبة
+      { wch: 30 }, // الوصف
+      { wch: 12 }, // الحالة
+      { wch: 12 }, // نسبة الانجاز
+      { wch: 12 }, // نطاق العمل
+      { wch: 18 }  // تاريخ الاضافة
+    ];
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'الطلبات الفنية');
+    const today = new Date().toISOString().split('T')[0];
+    XLSX.writeFile(workbook, `الطلبات_الفنية_${today}.xlsx`);
+  };
+
   const handleSubmit = async () => {
     if (!techForm.project_id || !techForm.service_type) return alert("يرجى تعبئة الحقول الأساسية");
     setIsUploading(true); 
@@ -310,6 +349,13 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
           {canEdit && (
             <>
               <input type="file" ref={excelInputRef} hidden accept=".xlsx, .xls" onChange={handleExcelImport} />
+              <button 
+                onClick={handleExportExcel}
+                className="flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 text-gray-600 rounded-xl font-bold text-sm hover:bg-gray-50 transition-all shadow-sm"
+              >
+                <Download size={18} className="text-blue-600" />
+                تحميل اكسل
+              </button>
               <button 
                 onClick={() => excelInputRef.current?.click()}
                 disabled={isBulkLoading}
