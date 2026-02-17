@@ -140,7 +140,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
    */
   const navItems = [
     { 
-      label: 'لوحة التحكم', 
+      label: 'لوحة الإحصائيات', 
       icon: <BarChart3 size={20} />, 
       path: '/dashboard', 
       roles: ['ADMIN', 'PR_MANAGER'] 
