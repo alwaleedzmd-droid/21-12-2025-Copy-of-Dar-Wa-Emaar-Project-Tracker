@@ -1,10 +1,11 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useLocation } from 'react-router';
 import { 
   Plus, MoreHorizontal, Trash2, Edit, FileText, 
   Building2, AlignLeft, CheckCircle2, Paperclip, 
-  FileUp, Sheet, Search, Filter, Zap, ChevronLeft, Loader2
+  FileUp, Sheet, Search, Filter, Zap, ChevronLeft, Loader2, Clock, XCircle
 } from 'lucide-react';
+import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
 import { supabase } from '../supabaseClient';
 import { TechnicalRequest, ProjectSummary, User } from '../types';
 import { notificationService } from '../services/notificationService';
@@ -43,6 +44,25 @@ const STATUS_OPTIONS = [
   { value: 'rejected', label: 'مرفوض' },
   { value: 'cancelled', label: 'ملغى' }
 ];
+
+const DONUT_COLORS = {
+  completed: '#10B981',
+  inProgress: '#0EA5E9',
+  rejected: '#F43F5E'
+};
+
+const renderDonutLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent }: any) => {
+  if (percent < 0.08) return null;
+  const RADIAN = Math.PI / 180;
+  const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
+  const x = cx + radius * Math.cos(-midAngle * RADIAN);
+  const y = cy + radius * Math.sin(-midAngle * RADIAN);
+  return (
+    <text x={x} y={y} fill="white" textAnchor="middle" dominantBaseline="central" className="font-black" style={{ fontSize: '12px' }}>
+      {(percent * 100).toFixed(0)}%
+    </text>
+  );
+};
 
 interface TechnicalModuleProps {
   requests: TechnicalRequest[];
@@ -228,15 +248,53 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
     } catch (err: any) { alert("فشل تحديث الحالة"); }
   };
 
-  const filteredRequests = (requests || []).filter(r => {
-    if (!searchTerm) return true;
+  const scopedRequests = useMemo(() => {
+    const base = requests || [];
+    return base.filter((r) => {
+      if (scopeFilter && r?.scope && r?.scope !== scopeFilter) return false;
+      if (filteredByProject) {
+        const projectMatch =
+          r?.project_name === filteredByProject ||
+          r?.project_title === filteredByProject ||
+          r?.project_id?.toString() === filteredByProject;
+        if (!projectMatch) return false;
+      }
+      return true;
+    });
+  }, [requests, filteredByProject, scopeFilter]);
+
+  const filteredRequests = useMemo(() => {
+    if (!searchTerm) return scopedRequests;
     const term = searchTerm.toLowerCase();
-    return (
+    return scopedRequests.filter(r => (
       r?.project_name?.toLowerCase()?.includes(term) ||
       r?.service_type?.toLowerCase()?.includes(term) ||
       r?.reviewing_entity?.toLowerCase()?.includes(term)
-    );
-  });
+    ));
+  }, [scopedRequests, searchTerm]);
+
+  const techSummary = useMemo(() => {
+    const isCompleted = (status: string) => ['completed', 'منجز', 'مكتمل'].includes(status);
+    const isRejected = (status: string) => ['rejected', 'مرفوض', 'cancelled', 'ملغى'].includes(status);
+
+    const completed = scopedRequests.filter(r => isCompleted(r?.status || '')).length;
+    const rejected = scopedRequests.filter(r => isRejected(r?.status || '')).length;
+    const inProgress = scopedRequests.filter(r => !isCompleted(r?.status || '') && !isRejected(r?.status || '')).length;
+
+    const chartData = [
+      { name: 'منجز', value: completed, color: DONUT_COLORS.completed },
+      { name: 'تحت الإجراء', value: inProgress, color: DONUT_COLORS.inProgress },
+      { name: 'مرفوض', value: rejected, color: DONUT_COLORS.rejected }
+    ];
+
+    return {
+      total: scopedRequests.length,
+      completed,
+      inProgress,
+      rejected,
+      chartData
+    };
+  }, [scopedRequests]);
 
   // Fix: Removed 'PR_EMPLOYEE' as it is not a valid UserRole and caused type overlap errors.
   const canEdit = currentUser?.role === 'ADMIN' || currentUser?.role === 'PR_MANAGER' || currentUser?.role === 'TECHNICAL';
@@ -265,6 +323,61 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
               </button>
             </>
           )}
+        </div>
+      </div>
+
+      <div className="bg-white p-6 rounded-[35px] border border-gray-100 shadow-sm">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h3 className="text-lg font-black text-[#1B2B48]">تفاصيل الطلبات الفنية</h3>
+            <p className="text-[10px] text-gray-400 font-bold">توزيع الطلبات حسب الحالة</p>
+          </div>
+          <span className="text-[10px] text-gray-400 font-bold">الإجمالي: {techSummary.total}</span>
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-center">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 lg:col-span-2">
+            <SummaryStatCard label="مرفوض" value={techSummary.rejected} icon={<XCircle size={18} />} color="text-rose-600" bg="bg-rose-50 border-rose-100" />
+            <SummaryStatCard label="تحت الإجراء" value={techSummary.inProgress} icon={<Clock size={18} />} color="text-sky-600" bg="bg-sky-50 border-sky-100" />
+            <SummaryStatCard label="منجز" value={techSummary.completed} icon={<CheckCircle2 size={18} />} color="text-emerald-600" bg="bg-emerald-50 border-emerald-100" />
+          </div>
+          <div className="bg-gray-50 rounded-[28px] p-4 border border-gray-100">
+            <div className="h-44">
+              {techSummary.total === 0 ? (
+                <div className="h-full flex items-center justify-center">
+                  <div className="w-28 h-28 rounded-full border-[10px] border-gray-200 flex items-center justify-center text-[10px] font-black text-gray-400">
+                    لا توجد بيانات
+                  </div>
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={techSummary.chartData}
+                      dataKey="value"
+                      nameKey="name"
+                      innerRadius={45}
+                      outerRadius={70}
+                      label={renderDonutLabel}
+                      labelLine={false}
+                    >
+                      {techSummary.chartData.map((entry) => (
+                        <Cell key={entry.name} fill={entry.color} />
+                      ))}
+                    </Pie>
+                  </PieChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+            <div className="flex flex-wrap justify-center gap-3 mt-2 text-[10px] font-bold text-gray-500">
+              {techSummary.chartData.map((item) => (
+                <div key={item.name} className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full" style={{ backgroundColor: item.color }} />
+                  <span>{item.name}</span>
+                  <span className="text-gray-400">{item.value}</span>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
 
@@ -343,5 +456,17 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
     </div>
   );
 };
+
+const SummaryStatCard = ({ label, value, icon, color, bg }: any) => (
+  <div className={`rounded-2xl border p-4 ${bg}`}>
+    <div className="flex items-center justify-between">
+      <div className="w-10 h-10 rounded-xl bg-white/70 flex items-center justify-center text-gray-400">
+        {icon}
+      </div>
+      <span className={`text-3xl font-black ${color}`}>{value}</span>
+    </div>
+    <p className="text-xs font-black text-gray-500 mt-2">{label}</p>
+  </div>
+);
 
 export default TechnicalModule;

@@ -10,6 +10,7 @@ import {
   Sparkles, FileSpreadsheet, Calendar, CreditCard,
   Building2, Phone, MapPin, FileText, Landmark, Sheet, Download
 } from 'lucide-react';
+import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
 // Fix: Removed ActivityLog import as it is not exported from DataContext
 import { useData } from '../contexts/DataContext';
 import { notificationService } from '../services/notificationService';
@@ -22,6 +23,25 @@ const STATUS_OPTIONS = [
   { value: 'مكتمل', label: 'مكتمل', color: 'bg-green-50 text-green-700 border-green-100' },
   { value: 'مرفوض', label: 'مرفوض', color: 'bg-red-50 text-red-700 border-red-100' }
 ];
+
+const DONUT_COLORS = {
+    completed: '#10B981',
+    inProgress: '#0EA5E9',
+    rejected: '#F43F5E'
+};
+
+const renderDonutLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent }: any) => {
+    if (percent < 0.08) return null;
+    const RADIAN = Math.PI / 180;
+    const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
+    const x = cx + radius * Math.cos(-midAngle * RADIAN);
+    const y = cy + radius * Math.sin(-midAngle * RADIAN);
+    return (
+        <text x={x} y={y} fill="white" textAnchor="middle" dominantBaseline="central" className="font-black" style={{ fontSize: '12px' }}>
+            {(percent * 100).toFixed(0)}%
+        </text>
+    );
+};
 
 interface DeedsDashboardProps {
   currentUserRole?: string;
@@ -340,6 +360,30 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
         );
     }, [deeds, searchQuery]);
 
+    const deedsSummary = useMemo(() => {
+        const all = deeds || [];
+        const isCompleted = (status: string) => ['مكتمل', 'completed', 'منجز'].includes(status);
+        const isRejected = (status: string) => ['مرفوض', 'rejected'].includes(status);
+
+        const completed = all.filter(d => isCompleted(d?.status || '')).length;
+        const rejected = all.filter(d => isRejected(d?.status || '')).length;
+        const inProgress = all.filter(d => !isCompleted(d?.status || '') && !isRejected(d?.status || '')).length;
+
+        const chartData = [
+            { name: 'مكتمل', value: completed, color: DONUT_COLORS.completed },
+            { name: 'تحت الإجراء', value: inProgress, color: DONUT_COLORS.inProgress },
+            { name: 'مرفوض', value: rejected, color: DONUT_COLORS.rejected }
+        ];
+
+        return {
+            total: all.length,
+            completed,
+            inProgress,
+            rejected,
+            chartData
+        };
+    }, [deeds]);
+
     const handleExportExcel = () => {
         if (filteredDeeds.length === 0) {
             alert('لا توجد بيانات للتصدير');
@@ -431,6 +475,61 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
                     <button onClick={() => setIsRegModalOpen(true)} className="flex items-center justify-center gap-2 px-6 py-2.5 bg-[#E95D22] text-white rounded-xl font-black text-sm hover:brightness-110 shadow-lg active:scale-95 transition-all">
                         <Plus size={16} /> تسجيل صك جديد
                     </button>
+                </div>
+            </div>
+
+            <div className="bg-white p-6 rounded-[35px] border border-gray-100 shadow-sm">
+                <div className="flex items-center justify-between mb-4">
+                    <div>
+                        <h3 className="text-lg font-black text-[#1B2B48]">تفاصيل سجل الإفراغات</h3>
+                        <p className="text-[10px] text-gray-400 font-bold">توزيع طلبات الإفراغ حسب الحالة</p>
+                    </div>
+                    <span className="text-[10px] text-gray-400 font-bold">الإجمالي: {deedsSummary.total}</span>
+                </div>
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-center">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 lg:col-span-2">
+                        <SummaryStatCard label="مرفوض" value={deedsSummary.rejected} icon={<XCircle size={18} />} color="text-rose-600" bg="bg-rose-50 border-rose-100" />
+                        <SummaryStatCard label="تحت الإجراء" value={deedsSummary.inProgress} icon={<Clock size={18} />} color="text-sky-600" bg="bg-sky-50 border-sky-100" />
+                        <SummaryStatCard label="مكتمل" value={deedsSummary.completed} icon={<CheckCircle2 size={18} />} color="text-emerald-600" bg="bg-emerald-50 border-emerald-100" />
+                    </div>
+                    <div className="bg-gray-50 rounded-[28px] p-4 border border-gray-100">
+                        <div className="h-44">
+                            {deedsSummary.total === 0 ? (
+                                <div className="h-full flex items-center justify-center">
+                                    <div className="w-28 h-28 rounded-full border-[10px] border-gray-200 flex items-center justify-center text-[10px] font-black text-gray-400">
+                                        لا توجد بيانات
+                                    </div>
+                                </div>
+                            ) : (
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <PieChart>
+                                        <Pie
+                                            data={deedsSummary.chartData}
+                                            dataKey="value"
+                                            nameKey="name"
+                                            innerRadius={45}
+                                            outerRadius={70}
+                                            label={renderDonutLabel}
+                                            labelLine={false}
+                                        >
+                                            {deedsSummary.chartData.map((entry) => (
+                                                <Cell key={entry.name} fill={entry.color} />
+                                            ))}
+                                        </Pie>
+                                    </PieChart>
+                                </ResponsiveContainer>
+                            )}
+                        </div>
+                        <div className="flex flex-wrap justify-center gap-3 mt-2 text-[10px] font-bold text-gray-500">
+                            {deedsSummary.chartData.map((item) => (
+                                <div key={item.name} className="flex items-center gap-1.5">
+                                    <span className="w-2 h-2 rounded-full" style={{ backgroundColor: item.color }} />
+                                    <span>{item.name}</span>
+                                    <span className="text-gray-400">{item.value}</span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -680,6 +779,18 @@ const Detail = ({ label, value, icon }: any) => (
             <label className="text-[9px] text-gray-400 font-black uppercase tracking-wider">{label}</label>
         </div>
         <span className="font-black text-[#1B2B48] text-sm leading-tight pr-5">{value || '-'}</span>
+    </div>
+);
+
+const SummaryStatCard = ({ label, value, icon, color, bg }: any) => (
+    <div className={`rounded-2xl border p-4 ${bg}`}>
+        <div className="flex items-center justify-between">
+            <div className="w-10 h-10 rounded-xl bg-white/70 flex items-center justify-center text-gray-400">
+                {icon}
+            </div>
+            <span className={`text-3xl font-black ${color}`}>{value}</span>
+        </div>
+        <p className="text-xs font-black text-gray-500 mt-2">{label}</p>
     </div>
 );
 
