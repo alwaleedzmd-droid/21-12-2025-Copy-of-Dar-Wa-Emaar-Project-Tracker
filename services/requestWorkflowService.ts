@@ -17,6 +17,18 @@ export const WORKFLOW_REQUEST_TYPE_OPTIONS: Array<{ value: WorkflowRequestType; 
   { value: 'METER_TRANSFER', label: 'إشعار نقل ملكية عداد (مياه/كهرباء)' }
 ];
 
+export const TECHNICAL_SERVICE_OPTIONS = [
+  'إصدار رخصة',
+  'طلب كهرباء',
+  'شهادة إتمام بناء',
+  'رسوم'
+];
+
+export const DEEDS_WORKFLOW_REQUEST_TYPE_OPTIONS: Array<{ value: WorkflowRequestType; label: string }> = [
+  { value: 'DEED_CLEARANCE', label: 'طلب إفراغ صك' },
+  { value: 'METER_TRANSFER', label: 'إشعار نقل ملكية عداد (مياه/كهرباء)' }
+];
+
 export const WORKFLOW_ROUTES: Record<WorkflowRequestType, WorkflowRoute> = {
   TECHNICAL_SECTION: {
     assigneeName: 'صالح اليحيى',
@@ -38,6 +50,9 @@ export const WORKFLOW_ROUTES: Record<WorkflowRequestType, WorkflowRoute> = {
 export const DIRECT_APPROVERS = ['صالح اليحيى', 'الوليد الدوسري', 'نورة المالكي'];
 
 const TECHNICAL_ALIASES = [
+  'إصدار رخصة',
+  'طلب كهرباء',
+  'شهادة إتمام بناء',
   'إصدار رخص بناء',
   'طلب فتح خدمة الكهرباء',
   'شهادة إتمام بناء (الأشغال)',

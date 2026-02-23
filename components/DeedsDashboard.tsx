@@ -14,7 +14,11 @@ import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
 // Fix: Removed ActivityLog import as it is not exported from DataContext
 import { useData } from '../contexts/DataContext';
 import { notificationService } from '../services/notificationService';
-import { WORKFLOW_ROUTES } from '../services/requestWorkflowService';
+import {
+    WORKFLOW_ROUTES,
+    DEEDS_WORKFLOW_REQUEST_TYPE_OPTIONS,
+    canApproveWorkflowRequest
+} from '../services/requestWorkflowService';
 import Modal from './Modal';
 import ApprovalPanel from './ApprovalPanel';
 import { parseClearanceExcel } from '../utils/excelHandler';
@@ -77,6 +81,7 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
     const autoFillTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const [newDeedForm, setNewDeedForm] = useState<any>({
+        request_type: 'DEED_CLEARANCE',
         region: 'الرياض',
         city: 'الرياض',
         project_name: filteredProjectName || '',
@@ -98,8 +103,11 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
         status: 'جديد'
     });
 
-    const deedWorkflowRoute = WORKFLOW_ROUTES.DEED_CLEARANCE;
-    const isAuthorizedToManage = currentUserName === deedWorkflowRoute.assigneeName;
+    const getRequestTypeLabel = (requestType?: string) => {
+        return DEEDS_WORKFLOW_REQUEST_TYPE_OPTIONS.find((option) => option.value === requestType)?.label || 'طلب إفراغ صك';
+    };
+
+    const isAuthorizedToManage = canApproveWorkflowRequest(currentUserName, selectedDeed?.assigned_to);
 
     /**
      * إرسال إشعار ذكي حسب دور المرسل:
@@ -318,7 +326,9 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
         if (!newDeedForm.client_name || !newDeedForm.id_number) return alert("الاسم والهوية مطلوبان");
         setIsSaving(true);
         try {
+            const workflowRoute = WORKFLOW_ROUTES[newDeedForm.request_type as 'DEED_CLEARANCE' | 'METER_TRANSFER'];
             const payload = {
+                request_type: newDeedForm.request_type,
                 region: newDeedForm.region,
                 city: newDeedForm.city,
                 project_name: newDeedForm.project_name,
@@ -339,9 +349,8 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
                 sakani_support_number: newDeedForm.sakani_support_number,
                 status: 'جديد',
                 submitted_by: currentUserName,
-                assigned_to: deedWorkflowRoute.assigneeName,
-                request_type: 'DEED_CLEARANCE',
-                workflow_cc: deedWorkflowRoute.ccLabel
+                assigned_to: workflowRoute.assigneeName,
+                workflow_cc: workflowRoute.ccLabel
             };
 
             const { data: insertedDeed, error } = await supabase.from('deeds_requests').insert([payload]).select('id').single();
@@ -351,16 +360,20 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
                 await supabase.from('deed_comments').insert([{
                     request_id: insertedDeed.id,
                     user_name: currentUserName || 'النظام',
-                    text: `تم تسجيل الطلب وتعيينه إلى ${deedWorkflowRoute.assigneeName}`
+                    text: `تم تسجيل ${getRequestTypeLabel(newDeedForm.request_type)} وتعيينه إلى ${workflowRoute.assigneeName}`
                 }]);
             }
             
-            await sendAppNotification('طلب إفراغ جديد', `تم تسجيل طلب جديد للمستفيد ${payload.client_name} | المسؤول: ${deedWorkflowRoute.assigneeName} | نسخة للعلم: ${deedWorkflowRoute.ccLabel}`);
+            await sendAppNotification(
+                'طلب جديد',
+                `تم تسجيل ${getRequestTypeLabel(newDeedForm.request_type)} للمستفيد ${payload.client_name} | المسؤول: ${workflowRoute.assigneeName} | نسخة للعلم: ${workflowRoute.ccLabel}`
+            );
 
             logActivity?.('تسجيل إفراغ جديد', payload.client_name, 'text-green-500');
 
             setIsRegModalOpen(false);
             setNewDeedForm({
+                request_type: 'DEED_CLEARANCE',
                 region: 'الرياض', city: 'الرياض', project_name: filteredProjectName || '',
                 plan_number: '', unit_number: '', old_deed_number: '', deed_date: '',
                 client_name: '', id_number: '', mobile: '', dob_hijri: '', unit_value: '',
@@ -570,6 +583,7 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
                         <thead className="bg-gray-50/50 border-b border-gray-100">
                             <tr className="text-right text-gray-400 text-[10px] font-black uppercase tracking-widest">
                                 <th className="p-6">المستفيد</th>
+                                <th className="p-6">نوع الطلب</th>
                                 <th className="p-6">المشروع / الوحدة</th>
                                 <th className="p-6">القيمة / البنك</th>
                                 <th className="p-6">الحالة</th>
@@ -578,9 +592,9 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
                         </thead>
                         <tbody className="divide-y divide-gray-50">
                             {isLoading ? (
-                                <tr><td colSpan={5} className="p-20 text-center"><Loader2 className="animate-spin mx-auto text-gray-300"/></td></tr>
+                                <tr><td colSpan={6} className="p-20 text-center"><Loader2 className="animate-spin mx-auto text-gray-300"/></td></tr>
                             ) : filteredDeeds.length === 0 ? (
-                                <tr><td colSpan={5} className="p-20 text-center text-gray-300 font-bold italic">لا توجد سجلات</td></tr>
+                                <tr><td colSpan={6} className="p-20 text-center text-gray-300 font-bold italic">لا توجد سجلات</td></tr>
                             ) : (
                                 filteredDeeds.map((deed) => {
                                     // مؤشر التحديث الجديد: إذا تم التحديث خلال آخر 24 ساعة
@@ -602,6 +616,9 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
                                                     </span>
                                                 )}
                                             </div>
+                                        </td>
+                                        <td className="p-6">
+                                            <p className="text-xs font-black text-[#1B2B48]">{getRequestTypeLabel(deed.request_type)}</p>
                                         </td>
                                         <td className="p-6">
                                             <p className="text-sm font-bold text-[#1B2B48]">{deed.project_name}</p>
@@ -645,6 +662,19 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
                     </div>
 
                     <div className="grid grid-cols-2 gap-3">
+                        <div className="col-span-2 space-y-1">
+                            <label className="text-[10px] text-gray-400 font-black">نوع الطلب</label>
+                            <select
+                                className="w-full p-3 bg-white rounded-xl border border-gray-100 outline-none font-black text-sm focus:border-[#E95D22] shadow-sm"
+                                value={newDeedForm.request_type}
+                                onChange={(e) => setNewDeedForm({ ...newDeedForm, request_type: e.target.value })}
+                            >
+                                {DEEDS_WORKFLOW_REQUEST_TYPE_OPTIONS.map((option) => (
+                                    <option key={option.value} value={option.value}>{option.label}</option>
+                                ))}
+                            </select>
+                        </div>
+
                         <div className="col-span-2">
                            <div className="space-y-1 relative">
                                 <label className="text-[10px] text-gray-400 font-black">رقم الهوية</label>
@@ -711,8 +741,9 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
                     <div className="space-y-6 text-right overflow-y-auto max-h-[85vh] p-1 custom-scrollbar">
                         <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
                             <div className="grid grid-cols-2 gap-4">
-                                <Detail label="المسؤول المباشر" value={selectedDeed.assigned_to || deedWorkflowRoute.assigneeName} icon={<UserIcon size={14}/>} />
-                                <Detail label="نسخة للعلم" value={selectedDeed.workflow_cc || deedWorkflowRoute.ccLabel} icon={<MessageSquare size={14}/>} />
+                                <Detail label="نوع الطلب" value={getRequestTypeLabel(selectedDeed.request_type)} icon={<FileText size={14}/>} />
+                                <Detail label="المسؤول المباشر" value={selectedDeed.assigned_to || '-'} icon={<UserIcon size={14}/>} />
+                                <Detail label="نسخة للعلم" value={selectedDeed.workflow_cc || '-'} icon={<MessageSquare size={14}/>} />
                             </div>
                         </div>
 
@@ -814,7 +845,7 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
                                         <div className="w-2 h-2 rounded-full bg-green-600 mt-2" />
                                         <div>
                                             <p className="text-xs font-black text-[#1B2B48]">{selectedDeed.status === 'مقبول' ? 'اعتماد نهائي' : 'رفض نهائي'}</p>
-                                            <p className="text-[11px] text-gray-500 font-bold">{selectedDeed.assigned_to || deedWorkflowRoute.assigneeName}</p>
+                                            <p className="text-[11px] text-gray-500 font-bold">{selectedDeed.assigned_to || '-'}</p>
                                             <p className="text-[10px] text-gray-400 font-bold" dir="ltr">{selectedDeed.updated_at ? new Date(selectedDeed.updated_at).toLocaleString('ar-SA') : '-'}</p>
                                         </div>
                                     </div>

@@ -10,7 +10,7 @@ import { supabase } from '../supabaseClient';
 import { TechnicalRequest, ProjectSummary, User } from '../types';
 import { notificationService } from '../services/notificationService';
 import { 
-  WORKFLOW_REQUEST_TYPE_OPTIONS,
+  TECHNICAL_SERVICE_OPTIONS,
   WORKFLOW_ROUTES,
   normalizeWorkflowType,
   canApproveWorkflowRequest
@@ -90,7 +90,6 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
   const [techForm, setTechForm] = useState({
     id: 0, 
     project_id: '', 
-    request_type: 'TECHNICAL_SECTION',
     service_type: '', 
     reviewing_entity: '', 
     requesting_entity: '', 
@@ -115,7 +114,6 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
     setTechForm({ 
       id: 0, 
       project_id: proj ? proj?.id?.toString() : '', 
-      request_type: 'TECHNICAL_SECTION',
       service_type: '', 
       reviewing_entity: '', 
       requesting_entity: '', 
@@ -197,7 +195,7 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
   };
 
   const handleSubmit = async () => {
-    if (!techForm.project_id || !techForm.request_type) return alert("يرجى تعبئة الحقول الأساسية");
+    if (!techForm.project_id || !techForm.service_type) return alert("يرجى تعبئة الحقول الأساسية");
     setIsUploading(true); 
 
     let finalAttachmentUrl = techForm.attachment_url;
@@ -218,14 +216,13 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
     }
 
     const selectedProj = (projects || []).find(p => p?.id?.toString() === techForm.project_id);
-    const workflowType = normalizeWorkflowType(techForm.request_type);
+    const workflowType = 'TECHNICAL_SECTION';
     const workflowRoute = WORKFLOW_ROUTES[workflowType];
-    const selectedRequestTypeLabel = WORKFLOW_REQUEST_TYPE_OPTIONS.find((option) => option.value === workflowType)?.label || techForm.request_type;
     const payload = {
       project_id: parseInt(techForm.project_id),
       scope: scopeFilter || 'EXTERNAL',
       request_type: workflowType,
-      service_type: selectedRequestTypeLabel,
+      service_type: techForm.service_type,
       reviewing_entity: techForm.reviewing_entity,
       requesting_entity: techForm.requesting_entity || currentUser?.name, 
       details: techForm.details,
@@ -258,7 +255,7 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
 
         notificationService.send(
           workflowRoute.notifyRoles,
-          `طلب جديد: ${selectedRequestTypeLabel} | المسؤول: ${workflowRoute.assigneeName} | نسخة للعلم: ${workflowRoute.ccLabel}`,
+          `طلب فني جديد: ${techForm.service_type} | المسؤول: ${workflowRoute.assigneeName} | نسخة للعلم: ${workflowRoute.ccLabel}`,
           '/technical',
           currentUser?.name || 'الإدارة'
         ).catch(() => {});
@@ -267,7 +264,7 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
         if (error) throw error;
         notificationService.send(
           workflowRoute.notifyRoles,
-          `تحديث طلب: ${selectedRequestTypeLabel} | المسؤول: ${workflowRoute.assigneeName}`,
+          `تحديث طلب فني: ${techForm.service_type} | المسؤول: ${workflowRoute.assigneeName}`,
           '/technical',
           currentUser?.name || 'الإدارة'
         ).catch(() => {});
@@ -513,9 +510,9 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="text-xs text-gray-400 font-bold block mb-1">نوع الطلب</label>
-              <select className="w-full p-4 bg-gray-50 border rounded-2xl font-bold outline-none" value={techForm.request_type} onChange={e=>setTechForm({...techForm, request_type:e.target.value})}>
+              <select className="w-full p-4 bg-gray-50 border rounded-2xl font-bold outline-none" value={techForm.service_type} onChange={e=>setTechForm({...techForm, service_type:e.target.value})}>
                 <option value="">اختر...</option>
-                {WORKFLOW_REQUEST_TYPE_OPTIONS.map((option)=><option key={option.value} value={option.value}>{option.label}</option>)}
+                {TECHNICAL_SERVICE_OPTIONS.map((option)=><option key={option} value={option}>{option}</option>)}
               </select>
             </div>
             <div>
