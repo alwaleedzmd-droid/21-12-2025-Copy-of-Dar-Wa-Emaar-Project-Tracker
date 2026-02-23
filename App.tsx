@@ -22,6 +22,7 @@ import TechnicalModule from './components/TechnicalModule';
 import ProjectsModule from './components/ProjectsModule';
 import DeedsDashboard from './components/DeedsDashboard';
 import ProjectDetailView from './components/ProjectDetailView';
+import ProjectRequestsView from './components/ProjectRequestsView';
 import UserManagement from './components/UserManagement'; 
 import AIAssistant from './components/AIAssistant';
 import StatisticsDashboard from './components/StatisticsDashboard';
@@ -329,7 +330,25 @@ const ProjectDetailWrapper = ({ projects = [], currentUser }: any) => {
 
    return (
      <div className="space-y-8 animate-in fade-in">
-        <ProjectDetailView project={project} isAdmin={isAdmin} onBack={() => navigate('/projects')} onRefresh={refreshData} />
+        <ProjectDetailView 
+          project={project} 
+          isAdmin={isAdmin} 
+          onBack={() => navigate('/projects')} 
+          onRefresh={refreshData}
+          technicalRequests={technicalRequests}
+          clearanceRequests={clearanceRequests}
+        />
+        
+        {/* ✅ عرض الطلبات التقنية والإفراغات المرتبطة بالمشروع */}
+        <div className="bg-white p-8 rounded-[40px] shadow-sm border border-gray-100">
+          <ProjectRequestsView 
+            projectId={project.id}
+            projectName={project.name || project.title || project.client || ''}
+            technicalRequests={technicalRequests}
+            clearanceRequests={clearanceRequests}
+          />
+        </div>
+        
         <div className="bg-white p-8 rounded-[40px] shadow-sm border border-gray-100">
             <div className="flex items-center justify-between mb-6">
                 <div>

@@ -14,6 +14,7 @@ import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
 // Fix: Removed ActivityLog import as it is not exported from DataContext
 import { useData } from '../contexts/DataContext';
 import { notificationService } from '../services/notificationService';
+import { updateProjectProgress } from '../services/projectProgressService';
 import {
     WORKFLOW_ROUTES,
     DEEDS_WORKFLOW_REQUEST_TYPE_OPTIONS,
@@ -329,6 +330,54 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
                 user_name: currentUserName || 'النظام',
                 text: `قرار نهائي: ${status}${reason ? ` | السبب: ${reason}` : ''}`
             }]);
+            
+            // ✅ إنشاء ProjectWork عند الموافقة على طلب الإفراغ/نقل المليكة
+            if (status === 'مقبول' && selectedDeed?.project_name) {
+              try {
+                // البحث عن ID المشروع بناءً على الاسم
+                const { data: projectData } = await supabase
+                  .from('projects')
+                  .select('id')
+                  .or(`name.eq.${selectedDeed.project_name},title.eq.${selectedDeed.project_name}`)
+                  .limit(1);
+                
+                if (projectData && projectData.length > 0) {
+                  const projectId = projectData[0].id;
+                  const requestTypeLabel = selectedDeed.request_type === 'METER_TRANSFER' ? 'نقل ملكية عداد' : 'إفراغ/تصفية';
+                  
+                  await supabase.from('project_works').insert({
+                    projectId: projectId,
+                    project_name: selectedDeed.project_name,
+                    task_name: `${requestTypeLabel} - عميل: ${selectedDeed.client_name}`,
+                    status: 'in_progress',
+                    authority: 'جهة حكومية',
+                    department: selectedDeed.request_type === 'METER_TRANSFER' ? 'نقل الملكية' : 'الإفراغ',
+                    notes: `طلب ${requestTypeLabel} مقبول - رقم الهوية: ${selectedDeed.id_number}${reason ? ` | ملاحظات: ${reason}` : ''} | رقم الطلب: #${selectedDeed.id}`,
+                    created_at: new Date().toISOString()
+                  });
+                }
+              } catch (workErr: any) {
+                console.warn('⚠️ تنبيه: فشل إنشاء ProjectWork:', workErr.message);
+                // عدم إيقاف العملية إذا فشل إنشاء work
+              }
+            }
+            
+            // 🔄 تحديث نسب الإنجاز المرتبطة - ابحث عن المشروع وحدّث progress
+            if (selectedDeed?.project_name) {
+              try {
+                const { data: projectData } = await supabase
+                  .from('projects')
+                  .select('id')
+                  .or(`name.eq.${selectedDeed.project_name},title.eq.${selectedDeed.project_name}`)
+                  .limit(1);
+                
+                if (projectData && projectData.length > 0) {
+                  await updateProjectProgress(projectData[0].id);
+                }
+              } catch (progErr) {
+                console.warn('⚠️ تحذير: فشل تحديث progress:', progErr);
+              }
+            }
             
             await sendAppNotification('تحديث حالة إفراغ', `تم تغيير حالة طلب ${selectedDeed.client_name} إلى (${status})${reason ? ` - السبب: ${reason}` : ''}`);
             

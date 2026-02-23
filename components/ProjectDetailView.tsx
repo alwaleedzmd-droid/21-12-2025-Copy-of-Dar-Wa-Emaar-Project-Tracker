@@ -3,22 +3,27 @@ import {
   Building2, Zap, FileText, MapPin, 
   ArrowLeft, Edit, User as UserIcon, Phone, Briefcase, Droplet, CheckCircle2, Ruler 
 } from 'lucide-react';
-import { ProjectSummary } from '../types';
+import { ProjectSummary, TechnicalRequest, ClearanceRequest } from '../types';
 import { supabase } from '../supabaseClient';
 import Modal from './Modal';
+import ProjectRequestsView from './ProjectRequestsView';
 
 interface ProjectDetailViewProps {
   project: ProjectSummary;
   isAdmin: boolean;
   onBack: () => void;
   onRefresh: () => void;
+  technicalRequests?: TechnicalRequest[];
+  clearanceRequests?: ClearanceRequest[];
 }
 
 const ProjectDetailView: React.FC<ProjectDetailViewProps> = ({
   project,
   isAdmin,
   onBack,
-  onRefresh
+  onRefresh,
+  technicalRequests = [],
+  clearanceRequests = []
 }) => {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editForm, setEditForm] = useState<Record<string, any>>({});

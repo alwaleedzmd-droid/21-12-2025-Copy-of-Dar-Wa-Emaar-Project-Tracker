@@ -9,6 +9,7 @@ import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
 import { supabase } from '../supabaseClient';
 import { TechnicalRequest, ProjectSummary, User } from '../types';
 import { notificationService } from '../services/notificationService';
+import { updateProjectProgress } from '../services/projectProgressService';
 import { 
   TECHNICAL_SERVICE_OPTIONS,
   WORKFLOW_ROUTES,
@@ -371,12 +372,37 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
       const workflowType = normalizeWorkflowType(activeRequest.request_type || activeRequest.service_type);
       const workflowRoute = WORKFLOW_ROUTES[workflowType];
       
+      // ✅ إنشاء ProjectWork عند الموافقة على الطلب
+      if (newStatus === 'approved' && activeRequest?.project_id) {
+        try {
+          const projectName = activeRequest.project_name || activeRequest.project_title || 'مشروع';
+          await supabase.from('project_works').insert({
+            projectId: activeRequest.project_id,
+            project_name: projectName,
+            task_name: `${activeRequest.service_type} - طلب تقني مقبول`,
+            status: 'in_progress',
+            authority: activeRequest.reviewing_entity || 'غير محدد',
+            department: activeRequest.scope || 'قسم فني',
+            notes: `طلب تقني مقبول - ${activeRequest.service_type}${reason ? ` | ملاحظات: ${reason}` : ''} | رقم الطلب: #${activeRequest.id}`,
+            created_at: new Date().toISOString()
+          });
+        } catch (workErr: any) {
+          console.warn('⚠️ تنبيه: فشل إنشاء ProjectWork:', workErr.message);
+          // عدم إيقاف العملية إذا فشل إنشاء work
+        }
+      }
+      
       notificationService.send(
         workflowRoute.notifyRoles,
         `تم ${newStatus === 'approved' ? 'قبول' : 'رفض'} الطلب: ${activeRequest.service_type}${reason ? ` | السبب: ${reason}` : ''}`,
         '/technical',
         currentUser?.name || 'النظام'
       );
+      
+      // 🔄 تحديث نسبة إنجاز المشروع تلقائياً
+      if (activeRequest?.project_id) {
+        await updateProjectProgress(activeRequest.project_id);
+      }
 
       setActiveRequest({ ...activeRequest, ...updateData });
       await onRefresh();
