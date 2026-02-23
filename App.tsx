@@ -95,7 +95,7 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
 const ProjectDetailWrapper = ({ projects = [], currentUser }: any) => {
    const { id } = useParams();
    const navigate = useNavigate();
-   const { refreshData, logActivity, projectWorks: allProjectWorks } = useData();
+   const { refreshData, logActivity, projectWorks: allProjectWorks, technicalRequests, clearanceRequests } = useData();
    
    const [isAddWorkOpen, setIsAddWorkOpen] = useState(false);
    const [isWorkDetailOpen, setIsWorkDetailOpen] = useState(false);
