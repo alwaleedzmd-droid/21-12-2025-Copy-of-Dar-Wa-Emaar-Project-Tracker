@@ -218,7 +218,29 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
     const selectedProj = (projects || []).find(p => p?.id?.toString() === techForm.project_id);
     const workflowType = 'TECHNICAL_SECTION';
     const workflowRoute = WORKFLOW_ROUTES[workflowType];
-    const payload = {
+
+    const trimUnsupportedWorkflowColumns = (inputPayload: Record<string, any>, message?: string) => {
+      const nextPayload = { ...inputPayload };
+      const lowered = (message || '').toLowerCase();
+
+      const missingColumnMatch = message?.match(/'([^']+)'\s+column/i);
+      const missingColumn = missingColumnMatch?.[1];
+      if (missingColumn && missingColumn in nextPayload) {
+        delete nextPayload[missingColumn];
+      }
+
+      if (lowered.includes('request_type')) delete nextPayload.request_type;
+      if (lowered.includes('workflow_cc')) delete nextPayload.workflow_cc;
+      return nextPayload;
+    };
+
+    const hasSameKeys = (a: Record<string, any>, b: Record<string, any>) => {
+      const aKeys = Object.keys(a).sort().join('|');
+      const bKeys = Object.keys(b).sort().join('|');
+      return aKeys === bKeys;
+    };
+
+    const payload: Record<string, any> = {
       project_id: parseInt(techForm.project_id),
       scope: scopeFilter || 'EXTERNAL',
       request_type: workflowType,
@@ -237,12 +259,33 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
 
     try {
       if (techForm.id === 0) {
-        const { data: insertedRequest, error } = await supabase
-          .from('technical_requests')
-          .insert([payload])
-          .select('id')
-          .single();
-        if (error) throw error;
+        let insertPayload: Record<string, any> = { ...payload };
+        let insertedRequest: { id: number } | null = null;
+        let insertError: any = null;
+
+        for (let attempt = 0; attempt < 3; attempt++) {
+          const { data, error } = await supabase
+            .from('technical_requests')
+            .insert([insertPayload])
+            .select('id')
+            .single();
+
+          if (!error) {
+            insertedRequest = data;
+            insertError = null;
+            break;
+          }
+
+          insertError = error;
+          const nextPayload = trimUnsupportedWorkflowColumns(
+            insertPayload,
+            `${error?.message || ''} ${error?.details || ''} ${error?.hint || ''}`
+          );
+          if (hasSameKeys(insertPayload, nextPayload)) break;
+          insertPayload = nextPayload;
+        }
+
+        if (insertError) throw insertError;
 
         if (insertedRequest?.id) {
           await supabase.from('request_comments').insert([{
@@ -260,8 +303,26 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
           currentUser?.name || 'الإدارة'
         ).catch(() => {});
       } else {
-        const { error } = await supabase.from('technical_requests').update(payload).eq('id', Number(techForm.id));
-        if (error) throw error;
+        let updatePayload: Record<string, any> = { ...payload };
+        let updateError: any = null;
+
+        for (let attempt = 0; attempt < 3; attempt++) {
+          const { error } = await supabase.from('technical_requests').update(updatePayload).eq('id', Number(techForm.id));
+          if (!error) {
+            updateError = null;
+            break;
+          }
+
+          updateError = error;
+          const nextPayload = trimUnsupportedWorkflowColumns(
+            updatePayload,
+            `${error?.message || ''} ${error?.details || ''} ${error?.hint || ''}`
+          );
+          if (hasSameKeys(updatePayload, nextPayload)) break;
+          updatePayload = nextPayload;
+        }
+
+        if (updateError) throw updateError;
         notificationService.send(
           workflowRoute.notifyRoles,
           `تحديث طلب فني: ${techForm.service_type} | المسؤول: ${workflowRoute.assigneeName}`,

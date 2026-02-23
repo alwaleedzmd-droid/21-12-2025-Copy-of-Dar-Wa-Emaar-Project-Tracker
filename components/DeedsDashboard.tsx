@@ -302,8 +302,27 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
             return;
         }
         try {
-            const { error } = await supabase.from('deeds_requests').update({ status, updated_at: new Date().toISOString() }).eq('id', selectedDeed.id);
-            if (error) throw error;
+            let statusPayload: any = { status, updated_at: new Date().toISOString() };
+            const stripUnsupportedStatusColumns = (inputPayload: Record<string, any>, message?: string) => {
+                const lowered = (message || '').toLowerCase();
+                const nextPayload = { ...inputPayload };
+                if (lowered.includes('updated_at')) delete nextPayload.updated_at;
+                return nextPayload;
+            };
+
+            let statusError: any = null;
+            for (let attempt = 0; attempt < 2; attempt++) {
+                const { error } = await supabase.from('deeds_requests').update(statusPayload).eq('id', selectedDeed.id);
+                if (!error) {
+                    statusError = null;
+                    break;
+                }
+                statusError = error;
+                const nextPayload = stripUnsupportedStatusColumns(statusPayload, error.message);
+                if (Object.keys(nextPayload).length === Object.keys(statusPayload).length) break;
+                statusPayload = nextPayload;
+            }
+            if (statusError) throw statusError;
 
             await supabase.from('deed_comments').insert([{
                 request_id: selectedDeed.id,
@@ -327,7 +346,7 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
         setIsSaving(true);
         try {
             const workflowRoute = WORKFLOW_ROUTES[newDeedForm.request_type as 'DEED_CLEARANCE' | 'METER_TRANSFER'];
-            const payload = {
+            const payload: Record<string, any> = {
                 request_type: newDeedForm.request_type,
                 region: newDeedForm.region,
                 city: newDeedForm.city,
@@ -353,8 +372,43 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
                 workflow_cc: workflowRoute.ccLabel
             };
 
-            const { data: insertedDeed, error } = await supabase.from('deeds_requests').insert([payload]).select('id').single();
-            if (error) throw error;
+            const trimUnsupportedWorkflowColumns = (inputPayload: Record<string, any>, message?: string) => {
+                const lowered = (message || '').toLowerCase();
+                const nextPayload = { ...inputPayload };
+
+                const missingColumnMatch = message?.match(/'([^']+)'\s+column/i);
+                const missingColumn = missingColumnMatch?.[1];
+                if (missingColumn && missingColumn in nextPayload) {
+                    delete nextPayload[missingColumn];
+                }
+
+                if (lowered.includes('request_type')) delete nextPayload.request_type;
+                if (lowered.includes('assigned_to')) delete nextPayload.assigned_to;
+                if (lowered.includes('workflow_cc')) delete nextPayload.workflow_cc;
+                return nextPayload;
+            };
+
+            let insertPayload: Record<string, any> = { ...payload };
+            let insertedDeed: { id: number } | null = null;
+            let insertError: any = null;
+
+            for (let attempt = 0; attempt < 3; attempt++) {
+                const { data, error } = await supabase.from('deeds_requests').insert([insertPayload]).select('id').single();
+                if (!error) {
+                    insertedDeed = data;
+                    insertError = null;
+                    break;
+                }
+                insertError = error;
+                const nextPayload = trimUnsupportedWorkflowColumns(
+                    insertPayload,
+                    `${error?.message || ''} ${error?.details || ''} ${error?.hint || ''}`
+                );
+                const sameKeys = Object.keys(insertPayload).sort().join('|') === Object.keys(nextPayload).sort().join('|');
+                if (sameKeys) break;
+                insertPayload = nextPayload;
+            }
+            if (insertError) throw insertError;
 
             if (insertedDeed?.id) {
                 await supabase.from('deed_comments').insert([{
