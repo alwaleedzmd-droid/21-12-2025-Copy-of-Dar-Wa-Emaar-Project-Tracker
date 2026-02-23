@@ -9,6 +9,12 @@ import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
 import { supabase } from '../supabaseClient';
 import { TechnicalRequest, ProjectSummary, User } from '../types';
 import { notificationService } from '../services/notificationService';
+import { 
+  WORKFLOW_REQUEST_TYPE_OPTIONS,
+  WORKFLOW_ROUTES,
+  normalizeWorkflowType,
+  canApproveWorkflowRequest
+} from '../services/requestWorkflowService';
 import Modal from './Modal';
 import ManageRequestModal from './ManageRequestModal';
 import * as XLSX from 'xlsx';
@@ -22,16 +28,7 @@ const RAW_REVIEW_ENTITIES = [
   "بلدية صفوى", "بلدية شرق الدمام", "أمانة العاصمة المقدسة", "الهيئة الملكية لتطوير الرياض", "أخرى"
 ];
 
-const RAW_WORK_STATEMENTS = [
-  "فرز صكوك", "شبكات الري", "نظام البناء", "كهرباء ",
-  "الترخيص البيئي", "بلاغ شرطة", "ربط شبكة المياه", "نقل ملكية عدادات الكهرباء",
-  "سرقة سيارة/معدات", "شهادة إتمام بناء (الأشغال)", "إصدار رخص بناء", "طلب فتح خدمة الكهرباء",
-  "سرقة كيابل", "سرقة مفاتيح/فصالات", "تعاقدات ", "اعتماد جامع/مسجد", "طلب استثناء",
-  "تعديل بيانات المالك", "رفع الحجز عن الصكوك", "تركيب عدادات", "فصل رخص البناء", "أخرى"
-];
-
 const REVIEW_ENTITIES = Array.from(new Set(RAW_REVIEW_ENTITIES));
-const WORK_STATEMENTS = Array.from(new Set(RAW_WORK_STATEMENTS));
 
 const STATUS_OPTIONS = [
   { value: 'new', label: 'جديد' },
@@ -93,6 +90,7 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
   const [techForm, setTechForm] = useState({
     id: 0, 
     project_id: '', 
+    request_type: 'TECHNICAL_SECTION',
     service_type: '', 
     reviewing_entity: '', 
     requesting_entity: '', 
@@ -117,6 +115,7 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
     setTechForm({ 
       id: 0, 
       project_id: proj ? proj?.id?.toString() : '', 
+      request_type: 'TECHNICAL_SECTION',
       service_type: '', 
       reviewing_entity: '', 
       requesting_entity: '', 
@@ -198,7 +197,7 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
   };
 
   const handleSubmit = async () => {
-    if (!techForm.project_id || !techForm.service_type) return alert("يرجى تعبئة الحقول الأساسية");
+    if (!techForm.project_id || !techForm.request_type) return alert("يرجى تعبئة الحقول الأساسية");
     setIsUploading(true); 
 
     let finalAttachmentUrl = techForm.attachment_url;
@@ -219,38 +218,56 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
     }
 
     const selectedProj = (projects || []).find(p => p?.id?.toString() === techForm.project_id);
+    const workflowType = normalizeWorkflowType(techForm.request_type);
+    const workflowRoute = WORKFLOW_ROUTES[workflowType];
+    const selectedRequestTypeLabel = WORKFLOW_REQUEST_TYPE_OPTIONS.find((option) => option.value === workflowType)?.label || techForm.request_type;
     const payload = {
       project_id: parseInt(techForm.project_id),
       scope: scopeFilter || 'EXTERNAL',
-      service_type: techForm.service_type, 
+      request_type: workflowType,
+      service_type: selectedRequestTypeLabel,
       reviewing_entity: techForm.reviewing_entity,
       requesting_entity: techForm.requesting_entity || currentUser?.name, 
       details: techForm.details,
-      status: techForm.status, 
+      status: 'pending', 
       progress: techForm.progress,
       project_name: selectedProj ? (selectedProj?.name || selectedProj?.title) : '',
       attachment_url: finalAttachmentUrl,
-      submitted_by: currentUser?.name
+      submitted_by: currentUser?.name,
+      assigned_to: workflowRoute.assigneeName,
+      workflow_cc: workflowRoute.ccLabel
     };
 
     try {
       if (techForm.id === 0) {
-        const { error } = await supabase.from('technical_requests').insert([payload]);
+        const { data: insertedRequest, error } = await supabase
+          .from('technical_requests')
+          .insert([payload])
+          .select('id')
+          .single();
         if (error) throw error;
-        // إشعار لجميع الأدوار المعنية
+
+        if (insertedRequest?.id) {
+          await supabase.from('request_comments').insert([{
+            request_id: insertedRequest.id,
+            request_type: 'technical',
+            user_name: currentUser?.name || 'النظام',
+            content: `تم تقديم الطلب وتعيينه إلى ${workflowRoute.assigneeName}`
+          }]);
+        }
+
         notificationService.send(
-          ['TECHNICAL', 'PR_MANAGER', 'ADMIN'],
-          `طلب فني جديد: ${techForm.service_type} لمشروع ${selectedProj?.name}`,
+          workflowRoute.notifyRoles,
+          `طلب جديد: ${selectedRequestTypeLabel} | المسؤول: ${workflowRoute.assigneeName} | نسخة للعلم: ${workflowRoute.ccLabel}`,
           '/technical',
           currentUser?.name || 'الإدارة'
         ).catch(() => {});
       } else {
         const { error } = await supabase.from('technical_requests').update(payload).eq('id', Number(techForm.id));
         if (error) throw error;
-        // إشعار تحديث لجميع المعنيين
         notificationService.send(
-          ['TECHNICAL', 'PR_MANAGER', 'ADMIN'],
-          `تحديث على طلب فني: ${techForm.service_type}`,
+          workflowRoute.notifyRoles,
+          `تحديث طلب: ${selectedRequestTypeLabel} | المسؤول: ${workflowRoute.assigneeName}`,
           '/technical',
           currentUser?.name || 'الإدارة'
         ).catch(() => {});
@@ -266,18 +283,39 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
     } finally { setIsUploading(false); }
   };
 
-  const updateStatus = async (newStatus: string) => {
+  const updateStatus = async (newStatus: string, reason?: string) => {
     if (!activeRequest?.id) return;
+    if (!canApproveWorkflowRequest(currentUser?.name, activeRequest.assigned_to)) {
+      alert('تحديث الحالة متاح فقط للمسؤول المباشر المعين على الطلب');
+      return;
+    }
+
+    if (!['approved', 'rejected'].includes(newStatus)) {
+      alert('المسموح فقط: مقبول أو مرفوض');
+      return;
+    }
+
     try {
-      const updateData: any = { status: newStatus };
-      if (newStatus === 'completed' || newStatus === 'منجز') updateData.progress = 100;
+      const updateData: any = {
+        status: newStatus,
+        progress: newStatus === 'approved' ? 100 : (activeRequest?.progress || 0)
+      };
       const { error } = await supabase.from('technical_requests').update(updateData).eq('id', Number(activeRequest?.id));
       if (error) throw error;
+
+      await supabase.from('request_comments').insert([{
+        request_id: activeRequest.id,
+        request_type: 'technical',
+        user_name: currentUser?.name || 'النظام',
+        content: `قرار نهائي: ${newStatus === 'approved' ? 'مقبول' : 'مرفوض'}${reason ? ` | السبب: ${reason}` : ''}`
+      }]);
+
+      const workflowType = normalizeWorkflowType(activeRequest.request_type || activeRequest.service_type);
+      const workflowRoute = WORKFLOW_ROUTES[workflowType];
       
-      // إشعار تغيير الحالة لجميع المعنيين
       notificationService.send(
-        ['TECHNICAL', 'PR_MANAGER', 'ADMIN'],
-        `تغيرت حالة العمل: ${activeRequest.service_type} إلى ${newStatus}`,
+        workflowRoute.notifyRoles,
+        `تم ${newStatus === 'approved' ? 'قبول' : 'رفض'} الطلب: ${activeRequest.service_type}${reason ? ` | السبب: ${reason}` : ''}`,
         '/technical',
         currentUser?.name || 'النظام'
       );
@@ -365,7 +403,7 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
                 استيراد إكسل
               </button>
               <button onClick={openAddModal} className="flex items-center gap-2 px-6 py-2.5 bg-[#1B2B48] text-white rounded-xl font-black text-sm hover:brightness-110 shadow-lg transition-all active:scale-95">
-                <Plus size={20} /> إضافة عمل يدوي
+                <Plus size={20} /> إضافة طلب
               </button>
             </>
           )}
@@ -454,7 +492,7 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
                     <td className="p-6"><div className="flex items-center gap-3"><Zap size={16} className="text-[#E95D22]"/><p className="font-bold text-gray-700 text-sm">{req?.service_type}</p></div></td>
                     <td className="p-6 text-sm text-gray-400 font-bold">{req?.reviewing_entity || '-'}</td>
                     <td className="p-6 w-48"><div className="flex items-center gap-2"><div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden"><div className={`h-full rounded-full transition-all duration-1000 ${req?.progress === 100 ? 'bg-green-500' : 'bg-[#E95D22]'}`} style={{width:`${req?.progress || 0}%`}}/></div><span className="text-[10px] font-black text-gray-400">{req?.progress || 0}%</span></div></td>
-                    <td className="p-6"><span className={`px-3 py-1 rounded-full text-[10px] font-black border ${req?.status === 'completed' || req?.status === 'منجز' ? 'bg-green-50 text-green-700 border-green-100' : 'bg-amber-50 text-amber-700 border-amber-100'}`}>{STATUS_OPTIONS.find(o => o.value === req?.status)?.label || req?.status}</span></td>
+                    <td className="p-6"><span className={`px-3 py-1 rounded-full text-[10px] font-black border ${req?.status === 'completed' || req?.status === 'منجز' || req?.status === 'approved' ? 'bg-green-50 text-green-700 border-green-100' : req?.status === 'rejected' || req?.status === 'مرفوض' ? 'bg-red-50 text-red-700 border-red-100' : 'bg-amber-50 text-amber-700 border-amber-100'}`}>{STATUS_OPTIONS.find(o => o.value === req?.status)?.label || req?.status}</span></td>
                     <td className="p-6 text-left"><ChevronLeft size={18} className="text-gray-300 opacity-0 group-hover:opacity-100" /></td>
                 </tr>
               ))}
@@ -463,7 +501,7 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
         </div>
       </div>
 
-      <Modal isOpen={isAddModalOpen} onClose={()=>setIsAddModalOpen(false)} title={techForm.id ? "تعديل العمل" : "إضافة عمل فني"}>
+      <Modal isOpen={isAddModalOpen} onClose={()=>setIsAddModalOpen(false)} title={techForm.id ? "تعديل الطلب" : "إضافة طلب"}>
         <div className="space-y-4 text-right">
           <div>
             <label className="text-xs text-gray-400 font-bold block mb-1">المشروع</label>
@@ -474,10 +512,10 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="text-xs text-gray-400 font-bold block mb-1">نوع العمل</label>
-              <select className="w-full p-4 bg-gray-50 border rounded-2xl font-bold outline-none" value={techForm.service_type} onChange={e=>setTechForm({...techForm, service_type:e.target.value})}>
+              <label className="text-xs text-gray-400 font-bold block mb-1">نوع الطلب</label>
+              <select className="w-full p-4 bg-gray-50 border rounded-2xl font-bold outline-none" value={techForm.request_type} onChange={e=>setTechForm({...techForm, request_type:e.target.value})}>
                 <option value="">اختر...</option>
-                {WORK_STATEMENTS.map(s=><option key={s} value={s}>{s}</option>)}
+                {WORKFLOW_REQUEST_TYPE_OPTIONS.map((option)=><option key={option.value} value={option.value}>{option.label}</option>)}
               </select>
             </div>
             <div>

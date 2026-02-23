@@ -2,8 +2,10 @@ import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
 import { User, Comment, TechnicalRequest, ClearanceRequest } from '../types';
 import Modal from './Modal';
-import { MessageSquare, Send, CheckCircle2, Activity, Edit3, XCircle, User as UserIcon, Phone, FileText, CreditCard, Landmark, MapPin, UserCheck, Loader2 } from 'lucide-react';
+import { MessageSquare, Send, User as UserIcon, Phone, FileText, CreditCard, Landmark, UserCheck, Loader2, GitBranch } from 'lucide-react';
 import { notificationService } from '../services/notificationService';
+import ApprovalPanel from './ApprovalPanel';
+import { canApproveWorkflowRequest } from '../services/requestWorkflowService';
 
 interface ManageRequestModalProps {
   isOpen: boolean;
@@ -11,7 +13,7 @@ interface ManageRequestModalProps {
   request: TechnicalRequest | ClearanceRequest | null;
   currentUser: User | null;
   usersList: any[];
-  onUpdateStatus: (newStatus: string) => Promise<void>;
+  onUpdateStatus: (newStatus: string, reason?: string) => Promise<void>;
   onUpdateDelegation: (userId: string) => void;
 }
 
@@ -106,12 +108,12 @@ const ManageRequestModal: React.FC<ManageRequestModalProps> = ({
     }
   };
 
-  const changeStatus = async (newStatus: string) => {
+  const changeStatusWithReason = async (newStatus: string, reason: string) => {
     if (!request?.id) return;
     const previousStatus = currentStatus;
     setCurrentStatus(newStatus);
     try {
-      await onUpdateStatus(newStatus);
+      await onUpdateStatus(newStatus, reason);
     } catch (err) {
       setCurrentStatus(previousStatus);
     }
@@ -148,8 +150,29 @@ const ManageRequestModal: React.FC<ManageRequestModalProps> = ({
 
   if (!request) return null;
 
-  const canAction = (roles: string[]) => currentUser?.role && roles.includes(currentUser.role);
+  const isDirectApprover = canApproveWorkflowRequest(currentUser?.name, (request as TechnicalRequest)?.assigned_to);
   const statusInfo = getStatusInfo(currentStatus);
+  const reviewers = Array.from(new Set((comments || []).map((comment) => comment.user_name).filter(Boolean)));
+  const timelineItems = [
+    {
+      id: 'submitted',
+      title: 'تم تقديم الطلب',
+      actor: (request as any)?.submitted_by || 'غير محدد',
+      date: (request as any)?.created_at
+    },
+    ...reviewers.map((reviewerName, index) => ({
+      id: `review-${index}`,
+      title: 'مراجعة الطلب',
+      actor: reviewerName,
+      date: (comments || []).find((comment) => comment.user_name === reviewerName)?.created_at
+    })),
+    ((currentStatus === 'approved' || currentStatus === 'rejected' || currentStatus === 'مرفوض') ? {
+      id: 'final-decision',
+      title: currentStatus === 'approved' ? 'اعتماد نهائي' : 'رفض نهائي',
+      actor: (request as TechnicalRequest)?.assigned_to || 'غير محدد',
+      date: (request as any)?.updated_at || (request as any)?.created_at
+    } : null)
+  ].filter(Boolean) as Array<{ id: string; title: string; actor: string; date?: string }>;
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="تفاصيل ومتابعة الطلب">
@@ -229,6 +252,16 @@ const ManageRequestModal: React.FC<ManageRequestModalProps> = ({
                    <p className="font-bold text-[#1B2B48] text-sm">{(request as TechnicalRequest)?.reviewing_entity || '-'}</p>
                  </div>
                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-[10px] text-gray-400 font-bold block">المسؤول المباشر</label>
+                    <p className="font-bold text-[#1B2B48] text-sm">{(request as TechnicalRequest)?.assigned_to || '-'}</p>
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-gray-400 font-bold block">نسخة للعلم (CC)</label>
+                    <p className="font-bold text-[#1B2B48] text-sm">{(request as any)?.workflow_cc || '-'}</p>
+                  </div>
+                </div>
                <div>
                  <label className="text-[10px] text-gray-400 font-bold block">التفاصيل</label>
                  <p className="text-xs text-gray-600 font-bold leading-relaxed">{(request as TechnicalRequest)?.details || 'لا توجد تفاصيل إضافية'}</p>
@@ -237,23 +270,32 @@ const ManageRequestModal: React.FC<ManageRequestModalProps> = ({
            </div>
         )}
 
-        {/* صلاحية تغيير الحالة: فقط العلاقات العامة ومدير النظام */}
-        {canAction(['ADMIN', 'PR_MANAGER']) && (
-          <div className="grid grid-cols-4 gap-2">
-            <button onClick={() => changeStatus('completed')} className={`p-3 rounded-xl font-black flex flex-col items-center justify-center gap-1 transition-all active:scale-95 ${currentStatus === 'completed' || currentStatus === 'منجز' ? 'bg-green-600 text-white shadow-lg ring-2 ring-green-200' : 'bg-green-50 text-green-700 hover:bg-green-100'}`}>
-              <CheckCircle2 size={18}/> <span className="text-[10px]">منجز</span>
-            </button>
-            <button onClick={() => changeStatus('pending')} className={`p-3 rounded-xl font-black flex flex-col items-center justify-center gap-1 transition-all active:scale-95 ${currentStatus === 'pending' || currentStatus === 'متابعة' ? 'bg-blue-600 text-white shadow-lg ring-2 ring-blue-200' : 'bg-blue-50 text-blue-700 hover:bg-blue-100'}`}>
-              <Activity size={18}/> <span className="text-[10px]">متابعة</span>
-            </button>
-            <button onClick={() => changeStatus('pending_modification')} className={`p-3 rounded-xl font-black flex flex-col items-center justify-center gap-1 transition-all active:scale-95 ${currentStatus === 'pending_modification' || currentStatus === 'مطلوب تعديل' ? 'bg-orange-500 text-white shadow-lg ring-2 ring-orange-200' : 'bg-orange-50 text-orange-700 hover:bg-orange-100'}`}>
-              <Edit3 size={18}/> <span className="text-[10px]">تعديل</span>
-            </button>
-            <button onClick={() => changeStatus('rejected')} className={`p-3 rounded-xl font-black flex flex-col items-center justify-center gap-1 transition-all active:scale-95 ${currentStatus === 'rejected' || currentStatus === 'مرفوض' ? 'bg-red-600 text-white shadow-lg ring-2 ring-red-200' : 'bg-red-50 text-red-700 hover:bg-red-100'}`}>
-              <XCircle size={18}/> <span className="text-[10px]">مرفوض</span>
-            </button>
+          {isDirectApprover && (
+            <ApprovalPanel
+              title="لوحة اعتماد المسؤول المباشر"
+              onApprove={(reason) => changeStatusWithReason('approved', reason)}
+              onReject={(reason) => changeStatusWithReason('rejected', reason)}
+            />
+          )}
+
+          <div className="bg-white p-5 rounded-[25px] border border-gray-100 shadow-sm space-y-3">
+            <h3 className="font-black text-[#1B2B48] text-sm flex items-center gap-2">
+              <GitBranch size={16} className="text-[#E95D22]" />
+              الشريط الزمني للطلب
+            </h3>
+            <div className="space-y-3">
+              {timelineItems.map((item) => (
+                <div key={item.id} className="flex items-start gap-3">
+                  <div className="w-2 h-2 rounded-full bg-[#E95D22] mt-2" />
+                  <div className="flex-1">
+                    <p className="text-xs font-black text-[#1B2B48]">{item.title}</p>
+                    <p className="text-[11px] text-gray-500 font-bold">{item.actor}</p>
+                    <p className="text-[10px] text-gray-400 font-bold" dir="ltr">{item.date ? new Date(item.date).toLocaleString('ar-SA') : '-'}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
-        )}
 
         <div className="border-t border-gray-100 pt-6">
             <h3 className="font-black text-[#1B2B48] mb-4 flex items-center gap-2">

@@ -7,20 +7,22 @@ import {
   Plus, Search, CheckCircle2, Clock, 
   ChevronDown, User as UserIcon, 
   MessageSquare, Send, Loader2, XCircle, Activity,
-  Sparkles, FileSpreadsheet, Calendar, CreditCard,
+    Sparkles, FileSpreadsheet, Calendar, CreditCard, GitBranch,
   Building2, Phone, MapPin, FileText, Landmark, Sheet, Download
 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
 // Fix: Removed ActivityLog import as it is not exported from DataContext
 import { useData } from '../contexts/DataContext';
 import { notificationService } from '../services/notificationService';
+import { WORKFLOW_ROUTES } from '../services/requestWorkflowService';
 import Modal from './Modal';
+import ApprovalPanel from './ApprovalPanel';
 import { parseClearanceExcel } from '../utils/excelHandler';
 
 const STATUS_OPTIONS = [
   { value: 'جديد', label: 'جديد', color: 'bg-indigo-50 text-indigo-700 border-indigo-100' },
   { value: 'قيد العمل', label: 'قيد العمل', color: 'bg-blue-50 text-blue-700 border-blue-100' },
-  { value: 'مكتمل', label: 'مكتمل', color: 'bg-green-50 text-green-700 border-green-100' },
+    { value: 'مقبول', label: 'مقبول', color: 'bg-green-50 text-green-700 border-green-100' },
   { value: 'مرفوض', label: 'مرفوض', color: 'bg-red-50 text-red-700 border-red-100' }
 ];
 
@@ -96,8 +98,8 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
         status: 'جديد'
     });
 
-    // إزالة الرتب القديمة وحصر الصلاحية في الرتب المطلوبة
-    const isAuthorizedToManage = ['ADMIN', 'PR_MANAGER', 'CONVEYANCE'].includes(currentUserRole || '');
+    const deedWorkflowRoute = WORKFLOW_ROUTES.DEED_CLEARANCE;
+    const isAuthorizedToManage = currentUserName === deedWorkflowRoute.assigneeName;
 
     /**
      * إرسال إشعار ذكي حسب دور المرسل:
@@ -285,13 +287,23 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
         } finally { setIsCommentLoading(false); }
     };
 
-    const handleUpdateStatus = async (status: string) => {
+    const handleUpdateStatus = async (status: string, reason?: string) => {
         if (!selectedDeed || !isAuthorizedToManage) return;
+        if (!['مقبول', 'مرفوض'].includes(status)) {
+            alert('المسموح فقط: مقبول أو مرفوض');
+            return;
+        }
         try {
             const { error } = await supabase.from('deeds_requests').update({ status, updated_at: new Date().toISOString() }).eq('id', selectedDeed.id);
             if (error) throw error;
+
+            await supabase.from('deed_comments').insert([{
+                request_id: selectedDeed.id,
+                user_name: currentUserName || 'النظام',
+                text: `قرار نهائي: ${status}${reason ? ` | السبب: ${reason}` : ''}`
+            }]);
             
-            await sendAppNotification('تحديث حالة إفراغ', `تم تغيير حالة طلب ${selectedDeed.client_name} إلى (${status})`);
+            await sendAppNotification('تحديث حالة إفراغ', `تم تغيير حالة طلب ${selectedDeed.client_name} إلى (${status})${reason ? ` - السبب: ${reason}` : ''}`);
             
             setSelectedDeed({ ...selectedDeed, status, updated_at: new Date().toISOString() });
             fetchDeeds();
@@ -326,13 +338,24 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
                 new_deed_date: newDeedForm.new_deed_date || null,
                 sakani_support_number: newDeedForm.sakani_support_number,
                 status: 'جديد',
-                submitted_by: currentUserName
+                submitted_by: currentUserName,
+                assigned_to: deedWorkflowRoute.assigneeName,
+                request_type: 'DEED_CLEARANCE',
+                workflow_cc: deedWorkflowRoute.ccLabel
             };
 
-            const { error } = await supabase.from('deeds_requests').insert([payload]);
+            const { data: insertedDeed, error } = await supabase.from('deeds_requests').insert([payload]).select('id').single();
             if (error) throw error;
+
+            if (insertedDeed?.id) {
+                await supabase.from('deed_comments').insert([{
+                    request_id: insertedDeed.id,
+                    user_name: currentUserName || 'النظام',
+                    text: `تم تسجيل الطلب وتعيينه إلى ${deedWorkflowRoute.assigneeName}`
+                }]);
+            }
             
-            await sendAppNotification('طلب إفراغ جديد', `تم تسجيل طلب جديد للمستفيد ${payload.client_name}`);
+            await sendAppNotification('طلب إفراغ جديد', `تم تسجيل طلب جديد للمستفيد ${payload.client_name} | المسؤول: ${deedWorkflowRoute.assigneeName} | نسخة للعلم: ${deedWorkflowRoute.ccLabel}`);
 
             logActivity?.('تسجيل إفراغ جديد', payload.client_name, 'text-green-500');
 
@@ -363,7 +386,7 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
 
     const deedsSummary = useMemo(() => {
         const all = deeds || [];
-        const isCompleted = (status: string) => ['مكتمل', 'completed', 'منجز'].includes(status);
+        const isCompleted = (status: string) => ['مقبول', 'مكتمل', 'completed', 'منجز', 'approved'].includes(status);
         const isRejected = (status: string) => ['مرفوض', 'rejected'].includes(status);
 
         const completed = all.filter(d => isCompleted(d?.status || '')).length;
@@ -686,6 +709,13 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
             {selectedDeed && (
                 <Modal isOpen={isManageModalOpen} onClose={() => setIsManageModalOpen(false)} title="تدقيق ومتابعة طلب الإفراغ">
                     <div className="space-y-6 text-right overflow-y-auto max-h-[85vh] p-1 custom-scrollbar">
+                        <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
+                            <div className="grid grid-cols-2 gap-4">
+                                <Detail label="المسؤول المباشر" value={selectedDeed.assigned_to || deedWorkflowRoute.assigneeName} icon={<UserIcon size={14}/>} />
+                                <Detail label="نسخة للعلم" value={selectedDeed.workflow_cc || deedWorkflowRoute.ccLabel} icon={<MessageSquare size={14}/>} />
+                            </div>
+                        </div>
+
                         {/* بيانات المستفيد */}
                         <div className="bg-gradient-to-br from-blue-50 to-indigo-50 p-6 rounded-[30px] border border-blue-100 shadow-sm">
                             <h3 className="text-sm font-black text-[#1B2B48] mb-4 flex items-center gap-2">
@@ -745,14 +775,52 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
                         </div>
 
                         {isAuthorizedToManage && (
-                          <div className="grid grid-cols-4 gap-2">
-                               {STATUS_OPTIONS.map(opt => (
-                                 <button key={opt.value} onClick={() => handleUpdateStatus(opt.value)} className={`p-3 rounded-xl font-black text-[10px] border transition-all ${selectedDeed.status === opt.value ? opt.color + ' ring-2 ring-offset-1 ring-[#1B2B48]/10 shadow-sm' : 'bg-white border-gray-100 text-gray-400 hover:bg-gray-50'}`}>
-                                   {opt.label}
-                                 </button>
-                               ))}
-                          </div>
+                            <ApprovalPanel
+                                title="لوحة اعتماد المسؤول المباشر"
+                                onApprove={(reason) => handleUpdateStatus('مقبول', reason)}
+                                onReject={(reason) => handleUpdateStatus('مرفوض', reason)}
+                            />
                         )}
+
+                        <div className="bg-white p-5 rounded-[25px] border border-gray-100 shadow-sm space-y-3">
+                            <h3 className="font-black text-[#1B2B48] text-sm flex items-center gap-2">
+                                <GitBranch size={16} className="text-[#E95D22]" />
+                                الشريط الزمني للطلب
+                            </h3>
+                            <div className="space-y-3">
+                                <div className="flex items-start gap-3">
+                                    <div className="w-2 h-2 rounded-full bg-[#E95D22] mt-2" />
+                                    <div>
+                                        <p className="text-xs font-black text-[#1B2B48]">تم تقديم الطلب</p>
+                                        <p className="text-[11px] text-gray-500 font-bold">{selectedDeed.submitted_by || '-'}</p>
+                                        <p className="text-[10px] text-gray-400 font-bold" dir="ltr">{selectedDeed.created_at ? new Date(selectedDeed.created_at).toLocaleString('ar-SA') : '-'}</p>
+                                    </div>
+                                </div>
+                                {Array.from(new Set((comments || []).map((comment) => comment.user_name))).map((reviewerName: string, index: number) => {
+                                    const reviewerComment = (comments || []).find((comment) => comment.user_name === reviewerName);
+                                    return (
+                                        <div key={`${reviewerName}-${index}`} className="flex items-start gap-3">
+                                            <div className="w-2 h-2 rounded-full bg-[#1B2B48] mt-2" />
+                                            <div>
+                                                <p className="text-xs font-black text-[#1B2B48]">مراجعة الطلب</p>
+                                                <p className="text-[11px] text-gray-500 font-bold">{reviewerName}</p>
+                                                <p className="text-[10px] text-gray-400 font-bold" dir="ltr">{reviewerComment?.created_at ? new Date(reviewerComment.created_at).toLocaleString('ar-SA') : '-'}</p>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                                {(selectedDeed.status === 'مقبول' || selectedDeed.status === 'مرفوض') && (
+                                    <div className="flex items-start gap-3">
+                                        <div className="w-2 h-2 rounded-full bg-green-600 mt-2" />
+                                        <div>
+                                            <p className="text-xs font-black text-[#1B2B48]">{selectedDeed.status === 'مقبول' ? 'اعتماد نهائي' : 'رفض نهائي'}</p>
+                                            <p className="text-[11px] text-gray-500 font-bold">{selectedDeed.assigned_to || deedWorkflowRoute.assigneeName}</p>
+                                            <p className="text-[10px] text-gray-400 font-bold" dir="ltr">{selectedDeed.updated_at ? new Date(selectedDeed.updated_at).toLocaleString('ar-SA') : '-'}</p>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
 
                         <div className="border-t pt-6">
                             <h4 className="font-black text-[#1B2B48] flex items-center gap-2 mb-4">

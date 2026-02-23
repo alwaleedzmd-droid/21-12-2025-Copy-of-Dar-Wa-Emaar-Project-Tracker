@@ -99,6 +99,8 @@ export interface TechnicalRequest {
   requesting_entity?: string;
   assigned_to?: string;
   submitted_by?: string;
+  request_type?: string;
+  workflow_cc?: string;
   attachment_url?: string;
 }
 
@@ -124,6 +126,9 @@ export interface ClearanceRequest {
   notes?: string;
   status: string;
   submitted_by: string;
+  assigned_to?: string;
+  request_type?: string;
+  workflow_cc?: string;
 }
 
 export interface Comment {
