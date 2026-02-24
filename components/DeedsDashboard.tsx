@@ -24,6 +24,7 @@ import Modal from './Modal';
 import ApprovalPanel from './ApprovalPanel';
 import StageUpdateModal from './StageUpdateModal';
 import { parseClearanceExcel } from '../utils/excelHandler';
+import { initializeStagesForRequest } from '../services/workflowStageService';
 
 const STATUS_OPTIONS = [
   { value: 'جديد', label: 'جديد', color: 'bg-indigo-50 text-indigo-700 border-indigo-100' },
@@ -274,11 +275,15 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
     const fetchWorkflowProgress = async (requestType: string, requestId: number) => {
         try {
             // جلب معرف الـ workflow route
-            const { data: routeData, error: routeError } = await supabase
+            const { data: routeRows, error: routeError } = await supabase
                 .from('workflow_routes')
                 .select('id')
                 .eq('request_type', requestType)
-                .single();
+                .eq('is_active', true)
+                .order('updated_at', { ascending: false })
+                .limit(1);
+
+            const routeData = routeRows?.[0];
             
             if (routeError || !routeData) {
                 console.warn('No workflow route found for:', requestType);
@@ -297,13 +302,26 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
             setWorkflowStages(stagesData || []);
 
             // جلب حالة التقدم للطلب الحالي
-            const { data: progressData, error: progressError } = await supabase
+            let { data: progressData, error: progressError } = await supabase
                 .from('workflow_stage_progress')
                 .select('*')
                 .eq('request_id', requestId)
                 .eq('request_type', requestType);
             
             if (progressError) throw progressError;
+
+            if ((progressData || []).length === 0 && (stagesData || []).length > 0) {
+                await initializeStagesForRequest(requestId, requestType, routeData.id);
+                const refetched = await supabase
+                    .from('workflow_stage_progress')
+                    .select('*')
+                    .eq('request_id', requestId)
+                    .eq('request_type', requestType);
+
+                if (refetched.error) throw refetched.error;
+                progressData = refetched.data || [];
+            }
+
             setStageProgress(progressData || []);
         } catch (error) {
             console.error('Error fetching workflow progress:', error);

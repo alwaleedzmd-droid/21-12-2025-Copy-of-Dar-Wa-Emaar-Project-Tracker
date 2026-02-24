@@ -7,6 +7,7 @@ import { MessageSquare, Send, User as UserIcon, Phone, FileText, CreditCard, Lan
 import { notificationService } from '../services/notificationService';
 import ApprovalPanel from './ApprovalPanel';
 import { canApproveWorkflowRequest } from '../services/requestWorkflowService';
+import { initializeStagesForRequest } from '../services/workflowStageService';
 
 interface ManageRequestModalProps {
   isOpen: boolean;
@@ -79,11 +80,15 @@ const ManageRequestModal: React.FC<ManageRequestModalProps> = ({
   const fetchWorkflowProgress = async (requestTypeCode: string, requestId: number) => {
     try {
       // جلب workflow route
-      const { data: routeData, error: routeError } = await supabase
+      const { data: routeRows, error: routeError } = await supabase
         .from('workflow_routes')
         .select('id')
         .eq('request_type', requestTypeCode)
-        .single();
+        .eq('is_active', true)
+        .order('updated_at', { ascending: false })
+        .limit(1);
+
+      const routeData = routeRows?.[0];
       
       if (routeError || !routeData) {
         console.warn('No workflow route found for:', requestTypeCode);
@@ -102,13 +107,26 @@ const ManageRequestModal: React.FC<ManageRequestModalProps> = ({
       setWorkflowStages(stagesData || []);
 
       // جلب حالة التقدم
-      const { data: progressData, error: progressError } = await supabase
+      let { data: progressData, error: progressError } = await supabase
         .from('workflow_stage_progress')
         .select('*')
         .eq('request_id', requestId)
         .eq('request_type', requestTypeCode);
       
       if (progressError) throw progressError;
+
+      if ((progressData || []).length === 0 && (stagesData || []).length > 0) {
+        await initializeStagesForRequest(requestId, requestTypeCode, routeData.id);
+        const refetched = await supabase
+          .from('workflow_stage_progress')
+          .select('*')
+          .eq('request_id', requestId)
+          .eq('request_type', requestTypeCode);
+
+        if (refetched.error) throw refetched.error;
+        progressData = refetched.data || [];
+      }
+
       setStageProgress(progressData || []);
     } catch (error) {
       console.error('Error fetching workflow progress:', error);

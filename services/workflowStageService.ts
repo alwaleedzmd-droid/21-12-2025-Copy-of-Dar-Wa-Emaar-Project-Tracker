@@ -235,14 +235,26 @@ export async function initializeStagesForRequest(
 
     if (stagesError) throw stagesError;
 
+    const { data: existingProgress, error: existingError } = await supabase
+      .from('workflow_stage_progress')
+      .select('stage_id')
+      .eq('request_id', requestId)
+      .eq('request_type', requestType);
+
+    if (existingError) throw existingError;
+
+    const existingStageIds = new Set((existingProgress || []).map((item: any) => item.stage_id));
+
     // إنشاء سجل تقدم لكل مرحلة
-    const progressRecords = (stages || []).map(stage => ({
-      request_id: requestId,
-      request_type: requestType,
-      stage_id: stage.id,
-      status: 'pending',
-      created_at: new Date().toISOString()
-    }));
+    const progressRecords = (stages || [])
+      .filter((stage: any) => !existingStageIds.has(stage.id))
+      .map((stage: any) => ({
+        request_id: requestId,
+        request_type: requestType,
+        stage_id: stage.id,
+        status: 'pending',
+        created_at: new Date().toISOString()
+      }));
 
     if (progressRecords.length > 0) {
       const { error: insertError } = await supabase
@@ -252,7 +264,7 @@ export async function initializeStagesForRequest(
       if (insertError) throw insertError;
     }
 
-    return { success: true, stageCount: progressRecords.length };
+    return { success: true, stageCount: progressRecords.length, skippedExisting: existingStageIds.size };
   } catch (err) {
     console.error('Error initializing stages:', err);
     return { success: false, error: err };

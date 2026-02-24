@@ -4,7 +4,7 @@ import {
   Clock, AlertCircle, Loader2, Send 
 } from 'lucide-react';
 import { 
-  startStage, completeStage, resetStage, 
+  startStage, completeStage, resetStage, updateStageProgress,
   addStageComment, getStageComments 
 } from '../services/workflowStageService';
 import Modal from './Modal';
@@ -167,7 +167,7 @@ const StageUpdateModal: React.FC<StageUpdateModalProps> = ({
             </button>
             <button
               onClick={() => handleStatusChange('in_progress')}
-              disabled={isLoading || status === 'pending' || status === 'completed'}
+              disabled={isLoading || status === 'in_progress' || status === 'completed'}
               className={`flex-1 py-2 px-3 rounded-lg font-black text-xs transition-all text-center ${
                 status === 'in_progress'
                   ? 'bg-blue-100 text-blue-700 border border-blue-200'
@@ -234,7 +234,14 @@ const StageUpdateModal: React.FC<StageUpdateModalProps> = ({
                 if (!stageProgress?.id) return;
                 setIsLoading(true);
                 try {
-                  await completeStage(stageProgress.id, currentUserName, notes);
+                  const result = await updateStageProgress(stageProgress.id, {
+                    notes,
+                    completed_by: currentUserName
+                  });
+                  if (!result.success) {
+                    alert('فشل حفظ الملاحظات');
+                    return;
+                  }
                   onUpdate?.();
                 } finally {
                   setIsLoading(false);

@@ -60,12 +60,15 @@ export const WORKFLOW_ROUTES: Record<WorkflowRequestType, WorkflowRoute> = {
  */
 export const getWorkflowRoute = async (requestType: WorkflowRequestType): Promise<WorkflowRoute> => {
   try {
-    const { data, error } = await supabase
+    const { data: rows, error } = await supabase
       .from('workflow_routes')
       .select('*')
       .eq('request_type', requestType)
       .eq('is_active', true)
-      .single();
+      .order('updated_at', { ascending: false })
+      .limit(1);
+
+    const data = rows?.[0];
 
     if (error || !data) {
       console.warn(`لم يتم العثور على سير موافقة لـ ${requestType}، استخدام القيمة الافتراضية`);

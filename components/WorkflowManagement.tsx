@@ -145,11 +145,14 @@ const WorkflowManagement: React.FC<WorkflowManagementProps> = ({ currentUser }) 
       
       for (const workflow of defaultWorkflows) {
         // تحقق إذا كان النوع موجود مسبقاً
-        const { data: existing, error: checkError } = await supabase
+        const { data: existingRows, error: checkError } = await supabase
           .from('workflow_routes')
           .select('id')
           .eq('request_type', workflow.request_type)
-          .maybeSingle();
+          .order('updated_at', { ascending: false })
+          .limit(1);
+
+        const existing = existingRows?.[0];
 
         if (checkError) {
           console.error(`خطأ في التحقق من ${workflow.request_type}:`, checkError);
@@ -309,20 +312,43 @@ const WorkflowManagement: React.FC<WorkflowManagementProps> = ({ currentUser }) 
         alert('✅ تم التحديث بنجاح');
       } else {
         // إضافة جديد
-        const { error } = await supabase
+        const { data: existingByType } = await supabase
           .from('workflow_routes')
-          .insert([{
-            request_type: finalRequestType,
-            request_type_label: finalLabel,
-            assigned_to: assignedToJson,
-            cc_list: ccListString,
-            notify_roles: formData.notify_roles || 'ADMIN',
-            is_active: formData.is_active,
-            created_at: new Date().toISOString()
-          }]);
+          .select('id')
+          .eq('request_type', finalRequestType)
+          .maybeSingle();
 
-        if (error) throw error;
-        alert('✅ تم الإضافة بنجاح');
+        if (existingByType?.id) {
+          const { error: upError } = await supabase
+            .from('workflow_routes')
+            .update({
+              request_type_label: finalLabel,
+              assigned_to: assignedToJson,
+              cc_list: ccListString,
+              notify_roles: formData.notify_roles || 'ADMIN',
+              is_active: formData.is_active,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', existingByType.id);
+
+          if (upError) throw upError;
+          alert('✅ النوع موجود مسبقاً، تم تحديثه بنجاح');
+        } else {
+          const { error } = await supabase
+            .from('workflow_routes')
+            .insert([{
+              request_type: finalRequestType,
+              request_type_label: finalLabel,
+              assigned_to: assignedToJson,
+              cc_list: ccListString,
+              notify_roles: formData.notify_roles || 'ADMIN',
+              is_active: formData.is_active,
+              created_at: new Date().toISOString()
+            }]);
+
+          if (error) throw error;
+          alert('✅ تم الإضافة بنجاح');
+        }
       }
 
       setIsModalOpen(false);
