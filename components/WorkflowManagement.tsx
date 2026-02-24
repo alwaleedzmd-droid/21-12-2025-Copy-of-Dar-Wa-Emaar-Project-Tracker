@@ -99,33 +99,45 @@ const WorkflowManagement: React.FC<WorkflowManagementProps> = ({ currentUser }) 
   const fetchWorkflows = async () => {
     setLoading(true);
     try {
+      console.log('🔍 جلب سير الموافقات من قاعدة البيانات...');
+      
       const { data, error } = await supabase
         .from('workflow_routes')
         .select('*')
         .order('created_at', { ascending: false });
 
       if (error) {
-        console.error('خطأ جلب البيانات:', error);
+        console.error('❌ خطأ جلب البيانات:', error);
         // إذا الجدول غير موجود، استخدم بيانات افتراضية
+        console.log('⚠️ استخدام البيانات الافتراضية...');
         setWorkflows(getDefaultWorkflows());
       } else {
         const workflows = data || [];
+        console.log(`📊 تم جلب ${workflows.length} نوع طلب`);
         
         // إذا لا توجد بيانات، قم بإضافة الأنواع الافتراضية
         if (workflows.length === 0) {
+          console.log('⚠️ لا توجد أنواع مسجلة، جاري الإضافة...');
           await initializeDefaultWorkflows();
           // أعد جلب البيانات بعد الإضافة
-          const { data: newData } = await supabase
+          const { data: newData, error: refetchError } = await supabase
             .from('workflow_routes')
             .select('*')
             .order('created_at', { ascending: false });
-          setWorkflows(newData || getDefaultWorkflows());
+          
+          if (refetchError) {
+            console.error('❌ خطأ في إعادة جلب البيانات:', refetchError);
+            setWorkflows(getDefaultWorkflows());
+          } else {
+            console.log(`✅ تمت إضافة ${(newData || []).length} نوع طلب`);
+            setWorkflows(newData || getDefaultWorkflows());
+          }
         } else {
           setWorkflows(workflows);
         }
       }
     } catch (err) {
-      console.error('خطأ:', err);
+      console.error('❌ خطأ عام:', err);
       setWorkflows(getDefaultWorkflows());
     } finally {
       setLoading(false);
@@ -136,17 +148,25 @@ const WorkflowManagement: React.FC<WorkflowManagementProps> = ({ currentUser }) 
     const defaultWorkflows = getDefaultWorkflows();
     
     try {
+      console.log('🔄 جاري إضافة الأنواع الافتراضية...');
+      
       for (const workflow of defaultWorkflows) {
         // تحقق إذا كان النوع موجود مسبقاً
-        const { data: existing } = await supabase
+        const { data: existing, error: checkError } = await supabase
           .from('workflow_routes')
           .select('id')
           .eq('request_type', workflow.request_type)
-          .single();
+          .maybeSingle();
+
+        if (checkError) {
+          console.error(`خطأ في التحقق من ${workflow.request_type}:`, checkError);
+          continue;
+        }
 
         if (!existing) {
           // أضف النوع إذا لم يكن موجود
-          await supabase
+          console.log(`✅ إضافة ${workflow.request_type_label}...`);
+          const { error: insertError } = await supabase
             .from('workflow_routes')
             .insert([{
               request_type: workflow.request_type,
@@ -156,10 +176,20 @@ const WorkflowManagement: React.FC<WorkflowManagementProps> = ({ currentUser }) 
               notify_roles: workflow.notify_roles,
               is_active: workflow.is_active
             }]);
+
+          if (insertError) {
+            console.error(`❌ فشل إضافة ${workflow.request_type}:`, insertError);
+          } else {
+            console.log(`✅ تمت إضافة ${workflow.request_type_label}`);
+          }
+        } else {
+          console.log(`ℹ️ ${workflow.request_type_label} موجود بالفعل`);
         }
       }
+      
+      console.log('✅ اكتمل تهيئة الأنواع الافتراضية');
     } catch (err) {
-      console.error('خطأ في إضافة الأنواع الافتراضية:', err);
+      console.error('❌ خطأ في إضافة الأنواع الافتراضية:', err);
     }
   };
 
