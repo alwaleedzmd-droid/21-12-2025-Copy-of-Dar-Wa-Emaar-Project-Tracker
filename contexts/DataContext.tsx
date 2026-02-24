@@ -20,9 +20,6 @@ interface DataContextType {
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
 
-// Global flag لتتبع Demo Mode - متاح في جميع الدوال
-let GlobalDemoModeActive = false;
-
 const hashPassword = async (password: string) => {
   const data = new TextEncoder().encode(password);
   const hashBuffer = await crypto.subtle.digest('SHA-256', data);
@@ -205,24 +202,8 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const initAuth = async () => {
       try {
         console.log('🔐 بدء تهيئة المصادقة...');
-        
-        // فحص جلسة Demo أولاً - إذا وجدنا واحدة، استخدمها وتوقف تماماً عن Supabase
-        const demoSessionStr = localStorage.getItem('dar_demo_session');
-        if (demoSessionStr) {
-          try {
-            const demoUser = JSON.parse(demoSessionStr);
-            console.log('✅ استرجاع جلسة Demo من localStorage:', demoUser.email);
-            setCurrentUser(demoUser);
-            GlobalDemoModeActive = true;  // تعيين global flag
-            setIsAuthLoading(false);
-            return; // توقف تماماً - لا تستدعي أي Supabase
-          } catch (e) {
-            console.warn('⚠️ فشل استرجاع جلسة Demo:', e);
-            localStorage.removeItem('dar_demo_session');
-          }
-        }
-        
-        // فقط حاول Supabase إذا لم نجد Demo session
+
+        // التشغيل الفعلي فقط: جلسة Supabase حقيقية
         if (!supabase || !supabase.auth) {
           console.error('❌ Supabase auth غير متاح.');
           setIsAuthLoading(false);
@@ -239,20 +220,20 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         if (session?.user?.email) {
           const email = session.user.email.toLowerCase();
           console.log('✅ مستخدم مسجل من GoTrue:', email);
-          
-          if (EMPLOYEES_DATA[email]) {
-            setCurrentUser({ id: session.user.id, email, ...EMPLOYEES_DATA[email], isDemoMode: false });
+
+          const { data: profile } = await supabase.from('profiles').select('*').eq('id', session.user.id).maybeSingle();
+          if (profile) {
+            setCurrentUser(profile);
           } else {
-            const { data: profile } = await supabase.from('profiles').select('*').eq('id', session.user.id).maybeSingle();
-            if (profile) setCurrentUser(profile);
-            else { 
-              console.warn('⚠️ ملف تعريف غير موجود للمستخدم');
-              await supabase.auth.signOut(); 
-              setCurrentUser(null); 
-            }
+            setCurrentUser({
+              id: session.user.id,
+              email,
+              name: (session.user.user_metadata as any)?.name || email.split('@')[0],
+              role: ((session.user.user_metadata as any)?.role as UserRole) || 'PR_MANAGER'
+            });
           }
         } else {
-          console.log('ℹ️ لا توجد جلسة GoTrue ولا Demo');
+          console.log('ℹ️ لا توجد جلسة GoTrue');
           setCurrentUser(null);
         }
       } catch (e) { 
@@ -269,22 +250,9 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   useEffect(() => {
     if (!supabase || !supabase.auth) return;
 
-    // إذا كنا في Demo Mode، لا نستمع لـ auth events على الإطلاق
-    if (GlobalDemoModeActive || (currentUser as any)?.isDemoMode === true) {
-      console.log('🔒 Demo Mode نشط - تخطي onAuthStateChange listener تماماً');
-      return;
-    }
-
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       console.log('🔐 Auth state changed:', event);
-      
-      // تحقق مجددة من Demo Mode
-      const isDemoMode = GlobalDemoModeActive || (currentUser as any)?.isDemoMode === true;
-      if (isDemoMode) {
-        console.log('🔒 Demo Mode نشط (global flag) - تجاهل حدث Auth بقوة:', event);
-        return; // توقف تام - لا تعدل state على الإطلاق
-      }
-      
+
       // عند تحديث المستخدم (مثل تغيير كلمة المرور) أو تحديث التوكن، نحافظ على المستخدم الحالي
       if ((event === 'USER_UPDATED' || event === 'TOKEN_REFRESHED') && session?.user?.email && currentUser) {
         // لا نفعل شيئاً - فقط نحافظ على المستخدم الحالي
@@ -339,70 +307,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       throw new Error('خدمة المصادقة غير متاحة حالياً');
     }
 
-    // قائمة المستخدمين المعروفة (Demo Mode Fast Track) - لا تتفاعل مع GoTrue
-    if (EMPLOYEES_DATA[e]) {
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('id, email, name, role, temp_password_hash, must_change_password')
-        .eq('email', e)
-        .maybeSingle();
-
-      if (profileError) {
-        throw new Error('تعذر التحقق من كلمة المرور حاليا');
-      }
-
-      if (!profile?.temp_password_hash) {
-        const err: any = new Error('يجب إعداد كلمة مرور مؤقتة');
-        err.code = 'TEMP_PASSWORD_REQUIRED';
-        throw err;
-      }
-
-      const inputHash = await hashPassword(password);
-      if (inputHash !== profile.temp_password_hash) {
-        throw new Error('البريد أو كلمة المرور غير صحيحة');
-      }
-
-      console.log('🔧 تفعيل Demo Mode المباشر - تجاوز GoTrue تماماً');
-      
-      // حذف جميع جلسات Supabase من localStorage لمنع أي تدخل من GoTrue
-      const keysToDelete = Object.keys(localStorage).filter(key => 
-        key.includes('supabase') || key.includes('auth') || key.includes('sb-')
-      );
-      keysToDelete.forEach(key => {
-        console.log('🗑️ حذف جلسة قديمة:', key);
-        localStorage.removeItem(key);
-      });
-      
-      // NÃO تحاول حتى signOut - فقط تجاوز تماماً
-      const empData = EMPLOYEES_DATA[e];
-      
-      const userId = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-        const r = Math.random() * 16 | 0;
-        const v = c === 'x' ? r : (r & 0x3 | 0x8);
-        return v.toString(16);
-      });
-      
-      const demoUser = {
-        id: userId,
-        email: e,
-        name: profile?.name || empData.name,
-        role: (profile?.role as UserRole) || empData.role,
-        isDemoMode: true  // Mark as demo mode
-      };
-      
-      // تعيين المستخدم مباشرة - هذا يجب أن يشغل App immediately
-      setCurrentUser(demoUser);
-      GlobalDemoModeActive = true;  // تعيين global flag
-      console.log('✅ تم تفعيل Demo Mode بنجاح - المستخدم:', demoUser.email, demoUser.role);
-      
-      // حفظ الجلسة التجريبية فقط (بدون Supabase session)
-      localStorage.setItem('dar_demo_session', JSON.stringify(demoUser));
-      
-      // إرجاع success object بدون أي تفاعل GoTrue
-      return { user: { id: userId, email: e, user_metadata: { isDemoMode: true, ...empData } } };
-    }
-
-    // محاولة تسجيل الدخول عبر GoTrue فقط للمستخدمين الجدد
+    // تسجيل دخول فعلي عبر Supabase Auth
     console.log('📡 محاولة الاتصال بـ GoTrue...');
     const { data, error } = await supabase.auth.signInWithPassword({ email: e, password });
     
@@ -432,15 +337,13 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     try {
       if (supabase && supabase.auth) await supabase.auth.signOut();
     } catch (e) { /* ignore */ }
-    // حذف جميع بيانات الجلسة
-    localStorage.removeItem('dar_demo_session');
+
     // حذف جميع جلسات Supabase
     const keysToDelete = Object.keys(localStorage).filter(key => 
       key.includes('supabase') || key.includes('auth') || key.includes('sb-')
     );
     keysToDelete.forEach(key => localStorage.removeItem(key));
-    
-    GlobalDemoModeActive = false;  // إعادة تعيين global flag
+
     setCurrentUser(null);
     window.location.href = '/';
   };
