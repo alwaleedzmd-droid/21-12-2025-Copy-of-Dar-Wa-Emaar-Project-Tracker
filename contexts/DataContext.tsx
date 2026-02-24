@@ -92,39 +92,41 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setIsDbLoading(true);
     console.log('🔄 جاري جلب البيانات من Supabase...');
     try {
+      const safeQuery = async (
+        label: string,
+        run: () => Promise<any>,
+        fallbackData: any = null,
+        level: 'error' | 'warn' = 'error'
+      ) => {
+        try {
+          const result = await run();
+          if (result?.error) {
+            console[level](`❌ خطأ جلب ${label}:`, result.error.message || result.error);
+          }
+          return result;
+        } catch (e: any) {
+          console[level](`❌ استثناء أثناء جلب ${label}:`, e?.message || e);
+          return { data: fallbackData, error: { message: e?.message || 'unknown error' } };
+        }
+      };
+
       // محاولات الاستعلام مع معالجة الأخطاء الفردية
-      const pRes = await supabase.from('projects').select('*').order('id', { ascending: true }).catch((e: any) => {
-        console.error('❌ خطأ جلب المشاريع:', e?.message);
-        return { data: null, error: { message: e?.message } };
-      });
-
-      const trRes = await supabase.from('technical_requests').select('*').order('created_at', { ascending: false }).catch((e: any) => {
-        console.error('❌ خطأ جلب الطلبات الفنية:', e?.message);
-        return { data: null, error: { message: e?.message } };
-      });
-
-      const drRes = await supabase.from('deeds_requests').select('*').order('created_at', { ascending: false }).catch((e: any) => {
-        console.error('❌ خطأ جلب الإفراغات:', e?.message);
-        return { data: null, error: { message: e?.message } };
-      });
-
-      const uRes = await supabase.from('profiles').select('*').catch((e: any) => {
-        console.error('❌ خطأ جلب المستخدمين:', e?.message);
-        return { data: null, error: { message: e?.message } };
-      });
+      const pRes = await safeQuery('المشاريع', () => supabase.from('projects').select('*').order('id', { ascending: true }));
+      const trRes = await safeQuery('الطلبات الفنية', () => supabase.from('technical_requests').select('*').order('created_at', { ascending: false }));
+      const drRes = await safeQuery('الإفراغات', () => supabase.from('deeds_requests').select('*').order('created_at', { ascending: false }));
+      const uRes = await safeQuery('المستخدمين', () => supabase.from('profiles').select('*'));
 
       // جلب أعمال المشاريع بشكل منفصل مع محاولة بديلة
-      let pwRes = await supabase.from('project_works').select('*').order('id', { ascending: false }).catch((e: any) => {
-        console.warn('⚠️ خطأ أول في جلب project_works:', e?.message);
-        return { data: null, error: { message: e?.message } };
-      });
+      let pwRes = await safeQuery(
+        'أعمال المشاريع (المحاولة الأولى)',
+        () => supabase.from('project_works').select('*').order('id', { ascending: false }),
+        null,
+        'warn'
+      );
 
       if (pwRes.error || !pwRes.data) {
         console.warn('⚠️ فشل جلب project_works مع الترتيب، إعادة المحاولة بدون ترتيب...');
-        pwRes = await supabase.from('project_works').select('*').catch((e: any) => {
-          console.error('❌ خطأ ثاني في جلب project_works:', e?.message);
-          return { data: [], error: { message: e?.message } };
-        });
+        pwRes = await safeQuery('أعمال المشاريع (المحاولة الثانية)', () => supabase.from('project_works').select('*'), []);
       }
 
       // تسجيل الأخطاء لكل جدول
