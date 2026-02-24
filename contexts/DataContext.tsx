@@ -177,7 +177,6 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setIsDbLoading(false);
     }
   }, [currentUser]);
-  }, [currentUser]);
 
   const setTempPassword = useCallback(async (email: string, tempPassword: string) => {
     if (!supabase) throw new Error('خدمة المصادقة غير متاحة حالياً');
