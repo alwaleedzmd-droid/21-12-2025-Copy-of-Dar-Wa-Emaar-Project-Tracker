@@ -8,7 +8,6 @@ export interface User {
   name: string;
   department?: string;
   created_at?: string;
-  isDemoMode?: boolean; // Flag to indicate if using Demo Mode
   temp_password_hash?: string;
   temp_password_set_at?: string;
   must_change_password?: boolean;

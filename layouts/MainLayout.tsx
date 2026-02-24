@@ -20,9 +20,6 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   const location = useLocation();
   const { currentUser, logout, refreshData } = useData();
 
-  // منع فتح modal تغيير كلمة المرور للمستخدمين في Demo Mode
-  const isDemoMode = (currentUser as any)?.isDemoMode === true;
-
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => 
     localStorage.getItem('dar_sidebar_v2_collapsed') === 'true'
   );
@@ -74,48 +71,20 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
 
     setPasswordLoading(true);
     try {
-      if (isDemoMode) {
-        const { data: profile, error: profileError } = await supabase
-          .from('profiles')
-          .select('temp_password_hash')
-          .eq('email', currentUser!.email)
-          .maybeSingle();
+      // الخطوة ١: التحقق من كلمة المرور الحالية عبر تسجيل الدخول
+      const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+        email: currentUser!.email,
+        password: passwordForm.current
+      });
 
-        if (profileError) throw profileError;
-
-        const currentHash = await hashPassword(passwordForm.current);
-        if (!profile?.temp_password_hash || currentHash !== profile.temp_password_hash) {
-          setPasswordError('كلمة المرور الحالية غير صحيحة');
-          return;
-        }
-
-        const newHash = await hashPassword(passwordForm.new);
-        const { error } = await supabase
-          .from('profiles')
-          .update({
-            temp_password_hash: newHash,
-            temp_password_set_at: new Date().toISOString(),
-            must_change_password: false
-          })
-          .eq('email', currentUser!.email);
-
-        if (error) throw error;
-      } else {
-        // الخطوة ١: التحقق من كلمة المرور الحالية عبر تسجيل الدخول
-        const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
-          email: currentUser!.email,
-          password: passwordForm.current
-        });
-
-        if (signInError || !signInData?.user) {
-          setPasswordError('كلمة المرور الحالية غير صحيحة');
-          return;
-        }
-
-        // الخطوة ٢: تغيير كلمة المرور
-        const { error } = await supabase.auth.updateUser({ password: passwordForm.new });
-        if (error) throw error;
+      if (signInError || !signInData?.user) {
+        setPasswordError('كلمة المرور الحالية غير صحيحة');
+        return;
       }
+
+      // الخطوة ٢: تغيير كلمة المرور
+      const { error } = await supabase.auth.updateUser({ password: passwordForm.new });
+      if (error) throw error;
 
       setPasswordSuccess('تم تغيير كلمة المرور بنجاح ✅');
       setPasswordForm({ current: '', new: '', confirm: '' });
