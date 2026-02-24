@@ -115,23 +115,16 @@ const WorkflowManagement: React.FC<WorkflowManagementProps> = ({ currentUser }) 
         const workflows = data || [];
         console.log(`📊 تم جلب ${workflows.length} نوع طلب`);
         
-        // إذا لا توجد بيانات، قم بإضافة الأنواع الافتراضية
+        // إذا لا توجد بيانات، اعرض رسالة
         if (workflows.length === 0) {
-          console.log('⚠️ لا توجد أنواع مسجلة، جاري الإضافة...');
-          await initializeDefaultWorkflows();
-          // أعد جلب البيانات بعد الإضافة
-          const { data: newData, error: refetchError } = await supabase
-            .from('workflow_routes')
-            .select('*')
-            .order('created_at', { ascending: false });
+          console.warn('⚠️ لا توجد أنواع مسجلة في قاعدة البيانات');
+          console.warn('📝 الرجاء تنفيذ Migration في Supabase SQL Editor:');
+          console.warn('   1. 20260224_create_workflow_routes_table.sql');
+          console.warn('   2. 20260224_insert_default_workflow_routes.sql');
+          console.warn('   3. 20260224_create_workflow_stages_system.sql');
           
-          if (refetchError) {
-            console.error('❌ خطأ في إعادة جلب البيانات:', refetchError);
-            setWorkflows(getDefaultWorkflows());
-          } else {
-            console.log(`✅ تمت إضافة ${(newData || []).length} نوع طلب`);
-            setWorkflows(newData || getDefaultWorkflows());
-          }
+          // استخدم البيانات الافتراضية للعرض فقط
+          setWorkflows(getDefaultWorkflows());
         } else {
           setWorkflows(workflows);
         }

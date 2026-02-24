@@ -5,6 +5,9 @@
 
 BEGIN;
 
+-- ⚠️ تعطيل RLS مؤقتاً للإضافة الأولية
+ALTER TABLE public.workflow_routes DISABLE ROW LEVEL SECURITY;
+
 -- حذف البيانات القديمة إن وجدت
 DELETE FROM public.workflow_routes WHERE request_type IN ('TECHNICAL_SECTION', 'DEED_CLEARANCE', 'METER_TRANSFER');
 
@@ -20,6 +23,9 @@ ON CONFLICT (request_type) DO UPDATE SET
   cc_list = EXCLUDED.cc_list,
   notify_roles = EXCLUDED.notify_roles,
   is_active = EXCLUDED.is_active;
+
+-- ✅ إعادة تفعيل RLS
+ALTER TABLE public.workflow_routes ENABLE ROW LEVEL SECURITY;
 
 COMMIT;
 
