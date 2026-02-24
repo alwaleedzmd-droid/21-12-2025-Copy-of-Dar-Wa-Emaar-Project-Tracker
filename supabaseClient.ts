@@ -53,19 +53,9 @@ console.log('Supabase Config:', {
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     persistSession: true,
-    autoRefreshToken: false,  // تعطيل التحديث التلقائي - قد يسبب dialogs
-    detectSessionInUrl: false,  // تعطيل detection من URL لمنع popup passwords
+    autoRefreshToken: true,
+    detectSessionInUrl: true,
     storageKey: 'dar-wa-emaar-auth',
     storage: typeof window !== 'undefined' ? window.localStorage : undefined
   }
 });
-
-// منع Supabase من فتح أي dialogs من خلفيتها
-if (typeof window !== 'undefined') {
-  // Intercept أي محاولة لعرض feedback أو dialogs من Supabase
-  const originalWarn = console.warn;
-  const originalLog = console.log;
-  
-  // تعطيل محاولات nested supabase calls من حدث auth
-  (supabase.auth as any)._shouldEmitEvent = false;
-}

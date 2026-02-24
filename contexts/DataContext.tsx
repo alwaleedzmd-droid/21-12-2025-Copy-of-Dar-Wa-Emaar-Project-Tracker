@@ -313,7 +313,14 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     
     if (error) {
       console.warn('❌ فشل GoTrue:', error.message);
-      throw new Error('البريد أو كلمة المرور غير صحيحة');
+      const msg = (error.message || '').toLowerCase();
+      if (msg.includes('database error querying schema') || msg.includes('querying schema')) {
+        throw new Error('تعذر تسجيل الدخول بسبب خلل في قاعدة مصادقة Supabase (Auth schema). شغّل migration إصلاح auth ثم أعد المحاولة.');
+      }
+      if (msg.includes('invalid login credentials')) {
+        throw new Error('البريد أو كلمة المرور غير صحيحة');
+      }
+      throw new Error(error.message || 'فشل تسجيل الدخول');
     }
     
     if (!data?.user) {
