@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Plus, Edit, Trash2, Save, X, Users, UserCheck, 
-  Mail, AlertCircle, CheckCircle2, Settings, ArrowDown, ArrowUp
+  Mail, AlertCircle, CheckCircle2, Settings, ArrowDown, ArrowUp, List
 } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import Modal from './Modal';
+import WorkflowStageManager from './WorkflowStageManager';
 import { UserRole } from '../types';
 
 interface WorkflowRoute {
@@ -59,6 +60,7 @@ const WorkflowManagement: React.FC<WorkflowManagementProps> = ({ currentUser }) 
     notify_roles: 'ADMIN',
     is_active: true
   });
+  const [selectedWorkflowForStages, setSelectedWorkflowForStages] = useState<WorkflowRoute | null>(null);
 
   // التحقق من الصلاحيات
   const isAdmin = currentUser?.role === 'ADMIN';
@@ -107,13 +109,57 @@ const WorkflowManagement: React.FC<WorkflowManagementProps> = ({ currentUser }) 
         // إذا الجدول غير موجود، استخدم بيانات افتراضية
         setWorkflows(getDefaultWorkflows());
       } else {
-        setWorkflows(data || []);
+        const workflows = data || [];
+        
+        // إذا لا توجد بيانات، قم بإضافة الأنواع الافتراضية
+        if (workflows.length === 0) {
+          await initializeDefaultWorkflows();
+          // أعد جلب البيانات بعد الإضافة
+          const { data: newData } = await supabase
+            .from('workflow_routes')
+            .select('*')
+            .order('created_at', { ascending: false });
+          setWorkflows(newData || getDefaultWorkflows());
+        } else {
+          setWorkflows(workflows);
+        }
       }
     } catch (err) {
       console.error('خطأ:', err);
       setWorkflows(getDefaultWorkflows());
     } finally {
       setLoading(false);
+    }
+  };
+
+  const initializeDefaultWorkflows = async () => {
+    const defaultWorkflows = getDefaultWorkflows();
+    
+    try {
+      for (const workflow of defaultWorkflows) {
+        // تحقق إذا كان النوع موجود مسبقاً
+        const { data: existing } = await supabase
+          .from('workflow_routes')
+          .select('id')
+          .eq('request_type', workflow.request_type)
+          .single();
+
+        if (!existing) {
+          // أضف النوع إذا لم يكن موجود
+          await supabase
+            .from('workflow_routes')
+            .insert([{
+              request_type: workflow.request_type,
+              request_type_label: workflow.request_type_label,
+              assigned_to: workflow.assigned_to,
+              cc_list: workflow.cc_list,
+              notify_roles: workflow.notify_roles,
+              is_active: workflow.is_active
+            }]);
+        }
+      }
+    } catch (err) {
+      console.error('خطأ في إضافة الأنواع الافتراضية:', err);
     }
   };
 
@@ -534,6 +580,14 @@ const WorkflowManagement: React.FC<WorkflowManagementProps> = ({ currentUser }) 
 
                 <div className="flex items-center gap-2">
                   <button
+                    onClick={() => setSelectedWorkflowForStages(workflow)}
+                    className="p-2 bg-purple-50 text-purple-600 rounded-lg hover:bg-purple-100 transition"
+                    title="إدارة المراحل"
+                  >
+                    <List size={18} />
+                  </button>
+
+                  <button
                     onClick={() => toggleActive(workflow)}
                     className={`p-2 rounded-lg transition ${
                       workflow.is_active
@@ -818,6 +872,21 @@ const WorkflowManagement: React.FC<WorkflowManagementProps> = ({ currentUser }) 
           </div>
         </div>
       </Modal>
+
+      {/* Stage Manager Modal */}
+      {selectedWorkflowForStages && (
+        <Modal
+          isOpen={true}
+          onClose={() => setSelectedWorkflowForStages(null)}
+          title=""
+        >
+          <WorkflowStageManager
+            workflowRouteId={selectedWorkflowForStages.id!}
+            workflowLabel={selectedWorkflowForStages.request_type_label}
+            onClose={() => setSelectedWorkflowForStages(null)}
+          />
+        </Modal>
+      )}
     </div>
   );
 };

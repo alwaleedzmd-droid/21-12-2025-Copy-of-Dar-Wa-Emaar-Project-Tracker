@@ -1,4 +1,5 @@
 import { UserRole } from '../types';
+import { supabase } from '../supabaseClient';
 
 export type WorkflowRequestType =
   | 'TECHNICAL_SECTION'
@@ -9,6 +10,7 @@ interface WorkflowRoute {
   assigneeName: string;
   ccLabel: string;
   notifyRoles: UserRole[];
+  assignedToEmails?: string[]; // تسلسل الإيميلات
 }
 
 export const WORKFLOW_REQUEST_TYPE_OPTIONS: Array<{ value: WorkflowRequestType; label: string }> = [
@@ -29,21 +31,105 @@ export const DEEDS_WORKFLOW_REQUEST_TYPE_OPTIONS: Array<{ value: WorkflowRequest
   { value: 'METER_TRANSFER', label: 'إشعار نقل ملكية عداد (مياه/كهرباء)' }
 ];
 
+// القيم الافتراضية (Fallback) في حالة عدم توفر قاعدة البيانات
 export const WORKFLOW_ROUTES: Record<WorkflowRequestType, WorkflowRoute> = {
   TECHNICAL_SECTION: {
     assigneeName: 'صالح اليحيى',
     ccLabel: 'الوليد الدوسري + مساعد العقيل + قسم PR + القسم الفني',
-    notifyRoles: ['PR_MANAGER', 'TECHNICAL', 'ADMIN']
+    notifyRoles: ['PR_MANAGER', 'TECHNICAL', 'ADMIN'],
+    assignedToEmails: ['ssalyahya@darwaemaar.com']
   },
   DEED_CLEARANCE: {
     assigneeName: 'الوليد الدوسري',
     ccLabel: 'مساعد العقيل + قسم CX',
-    notifyRoles: ['PR_MANAGER', 'CONVEYANCE', 'ADMIN']
+    notifyRoles: ['PR_MANAGER', 'CONVEYANCE', 'ADMIN'],
+    assignedToEmails: ['adaldawsari@darwaemaar.com']
   },
   METER_TRANSFER: {
     assigneeName: 'نورة المالكي',
     ccLabel: 'مساعد العقيل + قسم CX',
-    notifyRoles: ['PR_MANAGER', 'CONVEYANCE', 'ADMIN']
+    notifyRoles: ['PR_MANAGER', 'CONVEYANCE', 'ADMIN'],
+    assignedToEmails: ['nalmalki@darwaemaar.com']
+  }
+};
+
+/**
+ * جلب سير الموافقات من قاعدة البيانات
+ * @param requestType نوع الطلب
+ * @returns تفاصيل سير الموافقة أو القيمة الافتراضية
+ */
+export const getWorkflowRoute = async (requestType: WorkflowRequestType): Promise<WorkflowRoute> => {
+  try {
+    const { data, error } = await supabase
+      .from('workflow_routes')
+      .select('*')
+      .eq('request_type', requestType)
+      .eq('is_active', true)
+      .single();
+
+    if (error || !data) {
+      console.warn(`لم يتم العثور على سير موافقة لـ ${requestType}، استخدام القيمة الافتراضية`);
+      return WORKFLOW_ROUTES[requestType];
+    }
+
+    // تحويل البيانات من قاعدة البيانات إلى الشكل المطلوب
+    let assignedToEmails: string[] = [];
+    try {
+      assignedToEmails = JSON.parse(data.assigned_to);
+      if (!Array.isArray(assignedToEmails)) {
+        assignedToEmails = [data.assigned_to];
+      }
+    } catch {
+      assignedToEmails = [data.assigned_to];
+    }
+
+    // جلب أسماء المستخدمين من الإيميلات
+    const firstAssigneeEmail = assignedToEmails[0];
+    let assigneeName = firstAssigneeEmail;
+    
+    if (firstAssigneeEmail) {
+      const { data: profileData } = await supabase
+        .from('profiles')
+        .select('name')
+        .eq('email', firstAssigneeEmail)
+        .single();
+      
+      if (profileData) {
+        assigneeName = profileData.name;
+      }
+    }
+
+    // تحويل cc_list من إيميلات إلى أسماء
+    const ccEmails = data.cc_list ? data.cc_list.split(',').map((e: string) => e.trim()) : [];
+    const ccNames: string[] = [];
+    
+    for (const email of ccEmails) {
+      const { data: profileData } = await supabase
+        .from('profiles')
+        .select('name')
+        .eq('email', email)
+        .single();
+      
+      ccNames.push(profileData?.name || email);
+    }
+
+    const ccLabel = ccNames.join(' + ') || '-';
+
+    // تحويل notify_roles من نص إلى مصفوفة
+    const notifyRoles = data.notify_roles 
+      ? data.notify_roles.split(',').map((r: string) => r.trim() as UserRole)
+      : ['ADMIN'];
+
+    return {
+      assigneeName,
+      ccLabel,
+      notifyRoles,
+      assignedToEmails
+    };
+
+  } catch (err) {
+    console.error('خطأ في جلب سير الموافقة:', err);
+    return WORKFLOW_ROUTES[requestType];
   }
 };
 

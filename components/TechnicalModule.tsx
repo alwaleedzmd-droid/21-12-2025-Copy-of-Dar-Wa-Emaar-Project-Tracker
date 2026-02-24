@@ -218,7 +218,10 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
 
     const selectedProj = (projects || []).find(p => p?.id?.toString() === techForm.project_id);
     const workflowType = 'TECHNICAL_SECTION';
-    const workflowRoute = WORKFLOW_ROUTES[workflowType];
+    
+    // جلب سير الموافقة من قاعدة البيانات
+    const { getWorkflowRoute } = await import('../services/requestWorkflowService');
+    const workflowRoute = await getWorkflowRoute(workflowType);
 
     const trimUnsupportedWorkflowColumns = (inputPayload: Record<string, any>, message?: string) => {
       const nextPayload = { ...inputPayload };
@@ -370,7 +373,10 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
       }]);
 
       const workflowType = normalizeWorkflowType(activeRequest.request_type || activeRequest.service_type);
-      const workflowRoute = WORKFLOW_ROUTES[workflowType];
+      
+      // جلب سير الموافقة من قاعدة البيانات
+      const { getWorkflowRoute } = await import('../services/requestWorkflowService');
+      const workflowRoute = await getWorkflowRoute(workflowType);
       
       // ✅ إنشاء ProjectWork عند الموافقة على الطلب
       if (newStatus === 'approved' && activeRequest?.project_id) {

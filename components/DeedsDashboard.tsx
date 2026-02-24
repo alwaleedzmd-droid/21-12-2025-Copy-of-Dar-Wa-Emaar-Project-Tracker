@@ -394,7 +394,10 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
         if (!newDeedForm.client_name || !newDeedForm.id_number) return alert("الاسم والهوية مطلوبان");
         setIsSaving(true);
         try {
-            const workflowRoute = WORKFLOW_ROUTES[newDeedForm.request_type as 'DEED_CLEARANCE' | 'METER_TRANSFER'];
+            // جلب سير الموافقة من قاعدة البيانات
+            const { getWorkflowRoute } = await import('../services/requestWorkflowService');
+            const workflowRoute = await getWorkflowRoute(newDeedForm.request_type as 'DEED_CLEARANCE' | 'METER_TRANSFER');
+            
             const payload: Record<string, any> = {
                 request_type: newDeedForm.request_type,
                 region: newDeedForm.region,
