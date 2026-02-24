@@ -24,6 +24,7 @@ import DeedsDashboard from './components/DeedsDashboard';
 import ProjectDetailView from './components/ProjectDetailView';
 import ProjectRequestsView from './components/ProjectRequestsView';
 import UserManagement from './components/UserManagement'; 
+import WorkflowManagement from './components/WorkflowManagement';
 import AIAssistant from './components/AIAssistant';
 import StatisticsDashboard from './components/StatisticsDashboard';
 import LoginPage from './components/LoginPage';
@@ -525,6 +526,9 @@ const AppContent: React.FC = () => {
         
         {/* إدارة المستخدمين: للمدير فقط */}
         <Route path="/users" element={<ProtectedRoute allowedRoles={['ADMIN']}><UserManagement /></ProtectedRoute>} />
+        
+        {/* إدارة سير الموافقات: للمدير فقط */}
+        <Route path="/workflow" element={<ProtectedRoute allowedRoles={['ADMIN']}><WorkflowManagement currentUser={currentUser} /></ProtectedRoute>} />
         
         <Route path="*" element={currentUser ? <Navigate to={getDefaultPath(currentUser.role)} replace /> : <Navigate to="/dashboard" replace />} />
       </Routes>
