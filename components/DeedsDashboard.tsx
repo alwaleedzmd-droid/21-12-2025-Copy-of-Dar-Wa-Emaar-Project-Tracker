@@ -8,7 +8,7 @@ import {
   ChevronDown, User as UserIcon, 
   MessageSquare, Send, Loader2, XCircle, Activity,
     Sparkles, FileSpreadsheet, Calendar, CreditCard, GitBranch,
-  Building2, Phone, MapPin, FileText, Landmark, Sheet, Download
+  Building2, Phone, MapPin, FileText, Landmark, Sheet, Download, Edit
 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
 // Fix: Removed ActivityLog import as it is not exported from DataContext
@@ -22,6 +22,7 @@ import {
 } from '../services/requestWorkflowService';
 import Modal from './Modal';
 import ApprovalPanel from './ApprovalPanel';
+import StageUpdateModal from './StageUpdateModal';
 import { parseClearanceExcel } from '../utils/excelHandler';
 
 const STATUS_OPTIONS = [
@@ -74,6 +75,11 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
     const [isCommentLoading, setIsCommentLoading] = useState(false);
     const [isAutoFilling, setIsAutoFilling] = useState(false);
     const [autoFillSuccess, setAutoFillSuccess] = useState(false);
+    const [workflowStages, setWorkflowStages] = useState<any[]>([]);
+    const [stageProgress, setStageProgress] = useState<any[]>([]);
+    const [selectedStage, setSelectedStage] = useState<any>(null);
+    const [selectedStageProgress, setSelectedStageProgress] = useState<any>(null);
+    const [isStageUpdateOpen, setIsStageUpdateOpen] = useState(false);
 
     const fileInputRef = useRef<HTMLInputElement>(null);
     const excelInputRef = useRef<HTMLInputElement>(null);
@@ -265,12 +271,58 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
         } finally { setIsCommentLoading(false); }
     };
 
+    const fetchWorkflowProgress = async (requestType: string, requestId: number) => {
+        try {
+            // جلب معرف الـ workflow route
+            const { data: routeData, error: routeError } = await supabase
+                .from('workflow_routes')
+                .select('id')
+                .eq('request_type', requestType)
+                .single();
+            
+            if (routeError || !routeData) {
+                console.warn('No workflow route found for:', requestType);
+                return;
+            }
+
+            // جلب المراحل
+            const { data: stagesData, error: stagesError } = await supabase
+                .from('workflow_stages')
+                .select('*')
+                .eq('workflow_route_id', routeData.id)
+                .eq('is_active', true)
+                .order('stage_order', { ascending: true });
+            
+            if (stagesError) throw stagesError;
+            setWorkflowStages(stagesData || []);
+
+            // جلب حالة التقدم للطلب الحالي
+            const { data: progressData, error: progressError } = await supabase
+                .from('workflow_stage_progress')
+                .select('*')
+                .eq('request_id', requestId)
+                .eq('request_type', requestType);
+            
+            if (progressError) throw progressError;
+            setStageProgress(progressData || []);
+        } catch (error) {
+            console.error('Error fetching workflow progress:', error);
+        }
+    };
+
     useEffect(() => { fetchDeeds(); }, [filteredProjectName]);
 
     const handleOpenManage = (deed: any) => {
         setSelectedDeed(deed);
         setIsManageModalOpen(true);
         fetchComments(deed.id);
+        fetchWorkflowProgress(deed.request_type || 'DEED_CLEARANCE', deed.id);
+    };
+
+    const handleOpenStageUpdate = (stage: any, progress: any) => {
+        setSelectedStage(stage);
+        setSelectedStageProgress(progress);
+        setIsStageUpdateOpen(true);
     };
 
     const handleAddComment = async () => {
@@ -922,9 +974,10 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
                         <div className="bg-white p-5 rounded-[25px] border border-gray-100 shadow-sm space-y-3">
                             <h3 className="font-black text-[#1B2B48] text-sm flex items-center gap-2">
                                 <GitBranch size={16} className="text-[#E95D22]" />
-                                الشريط الزمني للطلب
+                                سير الموافقات
                             </h3>
                             <div className="space-y-3">
+                                {/* تقديم الطلب */}
                                 <div className="flex items-start gap-3">
                                     <div className="w-2 h-2 rounded-full bg-[#E95D22] mt-2" />
                                     <div>
@@ -933,27 +986,77 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
                                         <p className="text-[10px] text-gray-400 font-bold" dir="ltr">{selectedDeed.created_at ? new Date(selectedDeed.created_at).toLocaleString('ar-SA') : '-'}</p>
                                     </div>
                                 </div>
-                                {Array.from(new Set((comments || []).map((comment) => comment.user_name))).map((reviewerName: string, index: number) => {
-                                    const reviewerComment = (comments || []).find((comment) => comment.user_name === reviewerName);
-                                    return (
-                                        <div key={`${reviewerName}-${index}`} className="flex items-start gap-3">
-                                            <div className="w-2 h-2 rounded-full bg-[#1B2B48] mt-2" />
-                                            <div>
-                                                <p className="text-xs font-black text-[#1B2B48]">مراجعة الطلب</p>
-                                                <p className="text-[11px] text-gray-500 font-bold">{reviewerName}</p>
-                                                <p className="text-[10px] text-gray-400 font-bold" dir="ltr">{reviewerComment?.created_at ? new Date(reviewerComment.created_at).toLocaleString('ar-SA') : '-'}</p>
+
+                                {/* مراحل سير العمل الفعلية */}
+                                {workflowStages.length > 0 ? (
+                                    workflowStages.map((stage: any, index: number) => {
+                                        const progress = stageProgress.find((p: any) => p.stage_id === stage.id);
+                                        const status = progress?.status || 'pending';
+                                        
+                                        let statusColor = 'bg-gray-300';
+                                        let statusText = 'في الانتظار';
+                                        let displayTime = null;
+                                        
+                                        if (status === 'in_progress') {
+                                            statusColor = 'bg-blue-500';
+                                            statusText = 'قيد التنفيذ';
+                                            displayTime = progress?.started_at;
+                                        } else if (status === 'completed') {
+                                            statusColor = 'bg-green-600';
+                                            statusText = 'مكتمل';
+                                            displayTime = progress?.completed_at;
+                                        }
+
+                                        return (
+                                            <div key={stage.id} className="flex items-start gap-3">
+                                                <div className={`w-2 h-2 rounded-full ${statusColor} mt-2`} />
+                                                <div className="flex-1">
+                                                    <div className="flex items-center gap-2 justify-between">
+                                                        <div className="flex items-center gap-2">
+                                                            <p className="text-xs font-black text-[#1B2B48]">{stage.stage_title}</p>
+                                                            <span className={`text-[9px] px-2 py-0.5 rounded-full ${
+                                                                status === 'completed' ? 'bg-green-50 text-green-700' :
+                                                                status === 'in_progress' ? 'bg-blue-50 text-blue-700' :
+                                                                'bg-gray-50 text-gray-500'
+                                                            } font-bold`}>
+                                                                {statusText}
+                                                            </span>
+                                                        </div>
+                                                        <button
+                                                            onClick={() => handleOpenStageUpdate(stage, progress)}
+                                                            className="p-1 hover:bg-orange-50 rounded-lg transition-colors"
+                                                            title="تحديث حالة المرحلة"
+                                                        >
+                                                            <Edit size={14} className="text-[#E95D22]" />
+                                                        </button>
+                                                    </div>
+                                                    <p className="text-[11px] text-gray-500 font-bold mt-0.5">
+                                                        المسؤول: {stage.responsible_party}
+                                                        {stage.platform_name && ` • ${stage.platform_name}`}
+                                                    </p>
+                                                    {displayTime && (
+                                                        <p className="text-[10px] text-gray-400 font-bold mt-0.5" dir="ltr">
+                                                            {new Date(displayTime).toLocaleString('ar-SA')}
+                                                        </p>
+                                                    )}
+                                                    {progress?.notes && (
+                                                        <p className="text-[10px] text-gray-600 font-bold mt-1 bg-gray-50 p-2 rounded-lg">
+                                                            {progress.notes}
+                                                        </p>
+                                                    )}
+                                                    {progress?.completed_by && status === 'completed' && (
+                                                        <p className="text-[10px] text-green-600 font-bold mt-0.5">
+                                                            ✓ تم بواسطة: {progress.completed_by}
+                                                        </p>
+                                                    )}
+                                                </div>
                                             </div>
-                                        </div>
-                                    );
-                                })}
-                                {(selectedDeed.status === 'مقبول' || selectedDeed.status === 'مرفوض') && (
-                                    <div className="flex items-start gap-3">
-                                        <div className="w-2 h-2 rounded-full bg-green-600 mt-2" />
-                                        <div>
-                                            <p className="text-xs font-black text-[#1B2B48]">{selectedDeed.status === 'مقبول' ? 'اعتماد نهائي' : 'رفض نهائي'}</p>
-                                            <p className="text-[11px] text-gray-500 font-bold">{selectedDeed.assigned_to || '-'}</p>
-                                            <p className="text-[10px] text-gray-400 font-bold" dir="ltr">{selectedDeed.updated_at ? new Date(selectedDeed.updated_at).toLocaleString('ar-SA') : '-'}</p>
-                                        </div>
+                                        );
+                                    })
+                                ) : (
+                                    <div className="text-center py-4 text-gray-400 text-xs">
+                                        <Activity size={20} className="mx-auto mb-2 opacity-30" />
+                                        <p className="font-bold">لا توجد مراحل معرّفة لهذا النوع من الطلبات</p>
                                     </div>
                                 )}
                             </div>
@@ -1007,6 +1110,19 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
                     </div>
                 </Modal>
             )}
+
+            {/* modal تحديث المرحلة */}
+            <StageUpdateModal
+                isOpen={isStageUpdateOpen}
+                onClose={() => setIsStageUpdateOpen(false)}
+                stage={selectedStage}
+                stageProgress={selectedStageProgress}
+                currentUserName={currentUserName || currentUser?.name || 'مستخدم'}
+                currentUserEmail={currentUser?.email || ''}
+                onUpdate={() => {
+                    fetchWorkflowProgress(selectedDeed?.request_type || 'DEED_CLEARANCE', selectedDeed?.id);
+                }}
+            />
         </div>
     );
 };
