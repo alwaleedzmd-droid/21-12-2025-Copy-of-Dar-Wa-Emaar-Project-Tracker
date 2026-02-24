@@ -80,7 +80,14 @@ const WorkflowManagement: React.FC<WorkflowManagementProps> = ({ currentUser }) 
       if (error) {
         console.error('خطأ جلب المستخدمين:', error);
       } else {
-        setUsers(data || []);
+        // إزالة التكرار بناءً على الإيميل
+        const uniqueUsers = (data || []).reduce((acc: AppUser[], user: AppUser) => {
+          if (!acc.find(u => u.email === user.email)) {
+            acc.push(user);
+          }
+          return acc;
+        }, []);
+        setUsers(uniqueUsers);
       }
     } catch (err) {
       console.error('خطأ:', err);
@@ -703,7 +710,7 @@ const WorkflowManagement: React.FC<WorkflowManagementProps> = ({ currentUser }) 
               >
                 <option value="">-- إضافة مسؤول للتسلسل --</option>
                 {users
-                  .filter(u => !assignedToSequence.includes(u.email))
+                  .filter(u => !assignedToSequence.includes(u.email) && !ccEmails.includes(u.email))
                   .map((user) => (
                     <option key={user.id} value={user.email}>
                       {user.name} ({user.email}) - {user.role}
@@ -754,7 +761,7 @@ const WorkflowManagement: React.FC<WorkflowManagementProps> = ({ currentUser }) 
               >
                 <option value="">-- إضافة نسخة (CC) --</option>
                 {users
-                  .filter(u => !ccEmails.includes(u.email))
+                  .filter(u => !ccEmails.includes(u.email) && !assignedToSequence.includes(u.email))
                   .map((user) => (
                     <option key={user.id} value={user.email}>
                       {user.name} ({user.email}) - {user.role}
