@@ -92,18 +92,39 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setIsDbLoading(true);
     console.log('🔄 جاري جلب البيانات من Supabase...');
     try {
-      const [pRes, trRes, drRes, uRes] = await Promise.all([
-        supabase.from('projects').select('*').order('id', { ascending: true }),
-        supabase.from('technical_requests').select('*').order('created_at', { ascending: false }),
-        supabase.from('deeds_requests').select('*').order('created_at', { ascending: false }),
-        supabase.from('profiles').select('*')
-      ]);
+      // محاولات الاستعلام مع معالجة الأخطاء الفردية
+      const pRes = await supabase.from('projects').select('*').order('id', { ascending: true }).catch((e: any) => {
+        console.error('❌ خطأ جلب المشاريع:', e?.message);
+        return { data: null, error: { message: e?.message } };
+      });
+
+      const trRes = await supabase.from('technical_requests').select('*').order('created_at', { ascending: false }).catch((e: any) => {
+        console.error('❌ خطأ جلب الطلبات الفنية:', e?.message);
+        return { data: null, error: { message: e?.message } };
+      });
+
+      const drRes = await supabase.from('deeds_requests').select('*').order('created_at', { ascending: false }).catch((e: any) => {
+        console.error('❌ خطأ جلب الإفراغات:', e?.message);
+        return { data: null, error: { message: e?.message } };
+      });
+
+      const uRes = await supabase.from('profiles').select('*').catch((e: any) => {
+        console.error('❌ خطأ جلب المستخدمين:', e?.message);
+        return { data: null, error: { message: e?.message } };
+      });
 
       // جلب أعمال المشاريع بشكل منفصل مع محاولة بديلة
-      let pwRes = await supabase.from('project_works').select('*').order('id', { ascending: false });
-      if (pwRes.error) {
+      let pwRes = await supabase.from('project_works').select('*').order('id', { ascending: false }).catch((e: any) => {
+        console.warn('⚠️ خطأ أول في جلب project_works:', e?.message);
+        return { data: null, error: { message: e?.message } };
+      });
+
+      if (pwRes.error || !pwRes.data) {
         console.warn('⚠️ فشل جلب project_works مع الترتيب، إعادة المحاولة بدون ترتيب...');
-        pwRes = await supabase.from('project_works').select('*');
+        pwRes = await supabase.from('project_works').select('*').catch((e: any) => {
+          console.error('❌ خطأ ثاني في جلب project_works:', e?.message);
+          return { data: [], error: { message: e?.message } };
+        });
       }
 
       // تسجيل الأخطاء لكل جدول
@@ -121,7 +142,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         console.warn('⚠️ project_works: لا توجد بيانات! error:', pwRes.error?.message || 'لا يوجد خطأ', 'data:', pwRes.data);
       }
 
-      setProjects(pRes.data?.map(p => ({ ...p, name: p.name || p.title || 'مشروع' })) || []);
+      setProjects(pRes.data?.map((p: any) => ({ ...p, name: p.name || p.title || 'مشروع' })) || []);
       setTechnicalRequests(trRes.data || []);
       setClearanceRequests(drRes.data || []);
       // تطبيع بيانات أعمال المشاريع لضمان وجود حقل projectId بشكل صحيح
@@ -146,9 +167,16 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
     } catch (e: any) {
       console.error('❌ خطأ عام في جلب البيانات:', e?.message || e);
+      // عند الخطأ، اعرض بيانات فارغة بدلاً من الانهيار
+      setProjects([]);
+      setTechnicalRequests([]);
+      setClearanceRequests([]);
+      setProjectWorks([]);
+      setAppUsers([]);
     } finally {
       setIsDbLoading(false);
     }
+  }, [currentUser]);
   }, [currentUser]);
 
   const setTempPassword = useCallback(async (email: string, tempPassword: string) => {
