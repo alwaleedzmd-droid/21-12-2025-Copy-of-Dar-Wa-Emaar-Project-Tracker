@@ -3,6 +3,7 @@ import { supabase } from '../supabaseClient';
 import { User, Comment, TechnicalRequest, ClearanceRequest } from '../types';
 import Modal from './Modal';
 import StageUpdateModal from './StageUpdateModal';
+import ApprovalChainTracker from './ApprovalChainTracker';
 import { MessageSquare, Send, User as UserIcon, Phone, FileText, CreditCard, Landmark, UserCheck, Loader2, GitBranch, Edit } from 'lucide-react';
 import { notificationService } from '../services/notificationService';
 import ApprovalPanel from './ApprovalPanel';
@@ -331,25 +332,27 @@ const ManageRequestModal: React.FC<ManageRequestModalProps> = ({
             />
           )}
 
+          {/* سير الموافقات - Approval Chain Tracker */}
+          <ApprovalChainTracker
+            requestType={isClearance 
+              ? ((request as any)?.request_type || 'DEED_CLEARANCE')
+              : ((request as any)?.request_type || 'TECHNICAL_SECTION')}
+            assignedTo={(request as any)?.assigned_to}
+            requestStatus={currentStatus}
+            submittedBy={(request as any)?.submitted_by}
+            createdAt={(request as any)?.created_at}
+            comments={comments}
+          />
+
+          {/* مراحل سير العمل الفنية (إن وجدت) */}
+          {workflowStages.length > 0 && (
           <div className="bg-white p-5 rounded-[25px] border border-gray-100 shadow-sm space-y-3">
             <h3 className="font-black text-[#1B2B48] text-sm flex items-center gap-2">
               <GitBranch size={16} className="text-[#E95D22]" />
-              سير الموافقات
+              مراحل التنفيذ
             </h3>
             <div className="space-y-3">
-              {/* تقديم الطلب */}
-              <div className="flex items-start gap-3">
-                <div className="w-2 h-2 rounded-full bg-[#E95D22] mt-2" />
-                <div>
-                  <p className="text-xs font-black text-[#1B2B48]">تم تقديم الطلب</p>
-                  <p className="text-[11px] text-gray-500 font-bold">{(request as any)?.submitted_by || 'غير محدد'}</p>
-                  <p className="text-[10px] text-gray-400 font-bold" dir="ltr">{(request as any)?.created_at ? new Date((request as any).created_at).toLocaleString('ar-SA') : '-'}</p>
-                </div>
-              </div>
-
-              {/* مراحل سير العمل الفعلية */}
-              {workflowStages.length > 0 ? (
-                workflowStages.map((stage: any) => {
+              {workflowStages.map((stage: any) => {
                   const progress = stageProgress.find((p: any) => p.stage_id === stage.id);
                   const status = progress?.status || 'pending';
                   
@@ -412,14 +415,10 @@ const ManageRequestModal: React.FC<ManageRequestModalProps> = ({
                       </div>
                     </div>
                   );
-                })
-              ) : (
-                <div className="text-center py-4 text-gray-400 text-xs">
-                  <p className="font-bold">لا توجد مراحل معرّفة لهذا النوع من الطلبات</p>
-                </div>
-              )}
+                })}
             </div>
           </div>
+          )}
 
         <div className="border-t border-gray-100 pt-6">
             <h3 className="font-black text-[#1B2B48] mb-4 flex items-center gap-2">

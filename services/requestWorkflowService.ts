@@ -13,6 +13,36 @@ interface WorkflowRoute {
   assignedToEmails?: string[]; // تسلسل الإيميلات
 }
 
+export interface ApprovalChainMember {
+  email: string;
+  name: string;
+  order: number;
+}
+
+export type ApprovalStepStatus = 'approved' | 'current' | 'pending' | 'rejected';
+
+export interface ApprovalChainStep extends ApprovalChainMember {
+  status: ApprovalStepStatus;
+}
+
+// خريطة أسماء الموظفين المحليين (احتياطي)
+const LOCAL_EMPLOYEE_NAMES: Record<string, string> = {
+  'adaldawsari@darwaemaar.com': 'الوليد الدوسري',
+  'malageel@darwaemaar.com': 'مساعد العقيل',
+  'ssalyahya@darwaemaar.com': 'صالح اليحيى',
+  'nalmalki@darwaemaar.com': 'نورة المالكي',
+  'taalmalki@darwaemaar.com': 'تهاني المالكي',
+  'saalfahad@darwaemaar.com': 'سارة الفهد',
+  'saalabdulsalam@darwaemaar.com': 'سارة عبدالسلام',
+  'maashammari@darwaemaar.com': 'محمد الشمري',
+  'malbahri@darwaemaar.com': 'محمد البحري',
+  'ssalama@darwaemaar.com': 'سيد سلامة',
+  'iahmad@darwaemaar.com': 'إسلام أحمد',
+  'emelshity@darwaemaar.com': 'إسلام الملشتي',
+  'mhbaishi@darwaemaar.com': 'محمود بحيصي',
+  'mhaqeel@darwaemaar.com': 'حمزة عقيل',
+};
+
 export const WORKFLOW_REQUEST_TYPE_OPTIONS: Array<{ value: WorkflowRequestType; label: string }> = [
   { value: 'TECHNICAL_SECTION', label: 'طلبات القسم الفني (رخص، كهرباء، إتمام بناء، رسوم)' },
   { value: 'DEED_CLEARANCE', label: 'طلب إفراغ صك' },
@@ -274,4 +304,140 @@ export const isWorkflowApprover = (currentUserEmail?: string): boolean => {
   if (!currentUserEmail) return false;
   const approverEmails = getAllApproverEmails();
   return approverEmails.includes(currentUserEmail.toLowerCase().trim());
+};
+
+// ============================================================================
+//  دوال تسلسل الموافقات - Approval Chain Functions
+// ============================================================================
+
+/**
+ * تحويل إيميل إلى اسم (محلي أو من قاعدة البيانات)
+ */
+export const resolveEmailToName = async (email: string): Promise<string> => {
+  const normalized = email.trim().toLowerCase();
+  
+  // 1. البحث في الخريطة المحلية
+  if (LOCAL_EMPLOYEE_NAMES[normalized]) {
+    return LOCAL_EMPLOYEE_NAMES[normalized];
+  }
+  
+  // 2. البحث في profiles
+  try {
+    const { data } = await supabase
+      .from('profiles')
+      .select('name')
+      .eq('email', normalized)
+      .maybeSingle();
+    if (data?.name) return data.name;
+  } catch { /* تجاهل */ }
+  
+  return email;
+};
+
+/**
+ * جلب سلسلة الموافقات الكاملة مع أسماء كل المسؤولين بالترتيب
+ */
+export const getFullApprovalChain = async (requestType: WorkflowRequestType): Promise<ApprovalChainMember[]> => {
+  const route = await getWorkflowRoute(requestType);
+  const emails = route.assignedToEmails || [];
+  
+  if (emails.length === 0) return [];
+  
+  const chain: ApprovalChainMember[] = [];
+  
+  // حل الأسماء بالتوازي
+  const namePromises = emails.map(e => resolveEmailToName(e));
+  const names = await Promise.all(namePromises);
+  
+  for (let i = 0; i < emails.length; i++) {
+    chain.push({
+      email: emails[i].trim().toLowerCase(),
+      name: names[i],
+      order: i
+    });
+  }
+  
+  return chain;
+};
+
+/**
+ * تحديد الخطوة الحالية في سلسلة الموافقات بناءً على assigned_to
+ */
+export const getCurrentApprovalStep = (
+  chain: ApprovalChainMember[], 
+  assignedTo?: string
+): number => {
+  if (!assignedTo || chain.length === 0) return 0;
+  
+  const idx = chain.findIndex(c =>
+    c.name === assignedTo ||
+    c.email === assignedTo ||
+    c.email.toLowerCase() === assignedTo.toLowerCase()
+  );
+  
+  return idx >= 0 ? idx : 0;
+};
+
+/**
+ * حساب حالة كل خطوة في سلسلة الموافقات
+ * يتحقق من التعليقات لمعرفة من وافق مسبقاً
+ */
+export const getApprovalChainWithStatus = (
+  chain: ApprovalChainMember[],
+  assignedTo?: string,
+  requestStatus?: string,
+  comments?: Array<{ text?: string; content?: string; user_name?: string }>
+): ApprovalChainStep[] => {
+  if (chain.length === 0) return [];
+  
+  const currentStep = getCurrentApprovalStep(chain, assignedTo);
+  const isRejected = ['مرفوض', 'rejected'].includes(requestStatus || '');
+  const isFinalApproved = ['مقبول', 'approved', 'completed', 'منجز'].includes(requestStatus || '');
+  
+  // تحقق من التعليقات لمعرفة من وافق
+  const approvedNames = new Set<string>();
+  if (comments) {
+    for (const c of comments) {
+      const text = c.text || c.content || '';
+      // نمط: "✅ تمت الموافقة بواسطة: اسم الشخص"
+      const approvalMatch = text.match(/✅ تمت الموافقة بواسطة:\s*(.+?)(?:\s*\||$)/);
+      if (approvalMatch) {
+        approvedNames.add(approvalMatch[1].trim());
+      }
+    }
+  }
+  
+  return chain.map((member, index) => {
+    let status: ApprovalStepStatus = 'pending';
+    
+    if (isRejected && index === currentStep) {
+      status = 'rejected';
+    } else if (isFinalApproved) {
+      // الطلب مقبول نهائياً - كل الخطوات مقبولة
+      status = 'approved';
+    } else if (approvedNames.has(member.name) || index < currentStep) {
+      status = 'approved';
+    } else if (index === currentStep) {
+      status = 'current';
+    }
+    
+    return { ...member, status };
+  });
+};
+
+/**
+ * جلب المسؤول التالي في السلسلة، أو null إذا كان الحالي هو الأخير
+ */
+export const getNextApprover = async (
+  requestType: WorkflowRequestType,
+  currentAssignedTo: string
+): Promise<ApprovalChainMember | null> => {
+  const chain = await getFullApprovalChain(requestType);
+  const currentIndex = getCurrentApprovalStep(chain, currentAssignedTo);
+  
+  if (currentIndex >= chain.length - 1) {
+    return null; // الأخير في السلسلة → موافقة نهائية
+  }
+  
+  return chain[currentIndex + 1];
 };

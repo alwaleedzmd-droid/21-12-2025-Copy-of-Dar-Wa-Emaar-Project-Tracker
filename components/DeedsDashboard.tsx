@@ -18,10 +18,17 @@ import { updateProjectProgress } from '../services/projectProgressService';
 import {
     WORKFLOW_ROUTES,
     DEEDS_WORKFLOW_REQUEST_TYPE_OPTIONS,
-    canApproveWorkflowRequest
+    canApproveWorkflowRequest,
+    normalizeWorkflowType,
+    getNextApprover,
+    getFullApprovalChain,
+    getApprovalChainWithStatus,
+    getCurrentApprovalStep,
+    WorkflowRequestType
 } from '../services/requestWorkflowService';
 import Modal from './Modal';
 import ApprovalPanel from './ApprovalPanel';
+import ApprovalChainTracker from './ApprovalChainTracker';
 import StageUpdateModal from './StageUpdateModal';
 import { parseClearanceExcel } from '../utils/excelHandler';
 import { initializeStagesForRequest } from '../services/workflowStageService';
@@ -372,14 +379,66 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
             alert('المسموح فقط: مقبول أو مرفوض');
             return;
         }
+
+        const stripUnsupportedStatusColumns = (inputPayload: Record<string, any>, message?: string) => {
+            const lowered = (message || '').toLowerCase();
+            const nextPayload = { ...inputPayload };
+            if (lowered.includes('updated_at')) delete nextPayload.updated_at;
+            if (lowered.includes('assigned_to')) delete nextPayload.assigned_to;
+            return nextPayload;
+        };
+
         try {
+            // ═══════════════════════════════════════
+            //  تسلسل الموافقات: تحقق إذا يوجد مسؤول تالي
+            // ═══════════════════════════════════════
+            if (status === 'مقبول') {
+                const reqType = normalizeWorkflowType(selectedDeed.request_type);
+                const nextApprover = await getNextApprover(reqType, selectedDeed.assigned_to);
+                
+                if (nextApprover) {
+                    // يوجد مسؤول تالي → تحويل الطلب إليه دون إغلاقه
+                    let advancePayload: any = {
+                        assigned_to: nextApprover.name,
+                        status: 'قيد العمل',
+                        updated_at: new Date().toISOString()
+                    };
+                    
+                    let advanceError: any = null;
+                    for (let attempt = 0; attempt < 2; attempt++) {
+                        const { error } = await supabase.from('deeds_requests').update(advancePayload).eq('id', selectedDeed.id);
+                        if (!error) { advanceError = null; break; }
+                        advanceError = error;
+                        const nextPayload = stripUnsupportedStatusColumns(advancePayload, error.message);
+                        if (Object.keys(nextPayload).length === Object.keys(advancePayload).length) break;
+                        advancePayload = nextPayload;
+                    }
+                    if (advanceError) throw advanceError;
+
+                    await supabase.from('deed_comments').insert([{
+                        request_id: selectedDeed.id,
+                        user_name: currentUserName || 'النظام',
+                        text: `✅ تمت الموافقة بواسطة: ${currentUserName || currentUser?.name}${reason ? ` | السبب: ${reason}` : ''} → تم تحويل الطلب إلى: ${nextApprover.name}`
+                    }]);
+
+                    await sendAppNotification(
+                        'تحويل طلب',
+                        `تمت موافقة ${currentUserName || currentUser?.name} على طلب ${selectedDeed.client_name} وتم تحويله إلى ${nextApprover.name}`
+                    );
+
+                    setSelectedDeed({ ...selectedDeed, assigned_to: nextApprover.name, status: 'قيد العمل', updated_at: new Date().toISOString() });
+                    fetchDeeds();
+                    fetchComments(selectedDeed.id);
+                    refreshData();
+                    logActivity?.('تحويل موافقة', `${selectedDeed.client_name} → ${nextApprover.name}`, 'text-blue-500');
+                    return;
+                }
+            }
+
+            // ═══════════════════════════════════════
+            //  موافقة/رفض نهائي (آخر مسؤول أو رفض)
+            // ═══════════════════════════════════════
             let statusPayload: any = { status, updated_at: new Date().toISOString() };
-            const stripUnsupportedStatusColumns = (inputPayload: Record<string, any>, message?: string) => {
-                const lowered = (message || '').toLowerCase();
-                const nextPayload = { ...inputPayload };
-                if (lowered.includes('updated_at')) delete nextPayload.updated_at;
-                return nextPayload;
-            };
 
             let statusError: any = null;
             for (let attempt = 0; attempt < 2; attempt++) {
@@ -395,10 +454,14 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
             }
             if (statusError) throw statusError;
 
+            // تسجيل الموافقة/الرفض النهائي في التعليقات
+            const isApproval = status === 'مقبول';
             await supabase.from('deed_comments').insert([{
                 request_id: selectedDeed.id,
                 user_name: currentUserName || 'النظام',
-                text: `قرار نهائي: ${status}${reason ? ` | السبب: ${reason}` : ''}`
+                text: isApproval
+                    ? `✅ تمت الموافقة بواسطة: ${currentUserName || currentUser?.name}${reason ? ` | السبب: ${reason}` : ''} → موافقة نهائية ✓`
+                    : `❌ تم الرفض بواسطة: ${currentUserName || currentUser?.name}${reason ? ` | السبب: ${reason}` : ''}`
             }]);
             
             // ✅ إنشاء ProjectWork عند الموافقة على طلب الإفراغ/نقل المليكة
@@ -810,6 +873,14 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
                                             }`}>
                                                 {deed.status}
                                             </span>
+                                            <div className="mt-1.5">
+                                                <ApprovalChainTracker
+                                                    requestType={deed.request_type}
+                                                    assignedTo={deed.assigned_to}
+                                                    requestStatus={deed.status}
+                                                    compact={true}
+                                                />
+                                            </div>
                                         </td>
                                         <td className="p-6 text-center">
                                             <ChevronDown size={16} className="text-gray-300" />
@@ -989,25 +1060,25 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
                             />
                         )}
 
+                        {/* سير الموافقات - Approval Chain Tracker */}
+                        <ApprovalChainTracker
+                            requestType={selectedDeed.request_type}
+                            assignedTo={selectedDeed.assigned_to}
+                            requestStatus={selectedDeed.status}
+                            submittedBy={selectedDeed.submitted_by}
+                            createdAt={selectedDeed.created_at}
+                            comments={comments}
+                        />
+
+                        {/* مراحل سير العمل الفنية (إن وجدت) */}
+                        {workflowStages.length > 0 && (
                         <div className="bg-white p-5 rounded-[25px] border border-gray-100 shadow-sm space-y-3">
                             <h3 className="font-black text-[#1B2B48] text-sm flex items-center gap-2">
                                 <GitBranch size={16} className="text-[#E95D22]" />
-                                سير الموافقات
+                                مراحل التنفيذ
                             </h3>
                             <div className="space-y-3">
-                                {/* تقديم الطلب */}
-                                <div className="flex items-start gap-3">
-                                    <div className="w-2 h-2 rounded-full bg-[#E95D22] mt-2" />
-                                    <div>
-                                        <p className="text-xs font-black text-[#1B2B48]">تم تقديم الطلب</p>
-                                        <p className="text-[11px] text-gray-500 font-bold">{selectedDeed.submitted_by || '-'}</p>
-                                        <p className="text-[10px] text-gray-400 font-bold" dir="ltr">{selectedDeed.created_at ? new Date(selectedDeed.created_at).toLocaleString('ar-SA') : '-'}</p>
-                                    </div>
-                                </div>
-
-                                {/* مراحل سير العمل الفعلية */}
-                                {workflowStages.length > 0 ? (
-                                    workflowStages.map((stage: any, index: number) => {
+                                {workflowStages.map((stage: any, index: number) => {
                                         const progress = stageProgress.find((p: any) => p.stage_id === stage.id);
                                         const status = progress?.status || 'pending';
                                         
@@ -1070,15 +1141,10 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
                                                 </div>
                                             </div>
                                         );
-                                    })
-                                ) : (
-                                    <div className="text-center py-4 text-gray-400 text-xs">
-                                        <Activity size={20} className="mx-auto mb-2 opacity-30" />
-                                        <p className="font-bold">لا توجد مراحل معرّفة لهذا النوع من الطلبات</p>
-                                    </div>
-                                )}
+                                    })}
                             </div>
                         </div>
+                        )}
 
                         <div className="border-t pt-6">
                             <h4 className="font-black text-[#1B2B48] flex items-center gap-2 mb-4">

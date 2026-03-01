@@ -14,7 +14,8 @@ import {
   TECHNICAL_SERVICE_OPTIONS,
   WORKFLOW_ROUTES,
   normalizeWorkflowType,
-  canApproveWorkflowRequest
+  canApproveWorkflowRequest,
+  getNextApprover
 } from '../services/requestWorkflowService';
 import Modal from './Modal';
 import ManageRequestModal from './ManageRequestModal';
@@ -358,6 +359,51 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
     }
 
     try {
+      const workflowType = normalizeWorkflowType(activeRequest.request_type || activeRequest.service_type);
+      
+      // ═══════════════════════════════════════
+      //  تسلسل الموافقات: تحقق إذا يوجد مسؤول تالي
+      // ═══════════════════════════════════════
+      if (newStatus === 'approved') {
+        const nextApprover = await getNextApprover(workflowType, activeRequest.assigned_to || '');
+        
+        if (nextApprover) {
+          // يوجد مسؤول تالي → تحويل الطلب إليه دون إغلاقه
+          const advanceData: any = {
+            assigned_to: nextApprover.name,
+            status: 'pending',
+          };
+          const { error } = await supabase.from('technical_requests').update(advanceData).eq('id', Number(activeRequest?.id));
+          if (error) throw error;
+
+          await supabase.from('request_comments').insert([{
+            request_id: activeRequest.id,
+            request_type: 'technical',
+            user_name: currentUser?.name || 'النظام',
+            content: `✅ تمت الموافقة بواسطة: ${currentUser?.name}${reason ? ` | السبب: ${reason}` : ''} → تم تحويل الطلب إلى: ${nextApprover.name}`
+          }]);
+
+          // جلب سير الموافقة من قاعدة البيانات
+          const { getWorkflowRoute } = await import('../services/requestWorkflowService');
+          const workflowRoute = await getWorkflowRoute(workflowType);
+
+          notificationService.send(
+            workflowRoute.notifyRoles,
+            `تمت موافقة ${currentUser?.name} على: ${activeRequest.service_type} → تم تحويله إلى ${nextApprover.name}`,
+            '/technical',
+            currentUser?.name || 'النظام'
+          );
+
+          setActiveRequest({ ...activeRequest, ...advanceData });
+          await onRefresh();
+          logActivity?.('تحويل موافقة فنية', `${activeRequest.service_type} → ${nextApprover.name}`, 'text-blue-500');
+          return;
+        }
+      }
+
+      // ═══════════════════════════════════════
+      //  موافقة/رفض نهائي (آخر مسؤول أو رفض)
+      // ═══════════════════════════════════════
       const updateData: any = {
         status: newStatus,
         progress: newStatus === 'approved' ? 100 : (activeRequest?.progress || 0)
@@ -365,15 +411,16 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
       const { error } = await supabase.from('technical_requests').update(updateData).eq('id', Number(activeRequest?.id));
       if (error) throw error;
 
+      const isApproval = newStatus === 'approved';
       await supabase.from('request_comments').insert([{
         request_id: activeRequest.id,
         request_type: 'technical',
         user_name: currentUser?.name || 'النظام',
-        content: `قرار نهائي: ${newStatus === 'approved' ? 'مقبول' : 'مرفوض'}${reason ? ` | السبب: ${reason}` : ''}`
+        content: isApproval
+          ? `✅ تمت الموافقة بواسطة: ${currentUser?.name}${reason ? ` | السبب: ${reason}` : ''} → موافقة نهائية ✓`
+          : `❌ تم الرفض بواسطة: ${currentUser?.name}${reason ? ` | السبب: ${reason}` : ''}`
       }]);
 
-      const workflowType = normalizeWorkflowType(activeRequest.request_type || activeRequest.service_type);
-      
       // جلب سير الموافقة من قاعدة البيانات
       const { getWorkflowRoute } = await import('../services/requestWorkflowService');
       const workflowRoute = await getWorkflowRoute(workflowType);
