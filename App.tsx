@@ -28,6 +28,7 @@ import WorkflowManagement from './components/WorkflowManagement';
 import AIAssistant from './components/AIAssistant';
 import StatisticsDashboard from './components/StatisticsDashboard';
 import LoginPage from './components/LoginPage';
+import SystemGuide from './components/SystemGuide';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -529,6 +530,9 @@ const AppContent: React.FC = () => {
         
         {/* إدارة سير الموافقات: للمدير فقط */}
         <Route path="/workflow" element={<ProtectedRoute allowedRoles={['ADMIN']}><WorkflowManagement currentUser={currentUser} /></ProtectedRoute>} />
+        
+        {/* الدليل الشامل للنظام */}
+        <Route path="/guide" element={<ProtectedRoute allowedRoles={['ADMIN', 'PR_MANAGER']}><SystemGuide /></ProtectedRoute>} />
         
         <Route path="*" element={currentUser ? <Navigate to={getDefaultPath(currentUser.role)} replace /> : <Navigate to="/dashboard" replace />} />
       </Routes>
