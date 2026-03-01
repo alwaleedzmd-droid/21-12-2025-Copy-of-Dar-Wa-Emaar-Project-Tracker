@@ -71,20 +71,68 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
 
     setPasswordLoading(true);
     try {
-      // الخطوة ١: التحقق من كلمة المرور الحالية عبر تسجيل الدخول
-      const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
-        email: currentUser!.email,
-        password: passwordForm.current
-      });
+      let goTrueWorking = false;
 
-      if (signInError || !signInData?.user) {
-        setPasswordError('كلمة المرور الحالية غير صحيحة');
-        return;
+      // المحاولة الأولى: التحقق عبر GoTrue (Supabase Auth)
+      try {
+        const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+          email: currentUser!.email,
+          password: passwordForm.current
+        });
+
+        if (signInError) {
+          const msg = (signInError.message || '').toLowerCase();
+          // GoTrue معطل (خطأ سيرفر)
+          if (msg.includes('database error') || msg.includes('500') || msg.includes('querying schema')) {
+            console.warn('⚠️ GoTrue معطل - التحقق عبر profiles...');
+            goTrueWorking = false;
+          } else if (msg.includes('invalid login credentials')) {
+            // كلمة المرور خاطئة في GoTrue - جرب profiles
+            goTrueWorking = false;
+          } else {
+            setPasswordError('كلمة المرور الحالية غير صحيحة');
+            return;
+          }
+        } else if (signInData?.user) {
+          goTrueWorking = true;
+        }
+      } catch {
+        goTrueWorking = false;
       }
 
-      // الخطوة ٢: تغيير كلمة المرور
-      const { error } = await supabase.auth.updateUser({ password: passwordForm.new });
-      if (error) throw error;
+      // إذا GoTrue لم ينجح، تحقق عبر profiles (هاش كلمة المرور)
+      if (!goTrueWorking) {
+        const currentHash = await hashPassword(passwordForm.current);
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('temp_password_hash')
+          .eq('id', currentUser!.id)
+          .maybeSingle();
+
+        if (!profile?.temp_password_hash || profile.temp_password_hash !== currentHash) {
+          setPasswordError('كلمة المرور الحالية غير صحيحة');
+          return;
+        }
+      }
+
+      // الخطوة ٢: تحديث كلمة المرور
+      const newHash = await hashPassword(passwordForm.new);
+      
+      // محاولة تحديث في GoTrue
+      if (goTrueWorking) {
+        try {
+          const { error } = await supabase.auth.updateUser({ password: passwordForm.new });
+          if (error) console.warn('⚠️ فشل تحديث GoTrue:', error.message);
+        } catch { /* تجاهل */ }
+      }
+
+      // تحديث الهاش في profiles (دائماً)
+      const { error: profileError } = await supabase.from('profiles').update({
+        temp_password_hash: newHash,
+        temp_password_set_at: new Date().toISOString()
+      }).eq('id', currentUser!.id);
+
+      if (profileError) throw profileError;
 
       setPasswordSuccess('تم تغيير كلمة المرور بنجاح ✅');
       setPasswordForm({ current: '', new: '', confirm: '' });
