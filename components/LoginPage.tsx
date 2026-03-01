@@ -67,11 +67,6 @@ const LoginPage: React.FC = () => {
     }
   };
 
-  const quickLogin = (demoEmail: string) => {
-    setEmail(demoEmail);
-    setPassword('demo');
-  };
-
   return (
     <div className="min-h-screen relative overflow-hidden bg-white flex items-center justify-center p-4 font-cairo" dir="rtl">
       <div className="absolute -top-32 -left-24 w-[420px] h-[420px] rounded-full bg-[#E95D22]/10 blur-3xl" />

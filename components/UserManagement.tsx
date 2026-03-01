@@ -9,25 +9,12 @@ const ALL_EMPLOYEES = [
   { email: 'adaldawsari@darwaemaar.com', name: 'الوليد الدوسري', role: 'ADMIN' },
   { email: 'malageel@darwaemaar.com', name: 'مساعد العقيل', role: 'PR_MANAGER' },
   { email: 'ssalyahya@darwaemaar.com', name: 'صالح اليحيى', role: 'PR_MANAGER' },
-  { email: 'syahya@darwaemaar.com', name: 'صالح اليحيى', role: 'PR_MANAGER' },
   { email: 'maashammari@darwaemaar.com', name: 'محمد الشمري', role: 'PR_MANAGER' },
-  { email: 'mshammari@darwaemaar.com', name: 'محمد الشمري', role: 'PR_MANAGER' },
   { email: 'malbahri@darwaemaar.com', name: 'محمد البحري', role: 'PR_MANAGER' },
-  { email: 'ssalama@darwaemaar.com', name: 'سيد سلامة', role: 'TECHNICAL' },
   { email: 'easalama@darwaemaar.com', name: 'سيد سلامة', role: 'TECHNICAL' },
-  { email: 'iahmad@darwaemaar.com', name: 'إسلام أحمد', role: 'TECHNICAL' },
   { email: 'emelshity@darwaemaar.com', name: 'إسلام الملشتي', role: 'TECHNICAL' },
-  { email: 'mhbaishi@darwaemaar.com', name: 'محمود بحيصي', role: 'TECHNICAL' },
   { email: 'mbuhaisi@darwaemaar.com', name: 'محمود بحيصي', role: 'TECHNICAL' },
-  { email: 'mhaqeel@darwaemaar.com', name: 'حمزة عقيل', role: 'TECHNICAL' },
   { email: 'hmaqel@darwaemaar.com', name: 'حمزة عقيل', role: 'TECHNICAL' },
-  { email: 'nalmalki@darwaemaar.com', name: 'نورة المالكي', role: 'CONVEYANCE' },
-  { email: 'saalfahad@darwaemaar.com', name: 'سارة الفهد', role: 'CONVEYANCE' },
-  { email: 'tmashari@darwaemaar.com', name: 'تماني المشاري', role: 'CONVEYANCE' },
-  { email: 'shalmalki@darwaemaar.com', name: 'شذى المالكي', role: 'CONVEYANCE' },
-  { email: 'balqarni@darwaemaar.com', name: 'بشرى القرني', role: 'CONVEYANCE' },
-  { email: 'hmalsalman@darwaemaar.com', name: 'حسن السلمان', role: 'CONVEYANCE' },
-  { email: 'falshammari@darwaemaar.com', name: 'فهد الشمري', role: 'CONVEYANCE' },
   { email: 'saalabdulsalam@darwaemaar.com', name: 'سارة عبدالسلام', role: 'CONVEYANCE' },
   { email: 'taalmalki@darwaemaar.com', name: 'تماني المالكي', role: 'CONVEYANCE' },
   { email: 'smalsanawi@darwaemaar.com', name: 'شذى الصنعاوي', role: 'CONVEYANCE' },
@@ -45,8 +32,42 @@ const UserManagement = () => {
   const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
   const [deleteConfirmUser, setDeleteConfirmUser] = useState<any>(null);
   const [newUser, setNewUser] = useState({ name: '', email: '', password: '', role: 'CONVEYANCE', department: '' });
+  const [isSyncingPasswords, setIsSyncingPasswords] = useState(false);
 
   const isAdmin = currentUser?.role === 'ADMIN';
+
+  // تحديث كلمات المرور الاحتياطية في profiles لجميع المستخدمين
+  const handleSyncPasswords = async () => {
+    if (!isAdmin) return;
+    const password = prompt('أدخل كلمة المرور التي تريد تعيينها لجميع المستخدمين:', '123456');
+    if (!password) return;
+
+    setIsSyncingPasswords(true);
+    try {
+      const hashData = new TextEncoder().encode(password);
+      const hashBuffer = await crypto.subtle.digest('SHA-256', hashData);
+      const passwordHash = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+
+      let successCount = 0;
+      let failCount = 0;
+
+      for (const user of appUsers) {
+        try {
+          const { error } = await supabase.from('profiles').update({
+            temp_password_hash: passwordHash,
+            temp_password_set_at: new Date().toISOString()
+          }).eq('id', user.id);
+          if (error) { failCount++; } else { successCount++; }
+        } catch { failCount++; }
+      }
+
+      alert(`✅ تم تحديث ${successCount} حساب${failCount > 0 ? `\n❌ فشل ${failCount} حساب` : ''}\nكلمة المرور: ${password}`);
+    } catch (err: any) {
+      alert('فشل التحديث: ' + err.message);
+    } finally {
+      setIsSyncingPasswords(false);
+    }
+  };
 
   const handleBulkCreateAccounts = async () => {
     if (!isAdmin) return;
@@ -70,6 +91,16 @@ const UserManagement = () => {
         if (error) {
           errors.push(`${emp.name} (${emp.email}): ${error.message}`);
         }
+        // حفظ هاش كلمة المرور في profiles للمصادقة الاحتياطية الآمنة
+        try {
+          const hashData = new TextEncoder().encode(defaultPassword);
+          const hashBuffer = await crypto.subtle.digest('SHA-256', hashData);
+          const passwordHash = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+          await supabase.from('profiles').update({
+            temp_password_hash: passwordHash,
+            temp_password_set_at: new Date().toISOString()
+          }).eq('email', emp.email);
+        } catch { /* تجاهل */ }
       } catch (err: any) {
         errors.push(`${emp.name} (${emp.email}): ${err.message}`);
       }
@@ -125,6 +156,17 @@ const UserManagement = () => {
 
       if (error) throw error;
       
+      // حفظ هاش كلمة المرور للمصادقة الاحتياطية الآمنة
+      try {
+        const hashData = new TextEncoder().encode(newUser.password);
+        const hashBuffer = await crypto.subtle.digest('SHA-256', hashData);
+        const passwordHash = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+        await supabase.from('profiles').update({
+          temp_password_hash: passwordHash,
+          temp_password_set_at: new Date().toISOString()
+        }).eq('email', newUser.email.toLowerCase());
+      } catch { /* تجاهل */ }
+
       alert("تمت إضافة المستخدم بنجاح ✅");
       setIsAddModalOpen(false);
       setNewUser({ name: '', email: '', password: '', role: 'CONVEYANCE', department: '' });
@@ -140,7 +182,20 @@ const UserManagement = () => {
     <div className="space-y-6 font-cairo" dir="rtl">
       <div className="flex justify-between items-center flex-wrap gap-3">
         <h2 className="text-2xl font-black text-[#1B2B48]">إدارة المستخدمين</h2>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
+          {isAdmin && (
+            <button 
+              onClick={handleSyncPasswords} 
+              disabled={isSyncingPasswords}
+              className="bg-green-600 text-white px-5 py-3 rounded-2xl font-bold flex items-center gap-2 shadow-lg hover:bg-green-700 transition-colors disabled:opacity-50"
+            >
+              {isSyncingPasswords ? (
+                <><Loader2 size={18} className="animate-spin" /> جاري التحديث...</>
+              ) : (
+                <><Shield size={18} /> تحديث كلمات المرور</>
+              )}
+            </button>
+          )}
           {isAdmin && (
             <button 
               onClick={handleBulkCreateAccounts} 

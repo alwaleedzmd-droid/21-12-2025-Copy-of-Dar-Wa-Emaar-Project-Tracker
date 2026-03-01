@@ -36,29 +36,16 @@ const EMPLOYEES_DATA: Record<string, { name: string; role: UserRole }> = {
   // علاقات عامة (PR_MANAGER)
   'malageel@darwaemaar.com': { name: 'مساعد العقيل', role: 'PR_MANAGER' },
   'ssalyahya@darwaemaar.com': { name: 'صالح اليحيى', role: 'PR_MANAGER' },
-  'syahya@darwaemaar.com': { name: 'صالح اليحيى', role: 'PR_MANAGER' },
   'maashammari@darwaemaar.com': { name: 'محمد الشمري', role: 'PR_MANAGER' },
-  'mshammari@darwaemaar.com': { name: 'محمد الشمري', role: 'PR_MANAGER' },
   'malbahri@darwaemaar.com': { name: 'محمد البحري', role: 'PR_MANAGER' },
   
   // القسم الفني (TECHNICAL)
-  'ssalama@darwaemaar.com': { name: 'سيد سلامة', role: 'TECHNICAL' },
   'easalama@darwaemaar.com': { name: 'سيد سلامة', role: 'TECHNICAL' },
-  'iahmad@darwaemaar.com': { name: 'إسلام أحمد', role: 'TECHNICAL' },
   'emelshity@darwaemaar.com': { name: 'إسلام الملشتي', role: 'TECHNICAL' },
-  'mhbaishi@darwaemaar.com': { name: 'محمود بحيصي', role: 'TECHNICAL' },
   'mbuhaisi@darwaemaar.com': { name: 'محمود بحيصي', role: 'TECHNICAL' },
-  'mhaqeel@darwaemaar.com': { name: 'حمزة عقيل', role: 'TECHNICAL' },
   'hmaqel@darwaemaar.com': { name: 'حمزة عقيل', role: 'TECHNICAL' },
   
   // موظفو الإفراغات (CONVEYANCE)
-  'nalmalki@darwaemaar.com': { name: 'نورة المالكي', role: 'CONVEYANCE' },
-  'saalfahad@darwaemaar.com': { name: 'سارة الفهد', role: 'CONVEYANCE' },
-  'tmashari@darwaemaar.com': { name: 'تماني المشاري', role: 'CONVEYANCE' },
-  'shalmalki@darwaemaar.com': { name: 'شذى المالكي', role: 'CONVEYANCE' },
-  'balqarni@darwaemaar.com': { name: 'بشرى القرني', role: 'CONVEYANCE' },
-  'hmalsalman@darwaemaar.com': { name: 'حسن السلمان', role: 'CONVEYANCE' },
-  'falshammari@darwaemaar.com': { name: 'فهد الشمري', role: 'CONVEYANCE' },
   'saalabdulsalam@darwaemaar.com': { name: 'سارة عبدالسلام', role: 'CONVEYANCE' },
   'taalmalki@darwaemaar.com': { name: 'تماني المالكي', role: 'CONVEYANCE' },
   'smalsanawi@darwaemaar.com': { name: 'شذى الصنعاوي', role: 'CONVEYANCE' },
@@ -203,18 +190,38 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       try {
         console.log('🔐 بدء تهيئة المصادقة...');
 
-        // التحقق من جلسة الوضع الاحتياطي أولاً
-        const demoSession = localStorage.getItem('dar_demo_session');
-        if (demoSession) {
+        // حذف أي جلسة demo قديمة غير آمنة (بدون تحقق كلمة مرور)
+        const oldDemo = localStorage.getItem('dar_demo_session');
+        if (oldDemo) {
           try {
-            const demoUser = JSON.parse(demoSession);
-            if (demoUser?.email && demoUser?.id?.startsWith('demo-')) {
-              console.log('✅ استعادة جلسة الوضع الاحتياطي:', demoUser.email);
-              setCurrentUser(demoUser);
-              setIsAuthLoading(false);
-              return;
+            const parsed = JSON.parse(oldDemo);
+            if (parsed?.id?.startsWith('demo-')) {
+              localStorage.removeItem('dar_demo_session');
             }
-          } catch { /* تجاهل JSON غير صالح */ }
+          } catch { localStorage.removeItem('dar_demo_session'); }
+        }
+
+        // استعادة جلسة الوضع الاحتياطي الآمن (مع تحقق كلمة مرور)
+        const secureSession = localStorage.getItem('dar_secure_session');
+        if (secureSession) {
+          try {
+            const sessionData = JSON.parse(secureSession);
+            // التحقق من صلاحية الجلسة (24 ساعة)
+            const sessionAge = Date.now() - (sessionData.timestamp || 0);
+            const MAX_SESSION_AGE = 24 * 60 * 60 * 1000; // 24 ساعة
+            if (sessionData?.email && sessionData?.id && sessionAge < MAX_SESSION_AGE) {
+              // التحقق من أن المستخدم لا يزال موجوداً في profiles
+              const { data: verifyProfile } = await supabase.from('profiles').select('id,email,name,role').eq('id', sessionData.id).maybeSingle();
+              if (verifyProfile) {
+                console.log('✅ استعادة جلسة آمنة:', verifyProfile.email);
+                setCurrentUser(verifyProfile);
+                setIsAuthLoading(false);
+                return;
+              }
+            }
+            // جلسة منتهية الصلاحية أو غير صالحة
+            localStorage.removeItem('dar_secure_session');
+          } catch { localStorage.removeItem('dar_secure_session'); }
         }
 
         // التشغيل الفعلي: جلسة Supabase حقيقية
@@ -229,7 +236,6 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           const result = await supabase.auth.getSession();
           if (result.error) {
             console.warn('⚠️ خطأ في جلب الجلسة:', result.error.message);
-            // لا نرمي خطأ - نكمل بدون جلسة
           } else {
             session = result.data?.session;
           }
@@ -320,104 +326,119 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     return () => { supabase.removeChannel(channel); };
   }, [currentUser, refreshData]);
 
-  // وضع احتياطي: تسجيل دخول محلي عند تعطل Supabase Auth
-  const fallbackLogin = (email: string): boolean => {
-    const emp = EMPLOYEES_DATA[email];
-    if (!emp) return false;
-    
-    const demoUser: User = {
-      id: `demo-${email}`,
-      email,
-      name: emp.name,
-      role: emp.role,
-    };
-    setCurrentUser(demoUser);
-    localStorage.setItem('dar_demo_session', JSON.stringify(demoUser));
-    console.log('✅ تسجيل دخول احتياطي (Demo Mode):', email);
-    return true;
+  // مصادقة آمنة عبر جدول profiles (عند تعطل GoTrue)
+  const secureFallbackLogin = async (email: string, password: string): Promise<User | null> => {
+    console.log('🔒 محاولة المصادقة الآمنة عبر profiles...');
+    try {
+      // جلب بيانات المستخدم من profiles
+      const { data: profile, error } = await supabase
+        .from('profiles')
+        .select('id, email, name, role, temp_password_hash')
+        .eq('email', email)
+        .maybeSingle();
+
+      if (error || !profile) {
+        console.warn('❌ لا يوجد ملف شخصي لهذا البريد:', email);
+        return null;
+      }
+
+      // التحقق من كلمة المرور عبر الهاش
+      const passwordHash = await hashPassword(password);
+      if (!profile.temp_password_hash || profile.temp_password_hash !== passwordHash) {
+        console.warn('❌ كلمة المرور غير صحيحة (الوضع الاحتياطي)');
+        return null;
+      }
+
+      console.log('✅ مصادقة آمنة ناجحة عبر profiles:', email);
+      const user: User = {
+        id: profile.id,
+        email: profile.email,
+        name: profile.name,
+        role: profile.role,
+      };
+      return user;
+    } catch (err) {
+      console.error('❌ خطأ في المصادقة الاحتياطية:', err);
+      return null;
+    }
   };
 
   const login = async (email: string, password: string) => {
     const e = email.toLowerCase();
     console.log('🔐 محاولة تسجيل الدخول:', e);
 
-    // التحقق أولاً: هل البريد موجود في بيانات الموظفين
-    const isKnownEmployee = !!EMPLOYEES_DATA[e];
-
     if (!supabase || !supabase.auth) {
-      // لا يوجد Supabase - استخدام الوضع الاحتياطي
-      if (isKnownEmployee) {
-        if (fallbackLogin(e)) return { user: { email: e }, session: null };
-      }
       throw new Error('خدمة المصادقة غير متاحة حالياً');
     }
 
-    // محاولة تسجيل دخول فعلي عبر Supabase Auth
+    // المحاولة الأولى: تسجيل دخول فعلي عبر Supabase Auth (GoTrue)
     console.log('📡 محاولة الاتصال بـ GoTrue...');
-    try {
-      const { data, error } = await supabase.auth.signInWithPassword({ email: e, password });
+    const { data, error } = await supabase.auth.signInWithPassword({ email: e, password });
+    
+    if (error) {
+      console.warn('❌ فشل GoTrue:', error.message);
+      const msg = (error.message || '').toLowerCase();
       
-      if (error) {
-        console.warn('❌ فشل GoTrue:', error.message);
-        const msg = (error.message || '').toLowerCase();
-        
-        // خطأ في schema قاعدة البيانات - تفعيل الوضع الاحتياطي
-        if (msg.includes('database error querying schema') || msg.includes('querying schema') || msg.includes('500')) {
-          console.warn('⚠️ Supabase Auth معطل - التحويل للوضع الاحتياطي...');
-          if (isKnownEmployee) {
-            if (fallbackLogin(e)) return { user: { email: e }, session: null };
-          }
-          throw new Error('خدمة المصادقة معطلة حالياً والبريد غير مسجل في النظام');
+      // بيانات خاطئة فعلياً - لا نجرب الوضع الاحتياطي
+      if (msg.includes('invalid login credentials')) {
+        // جرب المصادقة عبر profiles في حالة كلمة المرور مختلفة عن Supabase Auth
+        const fallbackUser = await secureFallbackLogin(e, password);
+        if (fallbackUser) {
+          setCurrentUser(fallbackUser);
+          localStorage.setItem('dar_secure_session', JSON.stringify({ ...fallbackUser, timestamp: Date.now() }));
+          return { user: fallbackUser, session: null };
         }
-        
-        if (msg.includes('invalid login credentials')) {
-          // بيانات خاطئة في Supabase - جرّب الوضع الاحتياطي إذا كانت كلمة المرور "demo"
-          if (isKnownEmployee && password === 'demo') {
-            console.warn('⚠️ بيانات Supabase غير صالحة - محاولة الوضع الاحتياطي...');
-            if (fallbackLogin(e)) return { user: { email: e }, session: null };
-          }
-          throw new Error('البريد أو كلمة المرور غير صحيحة');
-        }
-        
-        // أي خطأ آخر من Supabase - جرب الوضع الاحتياطي
-        if (isKnownEmployee) {
-          console.warn('⚠️ خطأ Supabase غير متوقع - محاولة الوضع الاحتياطي...');
-          if (fallbackLogin(e)) return { user: { email: e }, session: null };
-        }
-        throw new Error(error.message || 'فشل تسجيل الدخول');
+        throw new Error('البريد أو كلمة المرور غير صحيحة');
       }
       
-      if (!data?.user) {
-        throw new Error('فشل تسجيل الدخول - لا توجد بيانات مستخدم');
-      }
-
-      console.log('✅ تسجيل دخول GoTrue ناجح:', data.user.id);
-      
-      // جلب بيانات الموظف من profiles
-      const { data: profile } = await supabase.from('profiles').select('*').eq('id', data.user.id).maybeSingle();
-      if (profile) {
-        setCurrentUser(profile);
-      } else {
-        const emp = EMPLOYEES_DATA[e];
-        setCurrentUser({ 
-          id: data.user.id, 
-          email: e, 
-          name: emp?.name || e.split('@')[0], 
-          role: emp?.role || 'PR_MANAGER' 
-        });
-      }
-      
-      return data;
-    } catch (err: any) {
-      // خطأ شبكة أو Supabase غير قابل للوصول
-      if (err?.message && !err.message.includes('البريد') && !err.message.includes('خدمة') && !err.message.includes('فشل')) {
-        console.warn('⚠️ خطأ شبكة/اتصال - محاولة الوضع الاحتياطي...');
-        if (isKnownEmployee) {
-          if (fallbackLogin(e)) return { user: { email: e }, session: null };
+      // خطأ سيرفر (GoTrue معطل) - استخدام المصادقة الآمنة عبر profiles
+      if (msg.includes('database error') || msg.includes('500') || msg.includes('querying schema')) {
+        console.warn('⚠️ GoTrue معطل - التحويل للمصادقة الآمنة عبر profiles...');
+        const fallbackUser = await secureFallbackLogin(e, password);
+        if (fallbackUser) {
+          setCurrentUser(fallbackUser);
+          localStorage.setItem('dar_secure_session', JSON.stringify({ ...fallbackUser, timestamp: Date.now() }));
+          return { user: fallbackUser, session: null };
         }
+        throw new Error('البريد أو كلمة المرور غير صحيحة');
       }
-      throw err;
+      
+      throw new Error(error.message || 'فشل تسجيل الدخول');
     }
+    
+    if (!data?.user) {
+      throw new Error('فشل تسجيل الدخول - لا توجد بيانات مستخدم');
+    }
+
+    console.log('✅ تسجيل دخول GoTrue ناجح:', data.user.id);
+    
+    // حفظ هاش كلمة المرور في profiles لاستخدامه كـ fallback آمن لاحقاً
+    try {
+      const passwordHash = await hashPassword(password);
+      await supabase.from('profiles').update({
+        temp_password_hash: passwordHash,
+        temp_password_set_at: new Date().toISOString()
+      }).eq('id', data.user.id);
+    } catch { /* تجاهل - ليس حرجاً */ }
+
+    // جلب بيانات الموظف من profiles
+    const { data: profile } = await supabase.from('profiles').select('*').eq('id', data.user.id).maybeSingle();
+    if (profile) {
+      setCurrentUser(profile);
+    } else {
+      const emp = EMPLOYEES_DATA[e];
+      setCurrentUser({ 
+        id: data.user.id, 
+        email: e, 
+        name: emp?.name || e.split('@')[0], 
+        role: emp?.role || 'PR_MANAGER' 
+      });
+    }
+    
+    // حذف الجلسة الاحتياطية إذا نجح GoTrue
+    localStorage.removeItem('dar_secure_session');
+    
+    return data;
   };
 
   const logout = async () => {
@@ -425,7 +446,8 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (supabase && supabase.auth) await supabase.auth.signOut();
     } catch (e) { /* ignore */ }
 
-    // حذف جميع جلسات Supabase وجلسة الوضع الاحتياطي
+    // حذف جميع جلسات Supabase والجلسة الاحتياطية الآمنة
+    localStorage.removeItem('dar_secure_session');
     localStorage.removeItem('dar_demo_session');
     const keysToDelete = Object.keys(localStorage).filter(key => 
       key.includes('supabase') || key.includes('auth') || key.includes('sb-')
