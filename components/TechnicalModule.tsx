@@ -347,7 +347,7 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
 
   const updateStatus = async (newStatus: string, reason?: string) => {
     if (!activeRequest?.id) return;
-    if (!canApproveWorkflowRequest(currentUser?.name, activeRequest.assigned_to)) {
+    if (!canApproveWorkflowRequest(currentUser?.name, activeRequest.assigned_to, currentUser?.email, currentUser?.role)) {
       alert('تحديث الحالة متاح فقط للمسؤول المباشر المعين على الطلب');
       return;
     }

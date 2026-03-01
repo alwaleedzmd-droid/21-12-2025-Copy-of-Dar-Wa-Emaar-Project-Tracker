@@ -115,7 +115,7 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
         return DEEDS_WORKFLOW_REQUEST_TYPE_OPTIONS.find((option) => option.value === requestType)?.label || 'طلب إفراغ صك';
     };
 
-    const isAuthorizedToManage = canApproveWorkflowRequest(currentUserName, selectedDeed?.assigned_to);
+    const isAuthorizedToManage = canApproveWorkflowRequest(currentUserName, selectedDeed?.assigned_to, currentUser?.email, currentUserRole || currentUser?.role);
 
     /**
      * إرسال إشعار ذكي حسب دور المرسل:

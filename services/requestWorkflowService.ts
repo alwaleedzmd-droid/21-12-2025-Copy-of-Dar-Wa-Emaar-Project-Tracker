@@ -72,14 +72,29 @@ export const getWorkflowRoute = async (requestType: WorkflowRequestType): Promis
           if (!Array.isArray(assignedToEmails)) assignedToEmails = [localMatch.assigned_to];
         } catch { assignedToEmails = [localMatch.assigned_to]; }
 
+        // تحويل أول إيميل إلى اسم عبر profiles
+        let assigneeName = assignedToEmails[0] || '';
+        if (assigneeName && assigneeName.includes('@')) {
+          try {
+            const { data: profileData } = await supabase
+              .from('profiles')
+              .select('name')
+              .eq('email', assigneeName)
+              .maybeSingle();
+            if (profileData?.name) {
+              assigneeName = profileData.name;
+            }
+          } catch { /* تجاهل - نستخدم الإيميل كاسم احتياطي */ }
+        }
+
         const ccEmails = localMatch.cc_list ? localMatch.cc_list.split(',').map((e: string) => e.trim()) : [];
         const notifyRoles = localMatch.notify_roles 
           ? localMatch.notify_roles.split(',').map((r: string) => r.trim() as UserRole)
           : ['ADMIN'];
 
-        console.log('📦 سير الموافقة من التخزين المحلي:', requestType);
+        console.log('📦 سير الموافقة من التخزين المحلي:', requestType, '→', assigneeName);
         return {
-          assigneeName: assignedToEmails[0] || '',
+          assigneeName,
           ccLabel: ccEmails.join(' + ') || '-',
           notifyRoles,
           assignedToEmails
@@ -166,7 +181,43 @@ export const getWorkflowRoute = async (requestType: WorkflowRequestType): Promis
   }
 };
 
-export const DIRECT_APPROVERS = ['صالح اليحيى', 'الوليد الدوسري', 'نورة المالكي'];
+/**
+ * جلب جميع أسماء وإيميلات المسؤولين المباشرين من سير الموافقات المحفوظة
+ * يبحث في localStorage ثم القيم الافتراضية
+ */
+const getAllApproverEmails = (): string[] => {
+  const emails = new Set<string>();
+
+  // 1. من التخزين المحلي (أحدث بيانات)
+  try {
+    const localData = localStorage.getItem('dar_workflow_routes');
+    if (localData) {
+      const routes = JSON.parse(localData);
+      for (const route of routes) {
+        if (!route.is_active) continue;
+        try {
+          const assignedEmails = JSON.parse(route.assigned_to);
+          if (Array.isArray(assignedEmails)) {
+            assignedEmails.forEach((e: string) => emails.add(e.toLowerCase().trim()));
+          } else {
+            emails.add(String(route.assigned_to).toLowerCase().trim());
+          }
+        } catch {
+          emails.add(String(route.assigned_to).toLowerCase().trim());
+        }
+      }
+    }
+  } catch { /* تجاهل */ }
+
+  // 2. من القيم الافتراضية
+  for (const route of Object.values(WORKFLOW_ROUTES)) {
+    if (route.assignedToEmails) {
+      route.assignedToEmails.forEach(e => emails.add(e.toLowerCase().trim()));
+    }
+  }
+
+  return Array.from(emails);
+};
 
 const TECHNICAL_ALIASES = [
   'إصدار رخصة',
@@ -187,7 +238,40 @@ export const normalizeWorkflowType = (value?: string): WorkflowRequestType => {
   return 'TECHNICAL_SECTION';
 };
 
-export const canApproveWorkflowRequest = (currentUserName?: string, assignedTo?: string) => {
-  if (!currentUserName || !assignedTo) return false;
-  return DIRECT_APPROVERS.includes(currentUserName) && currentUserName === assignedTo;
+/**
+ * التحقق من صلاحية المستخدم للموافقة/الرفض على طلب
+ * المسؤول المباشر = اسم المستخدم يطابق assigned_to في الطلب
+ * أي شخص مضاف في سير الموافقات يصبح مسؤول مباشر عندما يكون معين على الطلب
+ */
+export const canApproveWorkflowRequest = (
+  currentUserName?: string, 
+  assignedTo?: string,
+  currentUserEmail?: string,
+  currentUserRole?: string
+) => {
+  console.log('🔍 canApproveWorkflowRequest:', { currentUserName, assignedTo, currentUserEmail, currentUserRole });
+  if (!assignedTo) return false;
+  
+  // المدير يقدر يوافق دائماً
+  if (currentUserRole === 'ADMIN') return true;
+  
+  // المسؤول المباشر: اسم المستخدم يطابق المعين على الطلب
+  if (currentUserName && currentUserName === assignedTo) return true;
+
+  // مقارنة بالإيميل (احتياط: لو assigned_to مخزن كإيميل)
+  if (currentUserEmail && assignedTo.includes('@')) {
+    if (currentUserEmail.toLowerCase() === assignedTo.toLowerCase()) return true;
+  }
+
+  return false;
+};
+
+/**
+ * التحقق المتقدم: هل المستخدم من ضمن المسؤولين في أي سير موافقة
+ * (يستخدم للعرض أو التحقق الإضافي)
+ */
+export const isWorkflowApprover = (currentUserEmail?: string): boolean => {
+  if (!currentUserEmail) return false;
+  const approverEmails = getAllApproverEmails();
+  return approverEmails.includes(currentUserEmail.toLowerCase().trim());
 };

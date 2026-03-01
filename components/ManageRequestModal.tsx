@@ -224,7 +224,7 @@ const ManageRequestModal: React.FC<ManageRequestModalProps> = ({
 
   if (!request) return null;
 
-  const isDirectApprover = canApproveWorkflowRequest(currentUser?.name, (request as TechnicalRequest)?.assigned_to);
+  const isDirectApprover = canApproveWorkflowRequest(currentUser?.name, (request as TechnicalRequest)?.assigned_to, currentUser?.email, currentUser?.role);
   const statusInfo = getStatusInfo(currentStatus);
 
   return (
