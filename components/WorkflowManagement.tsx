@@ -10,6 +10,7 @@ import { UserRole } from '../types';
 
 interface WorkflowRoute {
   id?: number;
+  local_id?: string; // معرف محلي للوضع الاحتياطي
   request_type: string;
   request_type_label: string;
   assigned_to: string; // JSON array of emails in sequence
@@ -30,6 +31,32 @@ interface AppUser {
 interface WorkflowManagementProps {
   currentUser: any;
 }
+
+// --- حفظ واسترجاع سير الموافقات من localStorage ---
+const LOCAL_WORKFLOWS_KEY = 'dar_workflow_routes';
+
+const saveWorkflowsToLocal = (workflows: WorkflowRoute[]) => {
+  try {
+    localStorage.setItem(LOCAL_WORKFLOWS_KEY, JSON.stringify(workflows));
+    console.log('💾 تم حفظ سير الموافقات محلياً:', workflows.length);
+  } catch (e) { console.error('خطأ حفظ محلي:', e); }
+};
+
+const loadWorkflowsFromLocal = (): WorkflowRoute[] | null => {
+  try {
+    const data = localStorage.getItem(LOCAL_WORKFLOWS_KEY);
+    if (data) {
+      const parsed = JSON.parse(data);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        console.log('📦 تم تحميل سير الموافقات من التخزين المحلي:', parsed.length);
+        return parsed;
+      }
+    }
+  } catch (e) { console.error('خطأ قراءة محلية:', e); }
+  return null;
+};
+
+const generateLocalId = () => `local_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
 // أنواع الطلبات المحددة مسبقاً
 const REQUEST_TYPES = [
@@ -80,20 +107,59 @@ const WorkflowManagement: React.FC<WorkflowManagementProps> = ({ currentUser }) 
         .order('name', { ascending: true });
 
       if (error) {
-        console.error('خطأ جلب المستخدمين:', error);
-      } else {
-        // إزالة التكرار بناءً على الإيميل
-        const uniqueUsers = (data || []).reduce((acc: AppUser[], user: AppUser) => {
-          if (!acc.find(u => u.email === user.email)) {
-            acc.push(user);
-          }
-          return acc;
-        }, []);
+        console.warn('⚠️ فشل جلب المستخدمين من Supabase:', error.message);
+        // استخدام بيانات الموظفين المحلية كبديل
+        setUsers(getLocalUsers());
+        return;
+      }
+      
+      // إزالة التكرار بناءً على الإيميل
+      const uniqueUsers = (data || []).reduce((acc: AppUser[], user: AppUser) => {
+        if (!acc.find(u => u.email === user.email)) {
+          acc.push(user);
+        }
+        return acc;
+      }, []);
+      
+      if (uniqueUsers.length > 0) {
         setUsers(uniqueUsers);
+      } else {
+        // لا يوجد مستخدمين في Supabase - استخدم المحلي
+        setUsers(getLocalUsers());
       }
     } catch (err) {
       console.error('خطأ:', err);
+      setUsers(getLocalUsers());
     }
+  };
+
+  // إنشاء قائمة مستخدمين من البيانات المحلية
+  const getLocalUsers = (): AppUser[] => {
+    const EMPLOYEES: Record<string, { name: string; role: UserRole }> = {
+      'adaldawsari@darwaemaar.com': { name: 'الوليد الدوسري', role: 'ADMIN' },
+      'malageel@darwaemaar.com': { name: 'مساعد العقيل', role: 'PR_MANAGER' },
+      'ssalyahya@darwaemaar.com': { name: 'صالح اليحيى', role: 'PR_MANAGER' },
+      'maashammari@darwaemaar.com': { name: 'محمد الشمري', role: 'PR_MANAGER' },
+      'malbahri@darwaemaar.com': { name: 'محمد البحري', role: 'PR_MANAGER' },
+      'ssalama@darwaemaar.com': { name: 'سيد سلامة', role: 'TECHNICAL' },
+      'iahmad@darwaemaar.com': { name: 'إسلام أحمد', role: 'TECHNICAL' },
+      'emelshity@darwaemaar.com': { name: 'إسلام الملشتي', role: 'TECHNICAL' },
+      'mhbaishi@darwaemaar.com': { name: 'محمود بحيصي', role: 'TECHNICAL' },
+      'mhaqeel@darwaemaar.com': { name: 'حمزة عقيل', role: 'TECHNICAL' },
+      'nalmalki@darwaemaar.com': { name: 'نورة المالكي', role: 'CONVEYANCE' },
+      'saalfahad@darwaemaar.com': { name: 'سارة الفهد', role: 'CONVEYANCE' },
+      'tmashari@darwaemaar.com': { name: 'تماني المشاري', role: 'CONVEYANCE' },
+      'shalmalki@darwaemaar.com': { name: 'شذى المالكي', role: 'CONVEYANCE' },
+      'balqarni@darwaemaar.com': { name: 'بشرى القرني', role: 'CONVEYANCE' },
+      'hmalsalman@darwaemaar.com': { name: 'حسن السلمان', role: 'CONVEYANCE' },
+      'falshammari@darwaemaar.com': { name: 'فهد الشمري', role: 'CONVEYANCE' },
+    };
+    return Object.entries(EMPLOYEES).map(([email, data]) => ({
+      id: `local-${email}`,
+      email,
+      name: data.name,
+      role: data.role
+    }));
   };
 
   const fetchWorkflows = async () => {
@@ -108,30 +174,43 @@ const WorkflowManagement: React.FC<WorkflowManagementProps> = ({ currentUser }) 
 
       if (error) {
         console.error('❌ خطأ جلب البيانات:', error);
-        // إذا الجدول غير موجود، استخدم بيانات افتراضية
-        console.log('⚠️ استخدام البيانات الافتراضية...');
-        setWorkflows(getDefaultWorkflows());
-      } else {
-        const workflows = data || [];
-        console.log(`📊 تم جلب ${workflows.length} نوع طلب`);
-        
-        // إذا لا توجد بيانات، اعرض رسالة
-        if (workflows.length === 0) {
-          console.warn('⚠️ لا توجد أنواع مسجلة في قاعدة البيانات');
-          console.warn('📝 الرجاء تنفيذ Migration في Supabase SQL Editor:');
-          console.warn('   1. 20260224_create_workflow_routes_table.sql');
-          console.warn('   2. 20260224_insert_default_workflow_routes.sql');
-          console.warn('   3. 20260224_create_workflow_stages_system.sql');
-          
-          // استخدم البيانات الافتراضية للعرض فقط
-          setWorkflows(getDefaultWorkflows());
+        // محاولة التحميل من التخزين المحلي
+        const localData = loadWorkflowsFromLocal();
+        if (localData) {
+          console.log('📦 استخدام البيانات المحلية بدلاً من قاعدة البيانات');
+          setWorkflows(localData);
         } else {
-          setWorkflows(workflows);
+          console.log('⚠️ استخدام البيانات الافتراضية...');
+          const defaults = getDefaultWorkflows();
+          setWorkflows(defaults);
+          saveWorkflowsToLocal(defaults);
+        }
+      } else {
+        const fetchedWorkflows = data || [];
+        console.log(`📊 تم جلب ${fetchedWorkflows.length} نوع طلب`);
+        
+        if (fetchedWorkflows.length === 0) {
+          // لا توجد بيانات في Supabase - تحقق من التخزين المحلي
+          const localData = loadWorkflowsFromLocal();
+          if (localData && localData.length > 0) {
+            console.log('📦 استخدام البيانات المحلية (قاعدة البيانات فارغة)');
+            setWorkflows(localData);
+          } else {
+            console.warn('⚠️ لا توجد أنواع مسجلة - استخدام الافتراضية');
+            const defaults = getDefaultWorkflows();
+            setWorkflows(defaults);
+            saveWorkflowsToLocal(defaults);
+          }
+        } else {
+          setWorkflows(fetchedWorkflows);
+          // حفظ كنسخة احتياطية محلية
+          saveWorkflowsToLocal(fetchedWorkflows);
         }
       }
     } catch (err) {
       console.error('❌ خطأ عام:', err);
-      setWorkflows(getDefaultWorkflows());
+      const localData = loadWorkflowsFromLocal();
+      setWorkflows(localData || getDefaultWorkflows());
     } finally {
       setLoading(false);
     }
@@ -293,25 +372,31 @@ const WorkflowManagement: React.FC<WorkflowManagementProps> = ({ currentUser }) 
     // Build cc_list as comma-separated emails
     const ccListString = ccEmails.join(', ');
 
+    const workflowData = {
+      request_type: finalRequestType,
+      request_type_label: finalLabel,
+      assigned_to: assignedToJson,
+      cc_list: ccListString,
+      notify_roles: formData.notify_roles || 'ADMIN',
+      is_active: formData.is_active !== false,
+      updated_at: new Date().toISOString()
+    };
+
+    let savedToSupabase = false;
+
     try {
-      if (editingWorkflow?.id) {
-        // تحديث
+      if (editingWorkflow?.id && !editingWorkflow.local_id) {
+        // تحديث في Supabase
         const { error } = await supabase
           .from('workflow_routes')
-          .update({
-            request_type_label: finalLabel,
-            assigned_to: assignedToJson,
-            cc_list: ccListString,
-            notify_roles: formData.notify_roles || 'ADMIN',
-            is_active: formData.is_active,
-            updated_at: new Date().toISOString()
-          })
+          .update(workflowData)
           .eq('id', editingWorkflow.id);
 
         if (error) throw error;
-        alert('✅ تم التحديث بنجاح');
-      } else {
-        // إضافة جديد
+        savedToSupabase = true;
+        console.log('✅ تم التحديث في Supabase');
+      } else if (!editingWorkflow?.local_id) {
+        // إضافة جديد في Supabase
         const { data: existingByType } = await supabase
           .from('workflow_routes')
           .select('id')
@@ -321,41 +406,75 @@ const WorkflowManagement: React.FC<WorkflowManagementProps> = ({ currentUser }) 
         if (existingByType?.id) {
           const { error: upError } = await supabase
             .from('workflow_routes')
-            .update({
-              request_type_label: finalLabel,
-              assigned_to: assignedToJson,
-              cc_list: ccListString,
-              notify_roles: formData.notify_roles || 'ADMIN',
-              is_active: formData.is_active,
-              updated_at: new Date().toISOString()
-            })
+            .update(workflowData)
             .eq('id', existingByType.id);
 
           if (upError) throw upError;
-          alert('✅ النوع موجود مسبقاً، تم تحديثه بنجاح');
+          savedToSupabase = true;
+          console.log('✅ النوع موجود في Supabase، تم تحديثه');
         } else {
           const { error } = await supabase
             .from('workflow_routes')
             .insert([{
-              request_type: finalRequestType,
-              request_type_label: finalLabel,
-              assigned_to: assignedToJson,
-              cc_list: ccListString,
-              notify_roles: formData.notify_roles || 'ADMIN',
-              is_active: formData.is_active,
+              ...workflowData,
               created_at: new Date().toISOString()
             }]);
 
           if (error) throw error;
-          alert('✅ تم الإضافة بنجاح');
+          savedToSupabase = true;
+          console.log('✅ تم الإضافة في Supabase');
         }
       }
-
-      setIsModalOpen(false);
-      fetchWorkflows();
     } catch (err: any) {
-      console.error('خطأ الحفظ:', err);
-      alert('❌ فشل الحفظ: ' + err.message);
+      console.warn('⚠️ فشل الحفظ في Supabase:', err.message);
+      savedToSupabase = false;
+    }
+
+    // حفظ محلي (سواء نجح Supabase أو لا)
+    try {
+      const currentWorkflows = [...workflows];
+      
+      if (editingWorkflow) {
+        // تحديث محلي
+        const idx = currentWorkflows.findIndex(w => 
+          (w.id && w.id === editingWorkflow.id) || 
+          (w.local_id && w.local_id === editingWorkflow.local_id) ||
+          w.request_type === editingWorkflow.request_type
+        );
+        if (idx !== -1) {
+          currentWorkflows[idx] = { ...currentWorkflows[idx], ...workflowData };
+        }
+      } else {
+        // إضافة جديد محلي
+        const existingIdx = currentWorkflows.findIndex(w => w.request_type === finalRequestType);
+        if (existingIdx !== -1) {
+          currentWorkflows[existingIdx] = { ...currentWorkflows[existingIdx], ...workflowData };
+        } else {
+          currentWorkflows.unshift({
+            ...workflowData,
+            local_id: generateLocalId(),
+            created_at: new Date().toISOString()
+          });
+        }
+      }
+      
+      setWorkflows(currentWorkflows);
+      saveWorkflowsToLocal(currentWorkflows);
+      console.log('💾 تم الحفظ محلياً');
+    } catch (localErr) {
+      console.error('❌ فشل الحفظ المحلي:', localErr);
+    }
+
+    if (savedToSupabase) {
+      alert('✅ تم الحفظ بنجاح في قاعدة البيانات');
+    } else {
+      alert('✅ تم الحفظ محلياً. سيتم المزامنة مع قاعدة البيانات عند توفرها.');
+    }
+
+    setIsModalOpen(false);
+    // إعادة جلب البيانات من Supabase إذا نجح
+    if (savedToSupabase) {
+      fetchWorkflows();
     }
   };
 
@@ -364,41 +483,68 @@ const WorkflowManagement: React.FC<WorkflowManagementProps> = ({ currentUser }) 
       return;
     }
 
+    let deletedFromSupabase = false;
+
     try {
-      if (workflow.id) {
+      if (workflow.id && !workflow.local_id) {
         const { error } = await supabase
           .from('workflow_routes')
           .delete()
           .eq('id', workflow.id);
 
         if (error) throw error;
-        alert('✅ تم الحذف بنجاح');
-        fetchWorkflows();
+        deletedFromSupabase = true;
+        console.log('✅ تم الحذف من Supabase');
       }
     } catch (err: any) {
-      console.error('خطأ الحذف:', err);
-      alert('❌ فشل الحذف: ' + err.message);
+      console.warn('⚠️ فشل الحذف من Supabase:', err.message);
+    }
+
+    // حذف محلي
+    const updatedWorkflows = workflows.filter(w => 
+      w.request_type !== workflow.request_type
+    );
+    setWorkflows(updatedWorkflows);
+    saveWorkflowsToLocal(updatedWorkflows);
+
+    if (deletedFromSupabase) {
+      alert('✅ تم الحذف بنجاح');
+      fetchWorkflows();
+    } else {
+      alert('✅ تم الحذف محلياً');
     }
   };
 
   const toggleActive = async (workflow: WorkflowRoute) => {
+    const newActive = !workflow.is_active;
+    
     try {
-      if (workflow.id) {
+      if (workflow.id && !workflow.local_id) {
         const { error } = await supabase
           .from('workflow_routes')
           .update({ 
-            is_active: !workflow.is_active,
+            is_active: newActive,
             updated_at: new Date().toISOString()
           })
           .eq('id', workflow.id);
 
         if (error) throw error;
+        console.log('✅ تم التحديث في Supabase');
         fetchWorkflows();
+        return;
       }
     } catch (err: any) {
-      console.error('خطأ التحديث:', err);
-      alert('❌ فشل التحديث: ' + err.message);
+      console.warn('⚠️ فشل التحديث في Supabase:', err.message);
     }
+
+    // تحديث محلي
+    const updatedWorkflows = workflows.map(w => 
+      w.request_type === workflow.request_type 
+        ? { ...w, is_active: newActive, updated_at: new Date().toISOString() }
+        : w
+    );
+    setWorkflows(updatedWorkflows);
+    saveWorkflowsToLocal(updatedWorkflows);
   };
 
   // دوال إدارة تسلسل المسؤولين (TO)

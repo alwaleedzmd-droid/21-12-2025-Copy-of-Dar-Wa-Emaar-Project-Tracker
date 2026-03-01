@@ -8,6 +8,7 @@ import Modal from './Modal';
 
 interface WorkflowStage {
   id?: number;
+  local_id?: string;
   workflow_route_id: number;
   stage_order: number;
   stage_title: string;
@@ -23,6 +24,29 @@ interface WorkflowStageManagerProps {
   workflowLabel: string;
   onClose: () => void;
 }
+
+// --- حفظ واسترجاع المراحل من localStorage ---
+const getStagesLocalKey = (routeId: number) => `dar_workflow_stages_${routeId}`;
+
+const saveStagesToLocal = (routeId: number, stages: WorkflowStage[]) => {
+  try {
+    localStorage.setItem(getStagesLocalKey(routeId), JSON.stringify(stages));
+    console.log('💾 تم حفظ المراحل محلياً:', stages.length);
+  } catch (e) { console.error('خطأ حفظ محلي:', e); }
+};
+
+const loadStagesFromLocal = (routeId: number): WorkflowStage[] | null => {
+  try {
+    const data = localStorage.getItem(getStagesLocalKey(routeId));
+    if (data) {
+      const parsed = JSON.parse(data);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch (e) { console.error('خطأ قراءة:', e); }
+  return null;
+};
+
+const generateStageLocalId = () => `stage_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
 const WorkflowStageManager: React.FC<WorkflowStageManagerProps> = ({ 
   workflowRouteId, 
@@ -56,10 +80,22 @@ const WorkflowStageManager: React.FC<WorkflowStageManagerProps> = ({
         .eq('workflow_route_id', workflowRouteId)
         .order('stage_order', { ascending: true });
 
-      if (error) throw error;
-      setStages(data || []);
+      if (error) {
+        console.warn('⚠️ فشل جلب المراحل من Supabase:', error.message);
+        const localStages = loadStagesFromLocal(workflowRouteId);
+        setStages(localStages || []);
+      } else if ((data || []).length > 0) {
+        setStages(data!);
+        saveStagesToLocal(workflowRouteId, data!);
+      } else {
+        // لا مراحل في Supabase - تحقق محلياً
+        const localStages = loadStagesFromLocal(workflowRouteId);
+        setStages(localStages || []);
+      }
     } catch (err) {
       console.error('خطأ جلب المراحل:', err);
+      const localStages = loadStagesFromLocal(workflowRouteId);
+      setStages(localStages || []);
     } finally {
       setLoading(false);
     }
@@ -99,49 +135,80 @@ const WorkflowStageManager: React.FC<WorkflowStageManagerProps> = ({
       return;
     }
 
+    const stageData = {
+      workflow_route_id: workflowRouteId,
+      stage_order: formData.stage_order || stages.length + 1,
+      stage_title: formData.stage_title!,
+      stage_description: formData.stage_description || '',
+      responsible_party: formData.responsible_party!,
+      platform_name: formData.platform_name || '',
+      expected_output: formData.expected_output || '',
+      is_active: formData.is_active !== false
+    };
+
+    let savedToSupabase = false;
+
     try {
-      if (editingStage?.id) {
-        // تحديث
+      if (editingStage?.id && !editingStage.local_id) {
+        // تحديث في Supabase
         const { error } = await supabase
           .from('workflow_stages')
-          .update({
-            stage_order: formData.stage_order,
-            stage_title: formData.stage_title,
-            stage_description: formData.stage_description,
-            responsible_party: formData.responsible_party,
-            platform_name: formData.platform_name,
-            expected_output: formData.expected_output,
-            is_active: formData.is_active
-          })
+          .update(stageData)
           .eq('id', editingStage.id);
 
         if (error) throw error;
-        alert('✅ تم التحديث بنجاح');
-      } else {
-        // إضافة
+        savedToSupabase = true;
+        console.log('✅ تم تحديث المرحلة في Supabase');
+      } else if (!editingStage?.local_id) {
+        // إضافة في Supabase
         const { error } = await supabase
           .from('workflow_stages')
-          .insert([{
-            workflow_route_id: workflowRouteId,
-            stage_order: formData.stage_order,
-            stage_title: formData.stage_title,
-            stage_description: formData.stage_description,
-            responsible_party: formData.responsible_party,
-            platform_name: formData.platform_name,
-            expected_output: formData.expected_output,
-            is_active: formData.is_active
-          }]);
+          .insert([stageData]);
 
         if (error) throw error;
-        alert('✅ تم الإضافة بنجاح');
+        savedToSupabase = true;
+        console.log('✅ تم إضافة المرحلة في Supabase');
       }
-
-      setIsModalOpen(false);
-      fetchStages();
     } catch (err: any) {
-      console.error('خطأ الحفظ:', err);
-      alert('❌ فشل الحفظ: ' + err.message);
+      console.warn('⚠️ فشل الحفظ في Supabase:', err.message);
     }
+
+    // حفظ محلي
+    try {
+      let currentStages = [...stages];
+      
+      if (editingStage) {
+        const idx = currentStages.findIndex(s => 
+          (s.id && s.id === editingStage.id) || 
+          (s.local_id && s.local_id === editingStage.local_id)
+        );
+        if (idx !== -1) {
+          currentStages[idx] = { ...currentStages[idx], ...stageData };
+        }
+      } else {
+        currentStages.push({
+          ...stageData,
+          local_id: generateStageLocalId()
+        } as WorkflowStage);
+      }
+      
+      // ترتيب حسب stage_order
+      currentStages.sort((a, b) => a.stage_order - b.stage_order);
+      
+      setStages(currentStages);
+      saveStagesToLocal(workflowRouteId, currentStages);
+    } catch (localErr) {
+      console.error('خطأ حفظ محلي:', localErr);
+    }
+
+    if (savedToSupabase) {
+      alert('✅ تم الحفظ بنجاح');
+      fetchStages(); // إعادة جلب من Supabase
+    } else {
+      alert('✅ تم الحفظ محلياً');
+    }
+    
+    setIsModalOpen(false);
   };
 
   const handleDelete = async (stage: WorkflowStage) => {
@@ -149,20 +216,34 @@ const WorkflowStageManager: React.FC<WorkflowStageManagerProps> = ({
       return;
     }
 
+    let deletedFromSupabase = false;
+
     try {
-      if (stage.id) {
+      if (stage.id && !stage.local_id) {
         const { error } = await supabase
           .from('workflow_stages')
           .delete()
           .eq('id', stage.id);
 
         if (error) throw error;
-        alert('✅ تم الحذف بنجاح');
-        fetchStages();
+        deletedFromSupabase = true;
       }
     } catch (err: any) {
-      console.error('خطأ الحذف:', err);
-      alert('❌ فشل الحذف: ' + err.message);
+      console.warn('⚠️ فشل الحذف من Supabase:', err.message);
+    }
+
+    // حذف محلي
+    const updatedStages = stages.filter(s => 
+      !((s.id && s.id === stage.id) || (s.local_id && s.local_id === stage.local_id))
+    );
+    setStages(updatedStages);
+    saveStagesToLocal(workflowRouteId, updatedStages);
+
+    if (deletedFromSupabase) {
+      alert('✅ تم الحذف بنجاح');
+      fetchStages();
+    } else {
+      alert('✅ تم الحذف محلياً');
     }
   };
 
@@ -170,21 +251,35 @@ const WorkflowStageManager: React.FC<WorkflowStageManagerProps> = ({
     if (index === 0) return;
     
     const prevStage = stages[index - 1];
+    const newStages = [...stages];
     
+    // تبديل الترتيب
+    const tempOrder = newStages[index].stage_order;
+    newStages[index] = { ...newStages[index], stage_order: newStages[index - 1].stage_order };
+    newStages[index - 1] = { ...newStages[index - 1], stage_order: tempOrder };
+    
+    // ترتيب المصفوفة
+    newStages.sort((a, b) => a.stage_order - b.stage_order);
+    
+    // حفظ محلي فوري
+    setStages(newStages);
+    saveStagesToLocal(workflowRouteId, newStages);
+    
+    // محاولة حفظ في Supabase
     try {
-      await supabase
-        .from('workflow_stages')
-        .update({ stage_order: stage.stage_order })
-        .eq('id', prevStage.id!);
+      if (prevStage.id && stage.id && !prevStage.local_id && !stage.local_id) {
+        await supabase
+          .from('workflow_stages')
+          .update({ stage_order: stage.stage_order })
+          .eq('id', prevStage.id);
 
-      await supabase
-        .from('workflow_stages')
-        .update({ stage_order: prevStage.stage_order })
-        .eq('id', stage.id!);
-
-      fetchStages();
+        await supabase
+          .from('workflow_stages')
+          .update({ stage_order: prevStage.stage_order })
+          .eq('id', stage.id);
+      }
     } catch (err) {
-      console.error('خطأ في تغيير الترتيب:', err);
+      console.warn('⚠️ فشل تحديث الترتيب في Supabase:', err);
     }
   };
 
@@ -192,21 +287,35 @@ const WorkflowStageManager: React.FC<WorkflowStageManagerProps> = ({
     if (index === stages.length - 1) return;
     
     const nextStage = stages[index + 1];
+    const newStages = [...stages];
     
+    // تبديل الترتيب
+    const tempOrder = newStages[index].stage_order;
+    newStages[index] = { ...newStages[index], stage_order: newStages[index + 1].stage_order };
+    newStages[index + 1] = { ...newStages[index + 1], stage_order: tempOrder };
+    
+    // ترتيب المصفوفة
+    newStages.sort((a, b) => a.stage_order - b.stage_order);
+    
+    // حفظ محلي فوري
+    setStages(newStages);
+    saveStagesToLocal(workflowRouteId, newStages);
+    
+    // محاولة حفظ في Supabase
     try {
-      await supabase
-        .from('workflow_stages')
-        .update({ stage_order: stage.stage_order })
-        .eq('id', nextStage.id!);
+      if (nextStage.id && stage.id && !nextStage.local_id && !stage.local_id) {
+        await supabase
+          .from('workflow_stages')
+          .update({ stage_order: stage.stage_order })
+          .eq('id', nextStage.id);
 
-      await supabase
-        .from('workflow_stages')
-        .update({ stage_order: nextStage.stage_order })
-        .eq('id', stage.id!);
-
-      fetchStages();
+        await supabase
+          .from('workflow_stages')
+          .update({ stage_order: nextStage.stage_order })
+          .eq('id', stage.id);
+      }
     } catch (err) {
-      console.error('خطأ في تغيير الترتيب:', err);
+      console.warn('⚠️ فشل تحديث الترتيب في Supabase:', err);
     }
   };
 

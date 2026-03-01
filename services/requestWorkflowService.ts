@@ -54,11 +54,41 @@ export const WORKFLOW_ROUTES: Record<WorkflowRequestType, WorkflowRoute> = {
 };
 
 /**
- * جلب سير الموافقات من قاعدة البيانات
+ * جلب سير الموافقات من قاعدة البيانات أو التخزين المحلي
  * @param requestType نوع الطلب
  * @returns تفاصيل سير الموافقة أو القيمة الافتراضية
  */
 export const getWorkflowRoute = async (requestType: WorkflowRequestType): Promise<WorkflowRoute> => {
+  // 1. محاولة جلب من التخزين المحلي أولاً (أحدث بيانات)
+  try {
+    const localData = localStorage.getItem('dar_workflow_routes');
+    if (localData) {
+      const localWorkflows = JSON.parse(localData);
+      const localMatch = localWorkflows.find((w: any) => w.request_type === requestType && w.is_active);
+      if (localMatch) {
+        let assignedToEmails: string[] = [];
+        try {
+          assignedToEmails = JSON.parse(localMatch.assigned_to);
+          if (!Array.isArray(assignedToEmails)) assignedToEmails = [localMatch.assigned_to];
+        } catch { assignedToEmails = [localMatch.assigned_to]; }
+
+        const ccEmails = localMatch.cc_list ? localMatch.cc_list.split(',').map((e: string) => e.trim()) : [];
+        const notifyRoles = localMatch.notify_roles 
+          ? localMatch.notify_roles.split(',').map((r: string) => r.trim() as UserRole)
+          : ['ADMIN'];
+
+        console.log('📦 سير الموافقة من التخزين المحلي:', requestType);
+        return {
+          assigneeName: assignedToEmails[0] || '',
+          ccLabel: ccEmails.join(' + ') || '-',
+          notifyRoles,
+          assignedToEmails
+        };
+      }
+    }
+  } catch (e) { /* تجاهل */ }
+
+  // 2. محاولة جلب من Supabase
   try {
     const { data: rows, error } = await supabase
       .from('workflow_routes')

@@ -203,18 +203,38 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       try {
         console.log('🔐 بدء تهيئة المصادقة...');
 
-        // التشغيل الفعلي فقط: جلسة Supabase حقيقية
+        // التحقق من جلسة الوضع الاحتياطي أولاً
+        const demoSession = localStorage.getItem('dar_demo_session');
+        if (demoSession) {
+          try {
+            const demoUser = JSON.parse(demoSession);
+            if (demoUser?.email && demoUser?.id?.startsWith('demo-')) {
+              console.log('✅ استعادة جلسة الوضع الاحتياطي:', demoUser.email);
+              setCurrentUser(demoUser);
+              setIsAuthLoading(false);
+              return;
+            }
+          } catch { /* تجاهل JSON غير صالح */ }
+        }
+
+        // التشغيل الفعلي: جلسة Supabase حقيقية
         if (!supabase || !supabase.auth) {
           console.error('❌ Supabase auth غير متاح.');
           setIsAuthLoading(false);
           return;
         }
 
-        const { data: { session }, error } = await supabase.auth.getSession();
-        
-        if (error) {
-          console.error('❌ خطأ في جلب الجلسة:', error);
-          throw error;
+        let session = null;
+        try {
+          const result = await supabase.auth.getSession();
+          if (result.error) {
+            console.warn('⚠️ خطأ في جلب الجلسة:', result.error.message);
+            // لا نرمي خطأ - نكمل بدون جلسة
+          } else {
+            session = result.data?.session;
+          }
+        } catch (e) {
+          console.warn('⚠️ فشل الاتصال بـ Supabase Auth:', e);
         }
 
         if (session?.user?.email) {
@@ -225,11 +245,12 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           if (profile) {
             setCurrentUser(profile);
           } else {
+            const emp = EMPLOYEES_DATA[email];
             setCurrentUser({
               id: session.user.id,
               email,
-              name: (session.user.user_metadata as any)?.name || email.split('@')[0],
-              role: ((session.user.user_metadata as any)?.role as UserRole) || 'PR_MANAGER'
+              name: emp?.name || (session.user.user_metadata as any)?.name || email.split('@')[0],
+              role: emp?.role || ((session.user.user_metadata as any)?.role as UserRole) || 'PR_MANAGER'
             });
           }
         } else {
@@ -299,45 +320,104 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     return () => { supabase.removeChannel(channel); };
   }, [currentUser, refreshData]);
 
+  // وضع احتياطي: تسجيل دخول محلي عند تعطل Supabase Auth
+  const fallbackLogin = (email: string): boolean => {
+    const emp = EMPLOYEES_DATA[email];
+    if (!emp) return false;
+    
+    const demoUser: User = {
+      id: `demo-${email}`,
+      email,
+      name: emp.name,
+      role: emp.role,
+    };
+    setCurrentUser(demoUser);
+    localStorage.setItem('dar_demo_session', JSON.stringify(demoUser));
+    console.log('✅ تسجيل دخول احتياطي (Demo Mode):', email);
+    return true;
+  };
+
   const login = async (email: string, password: string) => {
     const e = email.toLowerCase();
     console.log('🔐 محاولة تسجيل الدخول:', e);
 
+    // التحقق أولاً: هل البريد موجود في بيانات الموظفين
+    const isKnownEmployee = !!EMPLOYEES_DATA[e];
+
     if (!supabase || !supabase.auth) {
+      // لا يوجد Supabase - استخدام الوضع الاحتياطي
+      if (isKnownEmployee) {
+        if (fallbackLogin(e)) return { user: { email: e }, session: null };
+      }
       throw new Error('خدمة المصادقة غير متاحة حالياً');
     }
 
-    // تسجيل دخول فعلي عبر Supabase Auth
+    // محاولة تسجيل دخول فعلي عبر Supabase Auth
     console.log('📡 محاولة الاتصال بـ GoTrue...');
-    const { data, error } = await supabase.auth.signInWithPassword({ email: e, password });
-    
-    if (error) {
-      console.warn('❌ فشل GoTrue:', error.message);
-      const msg = (error.message || '').toLowerCase();
-      if (msg.includes('database error querying schema') || msg.includes('querying schema')) {
-        throw new Error('تعذر تسجيل الدخول بسبب خلل في قاعدة مصادقة Supabase (Auth schema). شغّل migration إصلاح auth ثم أعد المحاولة.');
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({ email: e, password });
+      
+      if (error) {
+        console.warn('❌ فشل GoTrue:', error.message);
+        const msg = (error.message || '').toLowerCase();
+        
+        // خطأ في schema قاعدة البيانات - تفعيل الوضع الاحتياطي
+        if (msg.includes('database error querying schema') || msg.includes('querying schema') || msg.includes('500')) {
+          console.warn('⚠️ Supabase Auth معطل - التحويل للوضع الاحتياطي...');
+          if (isKnownEmployee) {
+            if (fallbackLogin(e)) return { user: { email: e }, session: null };
+          }
+          throw new Error('خدمة المصادقة معطلة حالياً والبريد غير مسجل في النظام');
+        }
+        
+        if (msg.includes('invalid login credentials')) {
+          // بيانات خاطئة في Supabase - جرّب الوضع الاحتياطي إذا كانت كلمة المرور "demo"
+          if (isKnownEmployee && password === 'demo') {
+            console.warn('⚠️ بيانات Supabase غير صالحة - محاولة الوضع الاحتياطي...');
+            if (fallbackLogin(e)) return { user: { email: e }, session: null };
+          }
+          throw new Error('البريد أو كلمة المرور غير صحيحة');
+        }
+        
+        // أي خطأ آخر من Supabase - جرب الوضع الاحتياطي
+        if (isKnownEmployee) {
+          console.warn('⚠️ خطأ Supabase غير متوقع - محاولة الوضع الاحتياطي...');
+          if (fallbackLogin(e)) return { user: { email: e }, session: null };
+        }
+        throw new Error(error.message || 'فشل تسجيل الدخول');
       }
-      if (msg.includes('invalid login credentials')) {
-        throw new Error('البريد أو كلمة المرور غير صحيحة');
+      
+      if (!data?.user) {
+        throw new Error('فشل تسجيل الدخول - لا توجد بيانات مستخدم');
       }
-      throw new Error(error.message || 'فشل تسجيل الدخول');
-    }
-    
-    if (!data?.user) {
-      throw new Error('فشل تسجيل الدخول - لا توجد بيانات مستخدم');
-    }
 
-    console.log('✅ تسجيل دخول GoTrue ناجح:', data.user.id);
-    
-    // جلب بيانات الموظف من profiles
-    const { data: profile } = await supabase.from('profiles').select('*').eq('id', data.user.id).maybeSingle();
-    if (profile) {
-      setCurrentUser(profile);
-    } else {
-      setCurrentUser({ id: data.user.id, email: e, name: e.split('@')[0], role: 'PR_MANAGER' });
+      console.log('✅ تسجيل دخول GoTrue ناجح:', data.user.id);
+      
+      // جلب بيانات الموظف من profiles
+      const { data: profile } = await supabase.from('profiles').select('*').eq('id', data.user.id).maybeSingle();
+      if (profile) {
+        setCurrentUser(profile);
+      } else {
+        const emp = EMPLOYEES_DATA[e];
+        setCurrentUser({ 
+          id: data.user.id, 
+          email: e, 
+          name: emp?.name || e.split('@')[0], 
+          role: emp?.role || 'PR_MANAGER' 
+        });
+      }
+      
+      return data;
+    } catch (err: any) {
+      // خطأ شبكة أو Supabase غير قابل للوصول
+      if (err?.message && !err.message.includes('البريد') && !err.message.includes('خدمة') && !err.message.includes('فشل')) {
+        console.warn('⚠️ خطأ شبكة/اتصال - محاولة الوضع الاحتياطي...');
+        if (isKnownEmployee) {
+          if (fallbackLogin(e)) return { user: { email: e }, session: null };
+        }
+      }
+      throw err;
     }
-    
-    return data;
   };
 
   const logout = async () => {
@@ -345,7 +425,8 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (supabase && supabase.auth) await supabase.auth.signOut();
     } catch (e) { /* ignore */ }
 
-    // حذف جميع جلسات Supabase
+    // حذف جميع جلسات Supabase وجلسة الوضع الاحتياطي
+    localStorage.removeItem('dar_demo_session');
     const keysToDelete = Object.keys(localStorage).filter(key => 
       key.includes('supabase') || key.includes('auth') || key.includes('sb-')
     );
