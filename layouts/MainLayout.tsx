@@ -3,7 +3,8 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router';
 import { 
   LogOut, RefreshCw, Building2, 
-  Zap, FileStack, Menu, X, Users, BarChart3, KeyRound, Loader2, Eye, EyeOff, Settings, BookOpen
+  Zap, FileStack, Menu, X, Users, BarChart3, KeyRound, Loader2, Eye, EyeOff, Settings, BookOpen,
+  Map as MapIcon
 } from 'lucide-react';
 import { useData } from '../contexts/DataContext';
 import { DAR_LOGO } from '../constants';
@@ -191,6 +192,12 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
       icon: <Settings size={20} />, 
       path: '/workflow', 
       roles: ['ADMIN'] 
+    },
+    { 
+      label: 'الخريطة التفاعلية', 
+      icon: <MapIcon size={20} />, 
+      path: '/operations-map', 
+      roles: ['ADMIN', 'PR_MANAGER'] 
     },
     { 
       label: 'دليل النظام', 

@@ -1,6 +1,29 @@
+/**
+ * AIAssistant - المساعد الذكي الاستباقي (Proactive AI Analyst)
+ * ============================================================================
+ * محلل مخاطر واستشاري إداري يقرأ من DataContext ويقدم:
+ *  - ملخص قيادة تلقائي للمدير عند الفتح
+ *  - تحليل عنق الزجاجة واكتشاف التأخيرات
+ *  - التنبؤ بتأخير المشاريع
+ *  - تقارير أداء الموظفين
+ *  - ذاكرة تراكمية لكل موضوع
+ *  - إشعارات استباقية
+ * ============================================================================
+ */
 
-import React, { useState, useRef, useEffect } from 'react';
-import { X, Bot, Sparkles, ArrowUpLeft, Send } from 'lucide-react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
+import {
+  X, ArrowUpLeft, Send,
+  AlertTriangle, TrendingUp, Users, Shield,
+  Brain, Zap, FileText
+} from 'lucide-react';
+import {
+  processSmartQuery,
+  generateExecutiveSummary,
+  formatExecutiveSummary,
+  analyzeBottlenecks,
+} from '../services/aiAnalysisEngine';
+import { notificationService } from '../services/notificationService';
 
 interface AIAssistantProps {
   currentUser: any;
@@ -9,209 +32,353 @@ interface AIAssistantProps {
   technicalRequests: any[];
   clearanceRequests: any[];
   projectWorks: any[];
+  appUsers?: any[];
 }
 
-const AIAssistant: React.FC<AIAssistantProps> = ({ 
-  currentUser, 
-  onNavigate, 
-  projects = [], 
-  technicalRequests = [], 
-  clearanceRequests = [], 
-  projectWorks = [] 
+interface ChatMessage {
+  id: number;
+  text: string;
+  sender: 'bot' | 'user';
+  time: string;
+  actions?: Array<{ label: string; type: string; data: any }>;
+  alertLevel?: 'critical' | 'warning' | 'info';
+}
+
+const AIAssistant: React.FC<AIAssistantProps> = ({
+  currentUser,
+  onNavigate,
+  projects = [],
+  technicalRequests = [],
+  clearanceRequests = [],
+  projectWorks = [],
+  appUsers = []
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [input, setInput] = useState('');
-  const [messages, setMessages] = useState<any[]>([
-    { 
-      id: 1, 
-      text: `مرحباً ${currentUser?.name || ''} 👋\nأنا مساعدك الذكي لمتابعة المشاريع.\nيمكنني تزويدك بتقرير تنفيذي شامل عن أي مشروع، فقط اذكر اسم المشروع (مثال: "النرجس" أو "سرايا").`, 
-      sender: 'bot', 
-      time: new Date().toLocaleTimeString('ar-SA', {hour: '2-digit', minute:'2-digit'}) 
-    }
-  ]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isTyping, setIsTyping] = useState(false);
+  const [hasShownSummary, setHasShownSummary] = useState(false);
+  const [alertBadge, setAlertBadge] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const lastProactiveCheck = useRef<number>(0);
 
-  useEffect(() => { 
-    if (isOpen) messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); 
+  const timeNow = () => new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' });
+
+  const isAdmin = currentUser?.role === 'ADMIN';
+  const isPRManager = currentUser?.role === 'PR_MANAGER';
+
+  // ============================================================================
+  //  التحليل الاستباقي - الفحص التلقائي عند تحميل البيانات
+  // ============================================================================
+
+  const proactiveAlerts = useMemo(() => {
+    if (!technicalRequests.length && !clearanceRequests.length) return [];
+    return analyzeBottlenecks(technicalRequests, clearanceRequests, projectWorks, projects);
+  }, [technicalRequests, clearanceRequests, projectWorks, projects]);
+
+  // تحديث بادج التنبيهات
+  useEffect(() => {
+    const criticalCount = proactiveAlerts.filter(a => a.severity === 'critical').length;
+    setAlertBadge(criticalCount);
+  }, [proactiveAlerts]);
+
+  // إرسال إشعارات استباقية للموظفين عند اكتشاف تأخير حرج (مرة واحدة كل 6 ساعات)
+  useEffect(() => {
+    const now = Date.now();
+    const SIX_HOURS = 6 * 60 * 60 * 1000;
+    if (now - lastProactiveCheck.current < SIX_HOURS) return;
+
+    const criticalAlerts = proactiveAlerts.filter(a => a.severity === 'critical');
+    if (criticalAlerts.length > 0 && isAdmin) {
+      lastProactiveCheck.current = now;
+
+      // إشعار المدير
+      notificationService.send(
+        'ADMIN',
+        `🔴 تنبيه: ${criticalAlerts.length} طلبات متأخرة بشكل حرج (تجاوزت 96 ساعة)`,
+        '/technical',
+        'المحلل الذكي'
+      );
+
+      // إشعار الموظفين المعنيين
+      const assignees = new Set(criticalAlerts.map(a => a.assignedTo));
+      assignees.forEach(assignee => {
+        const alerts = criticalAlerts.filter(a => a.assignedTo === assignee);
+        notificationService.send(
+          ['PR_MANAGER', 'TECHNICAL'],
+          `⚠️ ${assignee}: لديك ${alerts.length} طلبات متأخرة تحتاج تحديث عاجل`,
+          '/technical',
+          'المحلل الذكي'
+        );
+      });
+    }
+  }, [proactiveAlerts, isAdmin]);
+
+  // ============================================================================
+  //  عند فتح المساعد - ملخص القيادة التلقائي
+  // ============================================================================
+
+  useEffect(() => {
+    if (!isOpen || hasShownSummary || !currentUser) return;
+
+    const welcomeMsg: ChatMessage = {
+      id: Date.now(),
+      text: getWelcomeMessage(),
+      sender: 'bot',
+      time: timeNow()
+    };
+    setMessages([welcomeMsg]);
+
+    // ملخص القيادة للمدير
+    if (isAdmin || isPRManager) {
+      setIsTyping(true);
+      setTimeout(() => {
+        const summary = generateExecutiveSummary(projects, technicalRequests, clearanceRequests, projectWorks);
+        const summaryText = formatExecutiveSummary(summary);
+
+        // إضافة تنبيهات حرجة إن وجدت
+        let alertMsg = '';
+        if (summary.alerts.length > 0) {
+          const critCount = summary.alerts.filter(a => a.severity === 'critical').length;
+          if (critCount > 0) {
+            alertMsg = `\n\n🚨 **تنبيه عاجل:** ${critCount} طلبات وصلت لمرحلة حرجة!`;
+          }
+        }
+
+        setMessages(prev => [...prev, {
+          id: Date.now() + 1,
+          text: summaryText + alertMsg,
+          sender: 'bot',
+          time: timeNow(),
+          alertLevel: summary.alerts.some(a => a.severity === 'critical') ? 'critical' : 'info'
+        }]);
+        setIsTyping(false);
+        setHasShownSummary(true);
+      }, 1200);
+    } else {
+      setHasShownSummary(true);
+    }
+  }, [isOpen, hasShownSummary, currentUser, isAdmin, isPRManager, projects, technicalRequests, clearanceRequests, projectWorks]);
+
+  // ============================================================================
+  //  تكامل الخريطة التفاعلية
+  // ============================================================================
+
+  useEffect(() => {
+    const handleMapSelect = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (!detail?.projectName) return;
+      setIsOpen(true);
+      const queryText = detail.projectName;
+      setMessages(prev => [...prev, {
+        id: Date.now(),
+        text: `📍 تم اختيار مشروع "${queryText}" من الخريطة التفاعلية`,
+        sender: 'user',
+        time: timeNow()
+      }]);
+      setTimeout(() => {
+        const result = processSmartQuery(queryText, projects, technicalRequests, clearanceRequests, projectWorks, appUsers, currentUser);
+        setMessages(prev => [...prev, {
+          id: Date.now() + 1,
+          text: result.text,
+          sender: 'bot',
+          time: timeNow(),
+          actions: result.actions
+        }]);
+      }, 600);
+    };
+    window.addEventListener('interactive-map-select', handleMapSelect);
+    return () => window.removeEventListener('interactive-map-select', handleMapSelect);
+  }, [projects, technicalRequests, clearanceRequests, projectWorks, appUsers, currentUser]);
+
+  // ============================================================================
+  //  التمرير التلقائي
+  // ============================================================================
+
+  useEffect(() => {
+    if (isOpen) messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isOpen]);
 
-  if (!currentUser || !['ADMIN', 'PR_MANAGER'].includes(currentUser.role)) return null;
+  // ============================================================================
+  //  التحقق من الصلاحية
+  // ============================================================================
 
-  // دالة لتنظيف وتطبيع النصوص للبحث الذكي
-  const normalizeText = (text: string) => {
-    if (!text) return "";
-    return text.toLowerCase()
-      .trim()
-      .replace(/[أإآ]/g, 'ا')
-      .replace(/ة/g, 'ه')
-      .replace(/ى/g, 'ي')
-      .replace(/\s+/g, ' ');
-  };
+  if (!currentUser || !['ADMIN', 'PR_MANAGER', 'TECHNICAL', 'CONVEYANCE'].includes(currentUser.role)) return null;
 
-  const processQuery = (rawQuery: string) => {
-    const query = normalizeText(rawQuery);
-    let responseText = "";
-    let actions: any[] = [];
+  // ============================================================================
+  //  رسالة الترحيب الذكية
+  // ============================================================================
 
-    if (!query || query.length < 2) return { text: "يرجى كتابة اسم مشروع أو استفسار واضح (أكثر من حرفين).", actions };
+  function getWelcomeMessage(): string {
+    const hour = new Date().getHours();
+    const greeting = hour < 12 ? 'صباح الخير' : hour < 17 ? 'مساء الخير' : 'مساء النور';
+    const name = currentUser?.name || '';
 
-    // 1. البحث الذكي عن المشروع (Smart/Fuzzy Match)
-    const matchedProject = projects?.find((p: any) => {
-      const pName = normalizeText(p.name || p.title || "");
-      return pName.includes(query) || query.includes(pName);
-    });
-
-    if (matchedProject) {
-      const pId = Number(matchedProject.id);
-      const pNameStr = matchedProject.name || matchedProject.title || "مشروع غير مسمى";
-
-      // 2. تجميع البيانات من كافة المصادر مع ضمان مطابقة الأنواع (The ID Fix)
-      const relatedWorks = projectWorks?.filter((w: any) => Number(w.projectId ?? w.projectid ?? w.project_id) === pId) || [];
-      const relatedTech = technicalRequests?.filter((t: any) => Number(t.project_id ?? t.projectId ?? t.projectid) === pId) || [];
-      
-      // مطابقة الإفراغات باسم المشروع لضمان الدقة
-      const relatedDeeds = clearanceRequests?.filter((d: any) => {
-        const dProjName = normalizeText(d.project_name || "");
-        const pNameNorm = normalizeText(pNameStr);
-        return dProjName.includes(pNameNorm) || pNameNorm.includes(dProjName);
-      }) || [];
-
-      // 3. دمج كافة العمليات وتصنيف الحالات
-      const allTasks = [...relatedWorks, ...relatedTech];
-      const completedTasks = allTasks.filter((t: any) => 
-        ['completed', 'منجز', 'مكتمل', 'تم الإفراغ'].includes(t.status?.toLowerCase())
-      );
-      const pendingTasks = allTasks.filter((t: any) => 
-        !['completed', 'منجز', 'مكتمل', 'تم الإفراغ'].includes(t.status?.toLowerCase())
-      );
-
-      // 4. بناء التقرير التنفيذي (Executive Summary Structure)
-      let summary = `🏗️ **تقرير مشروع: ${pNameStr}** | 📍 الموقع: ${matchedProject.location || 'غير محدد'}\n\n`;
-      
-      summary += `📊 **إحصائيات الإنجاز:**\n`;
-      summary += `• إجمالي المهام: ${allTasks.length + relatedDeeds.length}\n`;
-      summary += `• ✅ المنجز: ${completedTasks.length}\n`;
-      summary += `• ⏳ قيد العمل: ${pendingTasks.length}\n\n`;
-
-      // تفاصيل المنجز
-      if (completedTasks.length > 0) {
-        summary += `✅ **أبرز الأعمال المنجزة:**\n`;
-        completedTasks.slice(0, 3).forEach(t => {
-          summary += `- ${t.task_name || t.service_type || 'مهمة فنية'}\n`;
-        });
-      }
-
-      // تفاصيل المعلق
-      if (pendingTasks.length > 0) {
-        summary += `\n⏳ **قيد المتابعة:**\n`;
-        pendingTasks.slice(0, 3).forEach(t => {
-          summary += `- ${t.task_name || t.service_type || 'مهمة فنية'}\n`;
-        });
-      }
-
-      // سجل الإفراغات
-      summary += `\n📄 **سجل الإفراغات:**\n`;
-      if (relatedDeeds.length > 0) {
-        const completedDeeds = relatedDeeds.filter(d => ['مكتمل', 'منجز', 'تم الإفراغ'].includes(d.status));
-        summary += `يوجد عدد (${relatedDeeds.length}) سجل إفراغ مرتبطة بالمشروع (تم إنجاز ${completedDeeds.length} منها).\n`;
-      } else {
-        summary += `لا توجد سجلات إفراغ مسجلة حالياً لهذا المشروع.\n`;
-      }
-
-      summary += `\n_هذا التقرير تم تجميعه لحظياً من كافة قطاعات العمل._`;
-      
-      responseText = summary;
-      actions.push({ label: `فتح ملف المشروع (ID: ${pId})`, type: 'PROJECT', data: matchedProject });
-    } 
-    else if (query.includes('افراغ') || query.includes('صك') || query.includes('افراغات')) {
-      const totalDeeds = clearanceRequests?.length || 0;
-      const completedDeeds = clearanceRequests?.filter((d: any) => 
-        ['مكتمل', 'منجز', 'تم الإفراغ', 'completed'].includes(d.status)
-      ).length || 0;
-
-      responseText = `📄 **ملخص سجل الإفراغات الكلي**\n\n`;
-      responseText += `• إجمالي طلبات الإفراغ: ${totalDeeds}\n`;
-      responseText += `• ✅ العمليات المكتملة: ${completedDeeds}\n`;
-      responseText += `• ⏳ تحت الإجراء: ${totalDeeds - completedDeeds}\n\n`;
-      responseText += `هل تريد الانتقال إلى سجل الإفراغات العام؟`;
-      
-      actions.push({ label: 'فتح سجل الإفراغات العام', type: 'DEED', data: null });
+    if (isAdmin) {
+      return `${greeting} ${name} 👋\nأنا محلل المخاطر واستشاريك الإداري.\n\nجاري تحضير ملخص القيادة التنفيذي...`;
     }
-    else {
-      // التعامل مع حالة عدم العثور على مشروع (Suggestions)
-      responseText = "عذراً، لم أجد مشروعاً بهذا الاسم. هل تقصد أحد هذه المشاريع النشطة؟\n\n";
-      const suggestions = projects?.slice(0, 4).map(p => `• ${p.name || p.title}`).join('\n');
-      responseText += suggestions || "لا توجد مشاريع مسجلة حالياً.";
+    if (isPRManager) {
+      return `${greeting} ${name} 👋\nأنا مساعدك الذكي لمتابعة المشاريع والطلبات.\n\nجاري تجهيز تقريرك...`;
     }
+    return `${greeting} ${name} 👋\nأنا مساعدك الذكي. يمكنني مساعدتك في:\n• متابعة طلباتك المعلقة\n• تحليل أداء المشاريع\n• اكتشاف التأخيرات\n\nاسألني عن أي شيء!`;
+  }
 
-    return { text: responseText, actions };
-  };
+  // ============================================================================
+  //  معالجة الرسائل
+  // ============================================================================
 
   const handleSend = () => {
     if (!input.trim()) return;
-    
     const userText = input;
-    setMessages(prev => [...prev, { 
-      id: Date.now(), 
-      text: userText, 
-      sender: 'user', 
-      time: new Date().toLocaleTimeString('ar-SA', {hour: '2-digit', minute:'2-digit'}) 
+    setMessages(prev => [...prev, {
+      id: Date.now(),
+      text: userText,
+      sender: 'user',
+      time: timeNow()
     }]);
     setInput('');
     setIsTyping(true);
 
     setTimeout(() => {
-      const { text, actions } = processQuery(userText);
-      setMessages(prev => [...prev, { 
-        id: Date.now() + 1, 
-        text: text, 
-        sender: 'bot', 
-        time: new Date().toLocaleTimeString('ar-SA', {hour: '2-digit', minute:'2-digit'}),
-        actions 
+      const result = processSmartQuery(userText, projects, technicalRequests, clearanceRequests, projectWorks, appUsers, currentUser);
+      setMessages(prev => [...prev, {
+        id: Date.now() + 1,
+        text: result.text,
+        sender: 'bot',
+        time: timeNow(),
+        actions: result.actions
       }]);
       setIsTyping(false);
     }, 800);
   };
 
+  // ============================================================================
+  //  الأوامر السريعة (Quick Actions)
+  // ============================================================================
+
+  const quickActions = [
+    { icon: <Shield size={14} />, label: 'ملخص القيادة', query: 'ملخص تنفيذي', color: 'bg-blue-500' },
+    { icon: <AlertTriangle size={14} />, label: 'تحليل المخاطر', query: 'مخاطر وتأخيرات', color: 'bg-red-500' },
+    { icon: <TrendingUp size={14} />, label: 'التنبؤ بالتأخير', query: 'تنبؤ بالتأخير', color: 'bg-amber-500' },
+    { icon: <Users size={14} />, label: 'عبء الموظفين', query: 'عبء الموظفين', color: 'bg-purple-500' },
+    { icon: <Zap size={14} />, label: 'طلبات فنية', query: 'تحليل الطلبات الفنية', color: 'bg-cyan-500' },
+    { icon: <FileText size={14} />, label: 'إفراغات', query: 'تحليل الإفراغات', color: 'bg-emerald-500' },
+  ];
+
+  const handleQuickAction = (query: string) => {
+    setMessages(prev => [...prev, {
+      id: Date.now(),
+      text: query,
+      sender: 'user',
+      time: timeNow()
+    }]);
+    setIsTyping(true);
+
+    setTimeout(() => {
+      const result = processSmartQuery(query, projects, technicalRequests, clearanceRequests, projectWorks, appUsers, currentUser);
+      setMessages(prev => [...prev, {
+        id: Date.now() + 1,
+        text: result.text,
+        sender: 'bot',
+        time: timeNow(),
+        actions: result.actions
+      }]);
+      setIsTyping(false);
+    }, 600);
+  };
+
+  // ============================================================================
+  //  الواجهة (UI)
+  // ============================================================================
+
   return (
     <>
-      <button 
-        onClick={() => setIsOpen(!isOpen)} 
+      {/* زر المساعد مع بادج التنبيهات */}
+      <button
+        onClick={() => setIsOpen(!isOpen)}
         className="fixed bottom-8 left-8 z-50 bg-[#1B2B48] hover:bg-[#E95D22] text-white p-4 rounded-full shadow-2xl transition-all duration-300 hover:scale-110 flex items-center gap-2 group"
+        title="المساعد الذكي"
       >
         <span className={`${isOpen ? 'hidden' : 'block'} max-w-0 overflow-hidden group-hover:max-w-xs transition-all duration-500 whitespace-nowrap font-bold text-sm`}>
-          المساعد الذكي
+          المحلل الذكي
         </span>
-        {isOpen ? <X size={28} /> : <Bot size={28} />}
+        {isOpen ? <X size={28} /> : <Brain size={28} />}
+
+        {/* بادج التنبيهات */}
+        {alertBadge > 0 && !isOpen && (
+          <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-black w-5 h-5 rounded-full flex items-center justify-center animate-pulse">
+            {alertBadge}
+          </span>
+        )}
       </button>
 
+      {/* نافذة المحادثة */}
       {isOpen && (
-        <div className="fixed bottom-24 left-8 z-50 w-80 bg-white rounded-[30px] shadow-2xl border border-gray-100 overflow-hidden flex flex-col animate-in slide-in-from-bottom-10 duration-300 h-[600px] font-cairo" dir="rtl">
-          <div className="bg-[#1B2B48] p-4 flex items-center gap-2 text-white shadow-md relative">
-            <Sparkles size={18} className="text-[#E95D22]" />
-            <span className="font-bold">مساعد دار وإعمار التنفيذي</span>
-            <button onClick={() => setIsOpen(false)} className="absolute left-4 top-1/2 -translate-y-1/2 text-white/50 hover:text-white">
+        <div className="fixed bottom-24 left-8 z-50 w-[380px] bg-white rounded-[30px] shadow-2xl border border-gray-100 overflow-hidden flex flex-col animate-in slide-in-from-bottom-10 duration-300 h-[650px] font-cairo" dir="rtl">
+
+          {/* الرأس */}
+          <div className="bg-gradient-to-l from-[#1B2B48] to-[#2a3f63] p-4 flex items-center gap-2 text-white shadow-md relative">
+            <div className="relative">
+              <Brain size={20} className="text-[#E95D22]" />
+              <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-emerald-400 rounded-full border-2 border-[#1B2B48]" />
+            </div>
+            <div className="flex-1">
+              <span className="font-bold text-sm">المحلل الذكي لدار وإعمار</span>
+              <p className="text-[9px] text-gray-300 font-bold">محلل مخاطر • استشاري إداري • ذاكرة تراكمية</p>
+            </div>
+            <button onClick={() => setIsOpen(false)} className="text-white/50 hover:text-white transition-colors" title="إغلاق">
               <X size={18} />
             </button>
           </div>
 
+          {/* الأوامر السريعة */}
+          <div className="bg-gray-50 border-b border-gray-100 px-3 py-2">
+            <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-hide pb-0.5">
+              {quickActions.map((qa, i) => (
+                <button
+                  key={i}
+                  onClick={() => handleQuickAction(qa.query)}
+                  className={`flex items-center gap-1 ${qa.color} text-white text-[9px] font-bold px-2.5 py-1.5 rounded-lg whitespace-nowrap hover:brightness-110 transition-all active:scale-95 shrink-0`}
+                >
+                  {qa.icon}
+                  {qa.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* الرسائل */}
           <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-[#f8f9fa] custom-scrollbar">
             {messages.map((msg) => (
               <div key={msg.id} className={`flex flex-col ${msg.sender === 'user' ? 'items-end' : 'items-start'}`}>
-                <div className={`max-w-[95%] rounded-2xl p-3 text-sm font-bold leading-relaxed shadow-sm whitespace-pre-wrap ${msg.sender === 'user' ? 'bg-[#E95D22] text-white rounded-bl-none' : 'bg-white text-[#1B2B48] border border-gray-100 rounded-br-none'}`}>
+                <div className={`max-w-[95%] rounded-2xl p-3 text-sm font-bold leading-relaxed shadow-sm whitespace-pre-wrap ${
+                  msg.sender === 'user'
+                    ? 'bg-[#E95D22] text-white rounded-bl-none'
+                    : msg.alertLevel === 'critical'
+                      ? 'bg-red-50 text-[#1B2B48] border border-red-200 rounded-br-none'
+                      : 'bg-white text-[#1B2B48] border border-gray-100 rounded-br-none'
+                }`}>
+                  {msg.alertLevel === 'critical' && (
+                    <div className="flex items-center gap-1 text-red-600 text-[10px] font-black mb-2 bg-red-100 px-2 py-1 rounded-lg w-fit">
+                      <AlertTriangle size={12} />
+                      تنبيه حرج
+                    </div>
+                  )}
                   {msg.text}
                 </div>
+
+                {/* أزرار الإجراءات */}
                 {msg.actions && msg.actions.length > 0 && (
                   <div className="mt-2 flex flex-wrap gap-2 w-full">
                     {msg.actions.map((action: any, idx: number) => (
-                      <button 
-                        key={idx} 
-                        onClick={() => { 
-                          if(action.type === 'PROJECT') onNavigate('PROJECT', action.data);
-                          if(action.type === 'DEED') onNavigate('DEED', null);
+                      <button
+                        key={idx}
+                        onClick={() => {
+                          if (action.type === 'PROJECT') onNavigate('PROJECT', action.data);
+                          if (action.type === 'DEED') onNavigate('DEED', null);
+                          if (action.type === 'TECHNICAL') onNavigate('TECHNICAL', null);
                           setIsOpen(false);
-                        }} 
+                        }}
                         className="flex items-center gap-1 bg-[#1B2B48] text-white text-[11px] px-3 py-2.5 rounded-xl hover:bg-[#E95D22] transition-colors w-full justify-center shadow-md font-black"
                       >
                         {action.label} <ArrowUpLeft size={14}/>
@@ -219,24 +386,38 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
                     ))}
                   </div>
                 )}
+
+                <span className="text-[8px] text-gray-300 mt-1 px-1">{msg.time}</span>
               </div>
             ))}
-            {isTyping && <div className="text-[10px] font-black text-[#E95D22] px-2 animate-pulse">جاري فحص قاعدة البيانات وتحليل الأداء...</div>}
+
+            {isTyping && (
+              <div className="flex items-center gap-2 px-2">
+                <div className="flex gap-1">
+                  <span className="w-2 h-2 bg-[#E95D22] rounded-full animate-bounce" />
+                  <span className="w-2 h-2 bg-[#E95D22] rounded-full animate-bounce [animation-delay:0.15s]" />
+                  <span className="w-2 h-2 bg-[#E95D22] rounded-full animate-bounce [animation-delay:0.3s]" />
+                </div>
+                <span className="text-[10px] font-black text-[#E95D22]">جاري التحليل وفحص قاعدة البيانات...</span>
+              </div>
+            )}
             <div ref={messagesEndRef} />
           </div>
 
+          {/* حقل الإدخال */}
           <div className="p-3 bg-white border-t flex gap-2 shadow-inner">
-            <input 
-              className="flex-1 bg-gray-50 rounded-xl px-4 text-sm font-bold outline-none focus:ring-2 ring-[#E95D22]/20 transition-all border border-gray-100" 
-              placeholder="اطلب تقرير عن أي مشروع..." 
+            <input
+              className="flex-1 bg-gray-50 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:ring-2 ring-[#E95D22]/20 transition-all border border-gray-100"
+              placeholder={isAdmin ? 'اسأل عن مخاطر، تنبؤات، موظفين...' : 'اسأل عن مشروع أو طلب...'}
               value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && handleSend()}
             />
-            <button 
-              onClick={handleSend} 
-              disabled={!input.trim()} 
+            <button
+              onClick={handleSend}
+              disabled={!input.trim()}
               className="p-3 bg-[#1B2B48] text-white rounded-xl hover:bg-[#E95D22] transition-colors disabled:opacity-50"
+              title="إرسال"
             >
               <Send size={18} />
             </button>

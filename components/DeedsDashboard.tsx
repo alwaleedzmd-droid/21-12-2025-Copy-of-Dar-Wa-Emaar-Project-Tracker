@@ -69,7 +69,7 @@ interface DeedsDashboardProps {
 
 const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, currentUserName, filteredProjectName, logActivity }) => {
     const location = useLocation();
-    const { refreshData, currentUser } = useData();
+    const { refreshData, currentUser, projects: allProjects } = useData();
     const [searchQuery, setSearchQuery] = useState('');
     const [isRegModalOpen, setIsRegModalOpen] = useState(false);
     const [isManageModalOpen, setIsManageModalOpen] = useState(false);
@@ -530,6 +530,22 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
             // جلب سير الموافقة من قاعدة البيانات
             const { getWorkflowRoute } = await import('../services/requestWorkflowService');
             const workflowRoute = await getWorkflowRoute(newDeedForm.request_type as 'DEED_CLEARANCE' | 'METER_TRANSFER');
+
+            // ===== Logic Override: التحقق من المسؤول المرمّز =====
+            let finalAssignee = workflowRoute.assigneeName;
+            if (newDeedForm.project_name) {
+              const { getLeadOverride } = await import('../services/projectLeadService');
+              const matchedProject = allProjects.find(p => 
+                (p.name || p.title) === newDeedForm.project_name
+              );
+              if (matchedProject) {
+                const leadName = getLeadOverride(matchedProject.id, allProjects);
+                if (leadName) {
+                  finalAssignee = leadName;
+                  console.log(`🎯 إفراغ: توجيه مباشر للمسؤول المرمّز: ${leadName}`);
+                }
+              }
+            }
             
             const payload: Record<string, any> = {
                 request_type: newDeedForm.request_type,
@@ -553,7 +569,7 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
                 sakani_support_number: newDeedForm.sakani_support_number,
                 status: 'جديد',
                 submitted_by: currentUserName,
-                assigned_to: workflowRoute.assigneeName,
+                assigned_to: finalAssignee,
                 workflow_cc: workflowRoute.ccLabel
             };
 

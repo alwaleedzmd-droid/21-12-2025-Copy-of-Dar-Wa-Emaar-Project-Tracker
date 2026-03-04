@@ -49,6 +49,10 @@ export interface ProjectSummary {
   electricity_contractor?: string;
   electricity_contractor_engineer?: string;
   electricity_contractor_mobile?: string;
+  // نظام ترميز المسؤول (Project Lead)
+  project_lead_id?: string;
+  project_lead_name?: string;
+  project_lead_email?: string;
 }
 
 export interface ProjectWork {

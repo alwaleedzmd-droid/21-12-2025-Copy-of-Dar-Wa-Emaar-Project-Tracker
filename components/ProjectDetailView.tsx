@@ -5,8 +5,10 @@ import {
 } from 'lucide-react';
 import { ProjectSummary, TechnicalRequest, ClearanceRequest } from '../types';
 import { supabase } from '../supabaseClient';
+import { useData } from '../contexts/DataContext';
 import Modal from './Modal';
 import ProjectRequestsView from './ProjectRequestsView';
+import ProjectLeadManager from './ProjectLeadManager';
 
 interface ProjectDetailViewProps {
   project: ProjectSummary;
@@ -29,6 +31,8 @@ const ProjectDetailView: React.FC<ProjectDetailViewProps> = ({
   const [editForm, setEditForm] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const { appUsers, currentUser } = useData();
 
   const openEditModal = () => {
     setEditForm({
@@ -166,6 +170,18 @@ const ProjectDetailView: React.FC<ProjectDetailViewProps> = ({
           </div>
         </div>
       </div>
+
+      {/* 3. ترميز المسؤول (للمدير فقط) */}
+      {isAdmin && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <ProjectLeadManager
+            project={project}
+            appUsers={appUsers}
+            currentUser={currentUser}
+            onRefresh={onRefresh}
+          />
+        </div>
+      )}
 
       {/* نافذة التعديل */}
       <Modal isOpen={isEditModalOpen} onClose={handleCloseModal} title="تعديل تفاصيل المشروع">

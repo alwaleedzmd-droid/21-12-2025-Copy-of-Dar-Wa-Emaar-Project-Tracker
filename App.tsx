@@ -29,6 +29,7 @@ import AIAssistant from './components/AIAssistant';
 import StatisticsDashboard from './components/StatisticsDashboard';
 import LoginPage from './components/LoginPage';
 import SystemGuide from './components/SystemGuide';
+import InteractiveOperationsMap from './components/InteractiveOperationsMap';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -534,12 +535,15 @@ const AppContent: React.FC = () => {
         {/* الدليل الشامل للنظام */}
         <Route path="/guide" element={<ProtectedRoute allowedRoles={['ADMIN', 'PR_MANAGER']}><SystemGuide /></ProtectedRoute>} />
         
+        {/* الخريطة التفاعلية للعمليات */}
+        <Route path="/operations-map" element={<ProtectedRoute allowedRoles={['ADMIN', 'PR_MANAGER']}><InteractiveOperationsMap /></ProtectedRoute>} />
+        
         <Route path="*" element={currentUser ? <Navigate to={getDefaultPath(currentUser.role)} replace /> : <Navigate to="/dashboard" replace />} />
       </Routes>
       
-      {/* ظهور المساعد الذكي للمدير ومدير العلاقات فقط */}
-      {['ADMIN', 'PR_MANAGER'].includes(currentUser.role) && (
-        <AIAssistant currentUser={currentUser} projects={projects} technicalRequests={technicalRequests} clearanceRequests={clearanceRequests} projectWorks={projectWorks} onNavigate={(type, data) => navigate(type === 'PROJECT' ? `/projects/${data?.id}` : '/deeds')} />
+      {/* المحلل الذكي الاستباقي - لجميع الأدوار */}
+      {['ADMIN', 'PR_MANAGER', 'TECHNICAL', 'CONVEYANCE'].includes(currentUser.role) && (
+        <AIAssistant currentUser={currentUser} projects={projects} technicalRequests={technicalRequests} clearanceRequests={clearanceRequests} projectWorks={projectWorks} appUsers={appUsers} onNavigate={(type, data) => navigate(type === 'PROJECT' ? `/projects/${data?.id}` : type === 'TECHNICAL' ? '/technical' : '/deeds')} />
       )}
     </MainLayout>
   );

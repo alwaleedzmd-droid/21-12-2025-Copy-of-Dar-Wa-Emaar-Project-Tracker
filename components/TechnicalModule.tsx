@@ -224,6 +224,14 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
     const { getWorkflowRoute } = await import('../services/requestWorkflowService');
     const workflowRoute = await getWorkflowRoute(workflowType);
 
+    // ===== Logic Override: التحقق من المسؤول المرمّز =====
+    const { getLeadOverride } = await import('../services/projectLeadService');
+    const leadOverrideName = getLeadOverride(techForm.project_id, projects);
+    const finalAssignee = leadOverrideName || workflowRoute.assigneeName;
+    if (leadOverrideName) {
+      console.log(`🎯 توجيه مباشر للمسؤول المرمّز: ${leadOverrideName}`);
+    }
+
     const trimUnsupportedWorkflowColumns = (inputPayload: Record<string, any>, message?: string) => {
       const nextPayload = { ...inputPayload };
       const lowered = (message || '').toLowerCase();
@@ -258,7 +266,7 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
       project_name: selectedProj ? (selectedProj?.name || selectedProj?.title) : '',
       attachment_url: finalAttachmentUrl,
       submitted_by: currentUser?.name,
-      assigned_to: workflowRoute.assigneeName,
+      assigned_to: finalAssignee,
       workflow_cc: workflowRoute.ccLabel
     };
 

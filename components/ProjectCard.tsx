@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { FolderOpen, MapPin, CheckCircle2, Clock, Pin, Building2, Zap, Droplets, FileText, ShieldCheck } from 'lucide-react';
+import { FolderOpen, MapPin, CheckCircle2, Clock, Pin, Building2, Zap, Droplets, FileText, ShieldCheck, UserCheck } from 'lucide-react';
 import { ProjectSummary } from '../types';
 
 interface ProjectCardProps {
@@ -51,6 +51,12 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onClick, onTogglePin
                     <MapPin className="w-3 h-3" />
                     <span>{project.location}</span>
                 </div>
+                {project.project_lead_name && (
+                  <div className="flex items-center gap-1 mt-1.5 text-emerald-200 text-[10px] bg-emerald-500/20 backdrop-blur-sm px-2 py-0.5 rounded-lg w-fit border border-emerald-400/20">
+                    <UserCheck className="w-3 h-3" />
+                    <span>{project.project_lead_name}</span>
+                  </div>
+                )}
             </div>
         </div>
 
