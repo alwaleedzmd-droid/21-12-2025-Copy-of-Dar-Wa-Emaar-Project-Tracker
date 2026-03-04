@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+﻿import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
 import { User, Comment, TechnicalRequest, ClearanceRequest } from '../types';
 import Modal from './Modal';
@@ -399,7 +399,7 @@ const ManageRequestModal: React.FC<ManageRequestModalProps> = ({
                         </p>
                         {displayTime && (
                           <p className="text-[10px] text-gray-400 font-bold mt-0.5" dir="ltr">
-                            {new Date(displayTime).toLocaleString('ar-SA')}
+                            {new Date(displayTime).toLocaleString('ar-EG')}
                           </p>
                         )}
                         {progress?.notes && (
@@ -441,7 +441,7 @@ const ManageRequestModal: React.FC<ManageRequestModalProps> = ({
                         <div className="flex justify-between items-center mb-1 gap-4">
                             <span className="font-black text-[10px] text-[#1B2B48]">{c?.user_name}</span>
                             <div className="flex items-center gap-1 text-[9px] text-gray-400 font-bold">
-                              <span dir="ltr">{c?.created_at ? new Date(c?.created_at).toLocaleTimeString('ar-SA', { hour: '2-digit', minute:'2-digit' }) : ''}</span>
+                              <span dir="ltr">{c?.created_at ? new Date(c?.created_at).toLocaleTimeString('ar-EG', { hour: '2-digit', minute:'2-digit' }) : ''}</span>
                             </div>
                         </div>
                         <p className="text-xs text-gray-700 font-bold leading-relaxed whitespace-pre-wrap">{c?.content}</p>

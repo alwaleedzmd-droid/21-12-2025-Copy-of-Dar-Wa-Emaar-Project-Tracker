@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from 'react';
+﻿import React, { useMemo, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
 import {
   PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid,
@@ -105,7 +105,7 @@ const StatCard: React.FC<StatCardProps> = ({ title, value, subtitle, icon, color
       <div>
         <p className="text-sm font-bold text-gray-400 mb-1">{title}</p>
         <p className="text-4xl font-black" style={{ color: NAVY }}>
-          {displayValue.toLocaleString('ar-SA')}
+          {displayValue.toLocaleString('ar-EG')}
         </p>
         {subtitle && (
           <p className="text-xs font-bold mt-2" style={{ color }}>
@@ -534,7 +534,7 @@ const StatisticsDashboard: React.FC = () => {
   const exportToExcel = () => {
     try {
       setIsExporting(true);
-      const timestamp = new Date().toLocaleString('ar-SA', { timeZone: 'Asia/Riyadh' });
+      const timestamp = new Date().toLocaleString('ar-EG', { timeZone: 'Asia/Riyadh' });
 
       // ملخص الإحصائيات
       const summaryData = [
@@ -724,14 +724,14 @@ const StatisticsDashboard: React.FC = () => {
           <div className="text-left bg-white/10 backdrop-blur-sm rounded-xl p-4">
             <p className="text-xs text-gray-200 font-bold mb-1">تاريخ التقرير</p>
             <p className="text-sm text-white font-black">
-              {new Date().toLocaleDateString('ar-SA', { 
+              {new Date().toLocaleDateString('ar-EG', { 
                 year: 'numeric', 
                 month: 'long', 
                 day: 'numeric'
               })}
             </p>
             <p className="text-xs text-gray-300 font-bold mt-1">
-              {new Date().toLocaleDateString('ar-SA', { weekday: 'long' })}
+              {new Date().toLocaleDateString('ar-EG', { weekday: 'long' })}
             </p>
           </div>
         </div>
@@ -853,7 +853,7 @@ const StatisticsDashboard: React.FC = () => {
                             return (
                               <>
                                 <span className="text-[10px] text-purple-600 font-black">
-                                  منذ {tagged.toLocaleDateString('ar-SA')}
+                                  منذ {tagged.toLocaleDateString('ar-EG')}
                                 </span>
                                 {diffDays > 0 && (
                                   <span className={`px-2 py-0.5 rounded-lg text-[9px] font-black ${
@@ -943,7 +943,7 @@ const StatisticsDashboard: React.FC = () => {
                             <Building2 size={10} /> {work.project_name || 'مشروع'}
                           </span>
                           <span className="text-[10px] text-red-500 font-black">
-                            الموعد: {new Date(work.expected_completion_date!).toLocaleDateString('ar-SA')}
+                            الموعد: {new Date(work.expected_completion_date!).toLocaleDateString('ar-EG')}
                           </span>
                           {work.current_handler && (
                             <span className="text-[10px] text-purple-600 font-black flex items-center gap-1">
@@ -984,7 +984,7 @@ const StatisticsDashboard: React.FC = () => {
                             <Building2 size={10} /> {work.project_name || 'مشروع'}
                           </span>
                           <span className="text-[10px] text-amber-600 font-black">
-                            الموعد: {new Date(work.expected_completion_date!).toLocaleDateString('ar-SA')}
+                            الموعد: {new Date(work.expected_completion_date!).toLocaleDateString('ar-EG')}
                           </span>
                           {work.current_handler && (
                             <span className="text-[10px] text-purple-600 font-black flex items-center gap-1">
@@ -1228,21 +1228,21 @@ const StatisticsDashboard: React.FC = () => {
                 <div className="w-10 h-10 rounded-xl bg-green-100 flex items-center justify-center mx-auto mb-3">
                   <CheckCircle2 size={20} className="text-green-600" />
                 </div>
-                <p className="text-3xl font-black text-green-700">{stats.completedTechnical.toLocaleString('ar-SA')}</p>
+                <p className="text-3xl font-black text-green-700">{stats.completedTechnical.toLocaleString('ar-EG')}</p>
                 <p className="text-xs font-bold text-green-500 mt-1">منجز</p>
               </div>
               <div className="bg-sky-50 rounded-2xl p-5 text-center border border-sky-100">
                 <div className="w-10 h-10 rounded-xl bg-sky-100 flex items-center justify-center mx-auto mb-3">
                   <Clock size={20} className="text-sky-600" />
                 </div>
-                <p className="text-3xl font-black text-sky-700">{stats.inProgressTechnical.toLocaleString('ar-SA')}</p>
+                <p className="text-3xl font-black text-sky-700">{stats.inProgressTechnical.toLocaleString('ar-EG')}</p>
                 <p className="text-xs font-bold text-sky-500 mt-1">قيد العمل</p>
               </div>
               <div className="bg-red-50 rounded-2xl p-5 text-center border border-red-100">
                 <div className="w-10 h-10 rounded-xl bg-red-100 flex items-center justify-center mx-auto mb-3">
                   <XCircle size={20} className="text-red-500" />
                 </div>
-                <p className="text-3xl font-black text-red-600">{stats.rejectedTechnical.toLocaleString('ar-SA')}</p>
+                <p className="text-3xl font-black text-red-600">{stats.rejectedTechnical.toLocaleString('ar-EG')}</p>
                 <p className="text-xs font-bold text-red-400 mt-1">مرفوض</p>
               </div>
             </div>
@@ -1328,21 +1328,21 @@ const StatisticsDashboard: React.FC = () => {
               <div className="w-10 h-10 rounded-xl bg-green-100 flex items-center justify-center mx-auto mb-3">
                 <CheckCircle2 size={20} className="text-green-600" />
               </div>
-              <p className="text-3xl font-black text-green-700">{stats.completedClearance.toLocaleString('ar-SA')}</p>
+              <p className="text-3xl font-black text-green-700">{stats.completedClearance.toLocaleString('ar-EG')}</p>
               <p className="text-xs font-bold text-green-500 mt-1">مكتمل</p>
             </div>
             <div className="bg-sky-50 rounded-2xl p-5 text-center border border-sky-100">
               <div className="w-10 h-10 rounded-xl bg-sky-100 flex items-center justify-center mx-auto mb-3">
                 <Clock size={20} className="text-sky-600" />
               </div>
-              <p className="text-3xl font-black text-sky-700">{stats.inProgressClearance.toLocaleString('ar-SA')}</p>
+              <p className="text-3xl font-black text-sky-700">{stats.inProgressClearance.toLocaleString('ar-EG')}</p>
               <p className="text-xs font-bold text-sky-500 mt-1">تحت الإجراء</p>
             </div>
             <div className="bg-red-50 rounded-2xl p-5 text-center border border-red-100">
               <div className="w-10 h-10 rounded-xl bg-red-100 flex items-center justify-center mx-auto mb-3">
                 <XCircle size={20} className="text-red-500" />
               </div>
-              <p className="text-3xl font-black text-red-600">{stats.rejectedClearance.toLocaleString('ar-SA')}</p>
+              <p className="text-3xl font-black text-red-600">{stats.rejectedClearance.toLocaleString('ar-EG')}</p>
               <p className="text-xs font-bold text-red-400 mt-1">مرفوض</p>
             </div>
           </div>
@@ -1444,7 +1444,7 @@ const StatisticsDashboard: React.FC = () => {
             </div>
             <div>
               <p className="text-2xl font-black" style={{ color: NAVY }}>
-                {item.value.toLocaleString('ar-SA')}
+                {item.value.toLocaleString('ar-EG')}
               </p>
               <p className="text-[11px] font-bold text-gray-400">{item.label}</p>
             </div>

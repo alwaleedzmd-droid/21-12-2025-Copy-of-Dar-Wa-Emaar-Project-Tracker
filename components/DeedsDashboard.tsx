@@ -1,4 +1,4 @@
-
+﻿
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { useLocation } from 'react-router';
 import { supabase } from '../supabaseClient'; 
@@ -1141,7 +1141,7 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
                                                     </p>
                                                     {displayTime && (
                                                         <p className="text-[10px] text-gray-400 font-bold mt-0.5" dir="ltr">
-                                                            {new Date(displayTime).toLocaleString('ar-SA')}
+                                                            {new Date(displayTime).toLocaleString('ar-EG')}
                                                         </p>
                                                     )}
                                                     {progress?.notes && (
@@ -1182,7 +1182,7 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
                                         <div key={c.id} className={`p-3 rounded-2xl shadow-sm max-w-[85%] ${c.user_name === currentUserName ? 'bg-[#1B2B48] text-white mr-auto' : 'bg-white text-[#1B2B48] ml-auto border'}`}>
                                             <div className="flex justify-between items-center mb-1 gap-4">
                                                 <span className="font-black text-[9px] opacity-70">{c.user_name}</span>
-                                                <span className="text-[8px] opacity-50" dir="ltr">{new Date(c.created_at).toLocaleTimeString('ar-SA', {hour: '2-digit', minute:'2-digit'})}</span>
+                                                <span className="text-[8px] opacity-50" dir="ltr">{new Date(c.created_at).toLocaleTimeString('ar-EG', {hour: '2-digit', minute:'2-digit'})}</span>
                                             </div>
                                             <p className="text-xs font-bold leading-relaxed">{c.text}</p>
                                         </div>

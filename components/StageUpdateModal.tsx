@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+﻿import React, { useState, useEffect, useRef } from 'react';
 import { 
   Save, X, MessageSquare, CheckCircle2, 
   Clock, AlertCircle, Loader2, Send 
@@ -196,7 +196,7 @@ const StageUpdateModal: React.FC<StageUpdateModalProps> = ({
                 <div className="flex justify-between items-center">
                   <span className="text-gray-500">بدأ في:</span>
                   <span className="font-bold text-gray-700 font-mono" dir="ltr">
-                    {new Date(stageProgress.started_at).toLocaleString('ar-SA')}
+                    {new Date(stageProgress.started_at).toLocaleString('ar-EG')}
                   </span>
                 </div>
               )}
@@ -204,7 +204,7 @@ const StageUpdateModal: React.FC<StageUpdateModalProps> = ({
                 <div className="flex justify-between items-center">
                   <span className="text-gray-500">انتهى في:</span>
                   <span className="font-bold text-green-700 font-mono" dir="ltr">
-                    {new Date(stageProgress.completed_at).toLocaleString('ar-SA')}
+                    {new Date(stageProgress.completed_at).toLocaleString('ar-EG')}
                   </span>
                 </div>
               )}
@@ -296,7 +296,7 @@ const StageUpdateModal: React.FC<StageUpdateModalProps> = ({
                   <div className="flex justify-between items-center mb-1 gap-2">
                     <span className="font-black">{comment.user_name}</span>
                     <span className="opacity-50 text-[9px]" dir="ltr">
-                      {new Date(comment.created_at).toLocaleTimeString('ar-SA', {
+                      {new Date(comment.created_at).toLocaleTimeString('ar-EG', {
                         hour: '2-digit',
                         minute: '2-digit'
                       })}

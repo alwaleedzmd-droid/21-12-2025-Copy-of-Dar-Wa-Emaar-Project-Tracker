@@ -1,4 +1,4 @@
-
+﻿
 import React, { useState } from 'react';
 import { 
   Plus, PieChart, Zap, FileText, Trash2, Building2, MapPin, 
@@ -44,7 +44,7 @@ const ProjectsModule: React.FC<ProjectsModuleProps> = ({
   const exportProjectsToExcel = () => {
     try {
       setIsExporting(true);
-      const timestamp = new Date().toLocaleString('ar-SA', { timeZone: 'Asia/Riyadh' });
+      const timestamp = new Date().toLocaleString('ar-EG', { timeZone: 'Asia/Riyadh' });
 
       // إنشاء البيانات - جميع المشاريع في صفحة واحدة
       const excelData: any[] = [

@@ -1,4 +1,4 @@
-
+﻿
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Routes, Route, useNavigate, useLocation, useParams, Navigate } from 'react-router-dom';
 import { AlertTriangle, Loader2, Plus, 
@@ -673,7 +673,7 @@ const ProjectDetailWrapper = ({ projects = [], currentUser }: any) => {
                               const isOverdue = diffDays < 0 && !isCompleted;
                               const isNear = diffDays >= 0 && diffDays <= 3 && !isCompleted;
                               const isSafe = diffDays > 3 || isCompleted;
-                              const dateStr = target.toLocaleDateString('ar-SA');
+                              const dateStr = target.toLocaleDateString('ar-EG');
                               return (
                                 <span className={`px-3 py-1.5 rounded-xl font-black text-[10px] flex items-center gap-1.5 border ${
                                   isCompleted ? 'bg-green-50 text-green-600 border-green-200' :
@@ -773,7 +773,7 @@ const ProjectDetailWrapper = ({ projects = [], currentUser }: any) => {
                               isCompleted ? 'text-green-700' :
                               isOverdue ? 'text-red-700' : isNear ? 'text-amber-700' : 'text-blue-700'
                             }`}>
-                              تاريخ الإنجاز المتوقع: {new Date(selectedWork.expected_completion_date).toLocaleDateString('ar-SA')}
+                              تاريخ الإنجاز المتوقع: {new Date(selectedWork.expected_completion_date).toLocaleDateString('ar-EG')}
                             </p>
                             <p className={`text-[10px] font-bold ${
                               isCompleted ? 'text-green-500' :
@@ -820,7 +820,7 @@ const ProjectDetailWrapper = ({ projects = [], currentUser }: any) => {
                               </p>
                               <p className="text-[10px] text-gray-400 font-bold">
                                 {selectedWork.handler_tagged_at && (
-                                  <span>منذ {new Date(selectedWork.handler_tagged_at).toLocaleDateString('ar-SA')}</span>
+                                  <span>منذ {new Date(selectedWork.handler_tagged_at).toLocaleDateString('ar-EG')}</span>
                                 )}
                                 {selectedWork.handler_status === 'completed' ? ' — تم الإنجاز ✅' : ' — نشط'}
                                 {selectedWork.handler_tagged_at && selectedWork.handler_status === 'active' && (() => {
@@ -927,7 +927,7 @@ const ProjectDetailWrapper = ({ projects = [], currentUser }: any) => {
                                           {config.emoji} @{entry.handler}
                                         </span>
                                         <span className="text-[9px] text-gray-400">
-                                          {entryDate.toLocaleDateString('ar-SA')} {entryDate.toLocaleTimeString('ar-SA', {hour: '2-digit', minute:'2-digit'})}
+                                          {entryDate.toLocaleDateString('ar-EG')} {entryDate.toLocaleTimeString('ar-EG', {hour: '2-digit', minute:'2-digit'})}
                                         </span>
                                         {duration !== null && duration > 0 && (
                                           <span className={`text-[9px] px-1.5 py-0.5 rounded font-black ${
@@ -971,12 +971,12 @@ const ProjectDetailWrapper = ({ projects = [], currentUser }: any) => {
                         const { error } = await supabase.from('project_works').update({ expected_completion_date: date }).eq('id', selectedWork.id);
                         if (error && !error.message?.includes('schema cache')) throw error;
                         
-                        const dateStr = new Date(date).toLocaleDateString('ar-SA');
+                        const dateStr = new Date(date).toLocaleDateString('ar-EG');
                         const projectName = project?.name || selectedWork.project_name || 'مشروع';
                         
                         // تسجيل كتعليق (يحفظ دائماً حتى لو الأعمدة غير موجودة)
                         const commentContent = justification 
-                          ? `⚠️📅 تبرير التأخير — ${selectedWork.task_name}\nالموعد السابق: ${new Date(selectedWork.expected_completion_date!).toLocaleDateString('ar-SA')}\nالموعد الجديد: ${dateStr}\n📝 السبب: ${justification}`
+                          ? `⚠️📅 تبرير التأخير — ${selectedWork.task_name}\nالموعد السابق: ${new Date(selectedWork.expected_completion_date!).toLocaleDateString('ar-EG')}\nالموعد الجديد: ${dateStr}\n📝 السبب: ${justification}`
                           : `📅 تم تسجيل تاريخ الإنجاز المتوقع: ${dateStr}`;
                         
                         await supabase.from('work_comments').insert({
@@ -1027,7 +1027,7 @@ const ProjectDetailWrapper = ({ projects = [], currentUser }: any) => {
                                 <div>
                                   <h4 className="font-black text-sm text-red-700">⚠️ هذا العمل متأخر عن الموعد!</h4>
                                   <p className="text-[10px] font-bold text-red-500">
-                                    الموعد المحدد: {new Date(selectedWork.expected_completion_date!).toLocaleDateString('ar-SA')} — متأخر {overdueDays} يوم
+                                    الموعد المحدد: {new Date(selectedWork.expected_completion_date!).toLocaleDateString('ar-EG')} — متأخر {overdueDays} يوم
                                   </p>
                                 </div>
                               </div>
@@ -1080,7 +1080,7 @@ const ProjectDetailWrapper = ({ projects = [], currentUser }: any) => {
                                 <Timer size={16} className="text-red-500 flex-shrink-0" />
                                 <div>
                                   <p className="text-[10px] text-red-500 font-black">الموعد السابق (متأخر {overdueDays} يوم):</p>
-                                  <p className="font-bold text-sm text-red-700">{new Date(selectedWork.expected_completion_date!).toLocaleDateString('ar-SA')}</p>
+                                  <p className="font-bold text-sm text-red-700">{new Date(selectedWork.expected_completion_date!).toLocaleDateString('ar-EG')}</p>
                                 </div>
                               </div>
                             )}
@@ -1155,7 +1155,7 @@ const ProjectDetailWrapper = ({ projects = [], currentUser }: any) => {
                             <div key={c.id} className={`p-3 rounded-xl shadow-sm max-w-[85%] ${c.user_name === currentUser?.name ? 'bg-blue-50 mr-auto border border-blue-100' : 'bg-white ml-auto border border-gray-100'}`}>
                                 <div className="flex justify-between items-center mb-1 gap-4">
                                     <span className="font-black text-[10px] text-[#1B2B48]">{c.user_name}</span>
-                                    <span className="text-[9px] text-gray-400" dir="ltr">{new Date(c.created_at).toLocaleTimeString('ar-SA', {hour: '2-digit', minute:'2-digit'})}</span>
+                                    <span className="text-[9px] text-gray-400" dir="ltr">{new Date(c.created_at).toLocaleTimeString('ar-EG', {hour: '2-digit', minute:'2-digit'})}</span>
                                 </div>
                                 <p className="text-xs text-gray-700 font-bold leading-relaxed">{c.content.split(/(@[\u0600-\u06FFa-zA-Z0-9_]+)/gu).map((part: string, i: number) => 
                                   part.match(/^@/) ? <span key={i} className="text-purple-600 font-black bg-purple-50 px-1 rounded">{part}</span> : part

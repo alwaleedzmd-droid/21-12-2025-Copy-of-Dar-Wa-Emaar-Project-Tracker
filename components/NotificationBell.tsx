@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+﻿import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Bell, CheckCircle2, Info } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import { useData } from '../contexts/DataContext';
@@ -150,7 +150,7 @@ const NotificationBell = () => {
                   <div className="text-right">
                     <p className="text-xs font-black text-[#1B2B48]">{n.title}</p>
                     <p className="text-[11px] text-gray-500 font-bold mt-1 line-clamp-2">{n.message}</p>
-                    <p className="text-[9px] text-gray-400 mt-2">{new Date(n.created_at).toLocaleTimeString('ar-SA')}</p>
+                    <p className="text-[9px] text-gray-400 mt-2">{new Date(n.created_at).toLocaleTimeString('ar-EG')}</p>
                   </div>
                 </div>
               ))

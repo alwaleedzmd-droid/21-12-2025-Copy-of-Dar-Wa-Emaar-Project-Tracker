@@ -1,4 +1,4 @@
-/**
+﻿/**
  * UnitProcessModal - نافذة تفاصيل الوحدة (Drill-down Popup)
  * تعرض: Timeline + Manager Profile + Document Viewer
  */
@@ -165,7 +165,7 @@ const UnitProcessModal: React.FC<UnitProcessModalProps> = ({
 
   const formatDate = (dateStr: string) => {
     try {
-      return new Date(dateStr).toLocaleDateString('ar-SA', {
+      return new Date(dateStr).toLocaleDateString('ar-EG', {
         year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
       });
     } catch { return dateStr; }

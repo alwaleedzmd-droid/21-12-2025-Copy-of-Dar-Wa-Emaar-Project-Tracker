@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+﻿import React, { useMemo } from 'react';
 import { CheckCircle2, XCircle, Clock, AlertCircle } from 'lucide-react';
 import { TechnicalRequest, ClearanceRequest } from '../types';
 
@@ -109,7 +109,7 @@ const ProjectRequestsView: React.FC<ProjectRequestsViewProps> = ({
                   </div>
                   <p className="text-xs text-gray-500 mb-2">{req.description}</p>
                   <div className="flex items-center gap-2 text-[10px] text-gray-400">
-                    <span>📅 {new Date(req.createdAt).toLocaleDateString('ar-SA')}</span>
+                    <span>📅 {new Date(req.createdAt).toLocaleDateString('ar-EG')}</span>
                     {req.assignedTo && <span>👤 {req.assignedTo}</span>}
                   </div>
                 </div>

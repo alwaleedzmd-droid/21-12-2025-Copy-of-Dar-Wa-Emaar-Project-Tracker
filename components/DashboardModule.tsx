@@ -1,4 +1,4 @@
-
+﻿
 import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router';
 import { 
@@ -119,7 +119,7 @@ const DashboardModule: React.FC<DashboardProps> = ({
         </div>
         <div className="bg-white px-6 py-3 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-3">
              <Calendar size={18} className="text-[#E95D22]"/> 
-             <span className="font-black text-[#1B2B48]">{new Date().toLocaleDateString('ar-SA', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</span>
+             <span className="font-black text-[#1B2B48]">{new Date().toLocaleDateString('ar-EG', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</span>
         </div>
       </div>
 
@@ -194,7 +194,7 @@ const DashboardModule: React.FC<DashboardProps> = ({
                           <div>
                             <h4 className="font-bold text-[#1B2B48] text-sm group-hover:text-[#E95D22] transition-colors line-clamp-1">{item.label}</h4>
                             <p className="text-[10px] text-gray-400 mt-0.5 font-bold uppercase">
-                                {item?.project_name || 'عام'} • {new Date(item.date).toLocaleDateString('ar-SA')}
+                                {item?.project_name || 'عام'} • {new Date(item.date).toLocaleDateString('ar-EG')}
                             </p>
                           </div>
                         </div>

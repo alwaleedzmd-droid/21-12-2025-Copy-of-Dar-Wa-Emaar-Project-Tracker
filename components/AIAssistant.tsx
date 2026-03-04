@@ -1,4 +1,4 @@
-/**
+﻿/**
  * AIAssistant - المساعد الذكي الاستباقي (Proactive AI Analyst)
  * ============================================================================
  * محلل مخاطر واستشاري إداري يقرأ من DataContext ويقدم:
@@ -67,7 +67,7 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
   const lastProactiveCheck = useRef<number>(0);
   const commentsLoaded = useRef(false);
 
-  const timeNow = () => new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' });
+  const timeNow = () => new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' });
 
   const isAdmin = currentUser?.role === 'ADMIN';
   const isPRManager = currentUser?.role === 'PR_MANAGER';

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { CheckCircle2, Circle, XCircle, Clock, GitBranch, ChevronDown, ChevronUp } from 'lucide-react';
 import {
   WorkflowRequestType,
@@ -135,7 +135,7 @@ const ApprovalChainTracker: React.FC<ApprovalChainTrackerProps> = ({
               <p className="text-[11px] text-gray-500 font-bold">{submittedBy || 'غير محدد'}</p>
               {createdAt && (
                 <p className="text-[10px] text-gray-400 font-bold" dir="ltr">
-                  {new Date(createdAt).toLocaleString('ar-SA')}
+                  {new Date(createdAt).toLocaleString('ar-EG')}
                 </p>
               )}
             </div>

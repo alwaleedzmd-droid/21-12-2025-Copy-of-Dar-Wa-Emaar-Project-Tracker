@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+﻿import React, { useState } from 'react';
 import { 
   Download, BookOpen, Building2, Zap, FileStack, Users, Settings, 
   CheckCircle2, Shield, Bell, GitBranch, BarChart3, FileSpreadsheet,
@@ -344,7 +344,7 @@ const SystemGuide: React.FC = () => {
     وتسلسل موافقات آلي ومتابعة حية لحالة كل طلب
   </p>
   <p class="version">
-    الإصدار 1.0 — ${new Date().toLocaleDateString('ar-SA', { year: 'numeric', month: 'long', day: 'numeric' })}<br/>
+    الإصدار 1.0 — ${new Date().toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' })}<br/>
     إعداد: إدارة تقنية المعلومات — شركة دار وإعمار
   </p>
 </div>

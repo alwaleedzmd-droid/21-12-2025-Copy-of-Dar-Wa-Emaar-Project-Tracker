@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+﻿import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import {
   ClipboardList, CheckCircle2, Clock, AlertTriangle, Play, Loader2,
   Building2, Calendar, MessageSquare, Timer, TrendingUp, Sparkles,
@@ -447,7 +447,7 @@ const MyTasksDashboard: React.FC = () => {
                                 </span>
                               )}
                               <span className="text-[10px] text-gray-400 font-bold flex items-center gap-1">
-                                <Calendar size={11} /> {new Date(req.created_at).toLocaleDateString('ar-SA')}
+                                <Calendar size={11} /> {new Date(req.created_at).toLocaleDateString('ar-EG')}
                               </span>
                             </div>
                             {req.notes && (
@@ -523,7 +523,7 @@ const MyTasksDashboard: React.FC = () => {
                           )}
                           {work.assigned_at && (
                             <span className="text-[10px] text-gray-400 font-bold flex items-center gap-1">
-                              <Calendar size={11} /> {new Date(work.assigned_at).toLocaleDateString('ar-SA')}
+                              <Calendar size={11} /> {new Date(work.assigned_at).toLocaleDateString('ar-EG')}
                             </span>
                           )}
                         </div>
@@ -590,13 +590,13 @@ const MyTasksDashboard: React.FC = () => {
                       <div className="bg-gray-50 p-3 rounded-xl border">
                         <span className="text-[10px] text-gray-400 font-bold block">تاريخ الإسناد</span>
                         <span className="font-bold text-sm text-[#1B2B48]">
-                          {work.assigned_at ? new Date(work.assigned_at).toLocaleDateString('ar-SA') : '-'}
+                          {work.assigned_at ? new Date(work.assigned_at).toLocaleDateString('ar-EG') : '-'}
                         </span>
                       </div>
                       <div className="bg-gray-50 p-3 rounded-xl border">
                         <span className="text-[10px] text-gray-400 font-bold block">تاريخ الإنجاز</span>
                         <span className="font-bold text-sm text-[#1B2B48]">
-                          {work.completed_at ? new Date(work.completed_at).toLocaleDateString('ar-SA') : '-'}
+                          {work.completed_at ? new Date(work.completed_at).toLocaleDateString('ar-EG') : '-'}
                         </span>
                       </div>
                     </div>
