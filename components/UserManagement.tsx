@@ -33,6 +33,9 @@ const UserManagement = () => {
   const [deleteConfirmUser, setDeleteConfirmUser] = useState<any>(null);
   const [newUser, setNewUser] = useState({ name: '', email: '', password: '', role: 'CONVEYANCE', department: '' });
   const [isSyncingPasswords, setIsSyncingPasswords] = useState(false);
+  const [editRoleUser, setEditRoleUser] = useState<any>(null);
+  const [selectedRole, setSelectedRole] = useState<string>('');
+  const [isUpdatingRole, setIsUpdatingRole] = useState(false);
 
   const isAdmin = currentUser?.role === 'ADMIN';
 
@@ -141,6 +144,26 @@ const UserManagement = () => {
     }
   };
 
+  const handleChangeRole = async () => {
+    if (!isAdmin || !editRoleUser || !selectedRole) return;
+    if (selectedRole === editRoleUser.role) {
+      setEditRoleUser(null);
+      return;
+    }
+    setIsUpdatingRole(true);
+    try {
+      const { error } = await supabase.from('profiles').update({ role: selectedRole }).eq('id', editRoleUser.id);
+      if (error) throw error;
+      alert(`✅ تم تغيير دور ${editRoleUser.name} إلى ${selectedRole === 'ADMIN' ? 'مدير النظام' : selectedRole === 'PR_MANAGER' ? 'PR' : selectedRole === 'TECHNICAL' ? 'المشاريع' : 'CX'} بنجاح`);
+      setEditRoleUser(null);
+      refreshData();
+    } catch (err: any) {
+      alert('فشل تغيير الدور: ' + err.message);
+    } finally {
+      setIsUpdatingRole(false);
+    }
+  };
+
   const handleAddUser = async () => {
     if (!newUser.email || !newUser.password) return alert("البريد وكلمة المرور مطلوبة");
     setIsLoading(true);
@@ -246,14 +269,23 @@ const UserManagement = () => {
                 {isAdmin && (
                   <td className="p-5">
                     {user.id !== currentUser?.id ? (
-                      <button
-                        onClick={() => setDeleteConfirmUser(user)}
-                        disabled={deletingUserId === user.id}
-                        className="p-2 text-red-400 hover:bg-red-50 rounded-xl transition-colors disabled:opacity-50"
-                        title="حذف المستخدم"
-                      >
-                        {deletingUserId === user.id ? <Loader2 size={18} className="animate-spin" /> : <Trash2 size={18} />}
-                      </button>
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => { setEditRoleUser(user); setSelectedRole(user.role); }}
+                          className="p-2 text-blue-500 hover:bg-blue-50 rounded-xl transition-colors"
+                          title="تغيير الدور"
+                        >
+                          <Edit2 size={18} />
+                        </button>
+                        <button
+                          onClick={() => setDeleteConfirmUser(user)}
+                          disabled={deletingUserId === user.id}
+                          className="p-2 text-red-400 hover:bg-red-50 rounded-xl transition-colors disabled:opacity-50"
+                          title="حذف المستخدم"
+                        >
+                          {deletingUserId === user.id ? <Loader2 size={18} className="animate-spin" /> : <Trash2 size={18} />}
+                        </button>
+                      </div>
                     ) : (
                       <span className="text-[10px] text-gray-400 font-bold">أنت</span>
                     )}
@@ -280,6 +312,48 @@ const UserManagement = () => {
           <button onClick={handleAddUser} disabled={isLoading} className="w-full bg-[#1B2B48] text-white py-4 rounded-2xl font-black shadow-xl">
             {isLoading ? <Loader2 className="animate-spin mx-auto" /> : "حفظ البيانات"}
           </button>
+        </div>
+      </Modal>
+
+      {/* مودال تغيير الدور */}
+      <Modal isOpen={!!editRoleUser} onClose={() => setEditRoleUser(null)} title="تغيير الدور الوظيفي">
+        <div className="space-y-5 pt-2" dir="rtl">
+          <div className="bg-blue-50 p-5 rounded-2xl flex items-start gap-3">
+            <Shield size={24} className="text-blue-600 mt-0.5 flex-shrink-0" />
+            <div>
+              <p className="font-black text-[#1B2B48] mb-1">تغيير دور: {editRoleUser?.name}</p>
+              <p className="text-sm text-gray-500 font-bold">{editRoleUser?.email}</p>
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-black text-gray-600 mb-2">الدور الجديد</label>
+            <select
+              className="w-full p-4 bg-gray-50 border rounded-2xl font-bold outline-none focus:border-[#E95D22]"
+              title="اختر الدور الوظيفي"
+              value={selectedRole}
+              onChange={e => setSelectedRole(e.target.value)}
+            >
+              <option value="ADMIN">مدير النظام</option>
+              <option value="PR_MANAGER">PR</option>
+              <option value="TECHNICAL">المشاريع</option>
+              <option value="CONVEYANCE">CX</option>
+            </select>
+          </div>
+          <div className="flex gap-3">
+            <button
+              onClick={handleChangeRole}
+              disabled={isUpdatingRole}
+              className="flex-1 bg-[#1B2B48] text-white py-4 rounded-2xl font-black shadow-xl hover:bg-[#2a3f63] transition-colors disabled:opacity-50"
+            >
+              {isUpdatingRole ? <Loader2 className="animate-spin mx-auto" size={20} /> : 'حفظ التغيير'}
+            </button>
+            <button
+              onClick={() => setEditRoleUser(null)}
+              className="flex-1 bg-gray-100 text-gray-700 py-4 rounded-2xl font-black hover:bg-gray-200 transition-colors"
+            >
+              إلغاء
+            </button>
+          </div>
         </div>
       </Modal>
 

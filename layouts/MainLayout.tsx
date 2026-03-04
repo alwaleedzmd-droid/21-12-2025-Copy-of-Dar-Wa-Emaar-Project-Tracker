@@ -4,7 +4,7 @@ import { useNavigate, useLocation } from 'react-router';
 import { 
   LogOut, RefreshCw, Building2, 
   Zap, FileStack, Menu, X, Users, BarChart3, KeyRound, Loader2, Eye, EyeOff, Settings, BookOpen,
-  Map as MapIcon
+  Map as MapIcon, ClipboardList, ListChecks
 } from 'lucide-react';
 import { useData } from '../contexts/DataContext';
 import { DAR_LOGO } from '../constants';
@@ -185,6 +185,18 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
       label: 'إدارة المستخدمين', 
       icon: <Users size={20} />, 
       path: '/users', 
+      roles: ['ADMIN'] 
+    },
+    { 
+      label: 'لوحة مهامي', 
+      icon: <ListChecks size={20} />, 
+      path: '/my-tasks', 
+      roles: ['ADMIN', 'PR_MANAGER', 'TECHNICAL', 'CONVEYANCE'] 
+    },
+    { 
+      label: 'إسناد المهام', 
+      icon: <ClipboardList size={20} />, 
+      path: '/task-assignment', 
       roles: ['ADMIN'] 
     },
     { 

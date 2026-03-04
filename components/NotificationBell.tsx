@@ -76,14 +76,19 @@ const NotificationBell = () => {
 
   const markAsRead = async () => {
     if (unreadCount === 0) return;
+    // تحديث محلي فوري (لمنع الوميض)
+    setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
     try {
       // تحديث فقط الإشعارات الموجهة لدور هذا المستخدم
-      await supabase
+      const { error } = await supabase
         .from('notifications')
         .update({ is_read: true })
         .eq('target_role', currentUser?.role)
         .eq('is_read', false);
-      setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
+      if (error) {
+        // في حالة فشل التحديث، نعيد الحالة المحلية بعد الجلب
+        console.warn('خطأ تحديث حالة الإشعارات:', error.message);
+      }
     } catch (err) {
       console.warn('خطأ تحديث حالة الإشعارات:', err);
     }
@@ -100,6 +105,7 @@ const NotificationBell = () => {
   const handleMouseLeave = () => {
     if (isOpen) {
       closeTimerRef.current = setTimeout(() => {
+        if (unreadCount > 0) markAsRead();
         setIsOpen(false);
       }, 400);
     }
@@ -114,7 +120,7 @@ const NotificationBell = () => {
 
   return (
     <div className="relative" onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave} ref={panelRef}>
-      <button onClick={() => { setIsOpen(!isOpen); if (!isOpen) markAsRead(); }} className="relative p-2.5 text-gray-400 hover:bg-gray-100 rounded-2xl transition-all active:scale-95">
+      <button onClick={() => { if (isOpen && unreadCount > 0) markAsRead(); setIsOpen(!isOpen); }} className="relative p-2.5 text-gray-400 hover:bg-gray-100 rounded-2xl transition-all active:scale-95">
         <Bell size={24} />
         {unreadCount > 0 && (
           <span className="absolute top-2 right-2 w-5 h-5 bg-[#E95D22] text-white text-[10px] font-black rounded-full border-2 border-white flex items-center justify-center animate-bounce">

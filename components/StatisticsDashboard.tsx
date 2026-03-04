@@ -7,9 +7,11 @@ import {
 import {
   Building2, Zap, FileStack, TrendingUp,
   CheckCircle2, Clock, Activity, BarChart3, XCircle, AlertCircle, ArrowLeft,
-  Download, FileSpreadsheet, FileText
+  Download, FileSpreadsheet, FileText, AtSign, Tag, Loader2, Calendar, Timer, FileWarning, MessageSquareWarning
 } from 'lucide-react';
 import { useData } from '../contexts/DataContext';
+import { notificationService } from '../services/notificationService';
+import { supabase } from '../supabaseClient';
 import * as XLSX from 'xlsx';
 
 // ─── ألوان هوية دار وإعمار ───
@@ -225,9 +227,28 @@ const CustomPieLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent, n
 // ═══════════════════════════════════════════
 const StatisticsDashboard: React.FC = () => {
   const navigate = useNavigate();
-  const { projects, technicalRequests, clearanceRequests, projectWorks, isDbLoading } = useData();
+  const { projects, technicalRequests, clearanceRequests, projectWorks, isDbLoading, currentUser, refreshData } = useData();
   const [chartsVisible, setChartsVisible] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [completingHandlerId, setCompletingHandlerId] = useState<number | null>(null);
+
+  // ═══ جلب التعليقات لاستخراج الترميزات (@) كبديل عن أعمدة قاعدة البيانات ═══
+  const [allComments, setAllComments] = useState<any[]>([]);
+  const [commentsLoaded, setCommentsLoaded] = useState(false);
+
+  useEffect(() => {
+    const fetchAllComments = async () => {
+      try {
+        const { data } = await supabase.from('work_comments').select('*').order('created_at', { ascending: true });
+        setAllComments(data || []);
+      } catch (err) {
+        console.warn('⚠️ فشل جلب التعليقات:', err);
+      } finally {
+        setCommentsLoaded(true);
+      }
+    };
+    fetchAllComments();
+  }, [projectWorks]); // إعادة الجلب عند تحديث الأعمال
 
   useEffect(() => {
     const timer = setTimeout(() => setChartsVisible(true), 600);
@@ -353,6 +374,161 @@ const StatisticsDashboard: React.FC = () => {
       projectWorksDetails,
     };
   }, [projects, technicalRequests, clearanceRequests, projectWorks]);
+
+  // إحصائيات الترميز (@) — من أعمدة قاعدة البيانات أو التعليقات
+  const handlerStats = useMemo(() => {
+    const safeWorks = projectWorks ?? [];
+    
+    // أولاً: الأعمال التي لديها بيانات ترميز من أعمدة قاعدة البيانات
+    const dbTagged = safeWorks.filter(w => w.current_handler && w.handler_status === 'active');
+    
+    // ثانياً: إذا لم تكن الأعمدة متوفرة، نستخرج من التعليقات
+    let enrichedWorks: Array<{
+      id: number; task_name: string; project_name?: string;
+      current_handler: string; handler_tagged_at?: string; handler_status: string;
+      status?: string;
+    }> = [];
+
+    if (dbTagged.length > 0) {
+      // الأعمدة متوفرة — نستخدم البيانات مباشرة
+      enrichedWorks = dbTagged.map(w => ({
+        id: w.id,
+        task_name: w.task_name,
+        project_name: w.project_name,
+        current_handler: w.current_handler!,
+        handler_tagged_at: w.handler_tagged_at,
+        handler_status: 'active',
+        status: w.status,
+      }));
+    } else if (commentsLoaded && allComments.length > 0) {
+      // بديل: تحليل التعليقات لاستخراج آخر @ترميز لكل عمل
+      const commentsByWork: Record<number, any[]> = {};
+      allComments.forEach(c => {
+        const wid = c.work_id;
+        if (!commentsByWork[wid]) commentsByWork[wid] = [];
+        commentsByWork[wid].push(c);
+      });
+
+      safeWorks.forEach(work => {
+        const wComments = commentsByWork[work.id];
+        if (!wComments || wComments.length === 0) return;
+        
+        // بحث من آخر تعليق إلى الأقدم
+        const reversed = [...wComments].sort((a: any, b: any) => 
+          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        );
+        
+        let handler: string | null = null;
+        let tagDate: string | null = null;
+        let isCompleted = false;
+        
+        for (const comment of reversed) {
+          const content = comment.content || '';
+          // تحقق من علامة الإنجاز
+          if (content.includes('✅ تم إنجاز الترميز @')) {
+            const m = content.match(/@([\u0600-\u06FFa-zA-Z0-9_]+)/u);
+            if (m) { handler = m[1]; tagDate = comment.created_at; isCompleted = true; }
+            break;
+          }
+          // البحث عن @ترميز
+          const tagMatch = content.match(/@([\u0600-\u06FFa-zA-Z0-9_]+)/u);
+          if (tagMatch) {
+            handler = tagMatch[1];
+            tagDate = comment.created_at;
+            isCompleted = false;
+            break;
+          }
+        }
+        
+        if (handler && !isCompleted) {
+          enrichedWorks.push({
+            id: work.id,
+            task_name: work.task_name,
+            project_name: work.project_name,
+            current_handler: handler,
+            handler_tagged_at: tagDate || undefined,
+            handler_status: 'active',
+            status: work.status,
+          });
+        }
+      });
+    }
+    
+    // تجميع حسب الجهة
+    const byHandler: Record<string, typeof enrichedWorks> = {};
+    enrichedWorks.forEach(w => {
+      const h = w.current_handler;
+      if (!byHandler[h]) byHandler[h] = [];
+      byHandler[h].push(w);
+    });
+    
+    return {
+      totalActive: enrichedWorks.length,
+      byHandler,
+      handlers: Object.keys(byHandler).sort((a, b) => byHandler[b].length - byHandler[a].length),
+      enrichedWorks,
+    };
+  }, [projectWorks, allComments, commentsLoaded]);
+
+  // ═══ إحصائيات المواعيد النهائية — أعمال قريبة ومتأخرة ═══
+  const deadlineStats = useMemo(() => {
+    const safeWorks = (projectWorks ?? []).filter(w => 
+      w.expected_completion_date && w.status !== 'completed'
+    );
+    const today = new Date(); today.setHours(0,0,0,0);
+    
+    const overdue: Array<typeof safeWorks[0] & { diffDays: number }> = [];
+    const nearDeadline: Array<typeof safeWorks[0] & { diffDays: number }> = [];
+    const safe: Array<typeof safeWorks[0] & { diffDays: number }> = [];
+    
+    safeWorks.forEach(work => {
+      const target = new Date(work.expected_completion_date!);
+      target.setHours(0,0,0,0);
+      const diffDays = Math.ceil((target.getTime() - today.getTime()) / (1000*60*60*24));
+      const enriched = { ...work, diffDays };
+      
+      if (diffDays < 0) overdue.push(enriched);
+      else if (diffDays <= 3) nearDeadline.push(enriched);
+      else safe.push(enriched);
+    });
+    
+    // ترتيب: الأقرب/الأكثر تأخراً أولاً
+    overdue.sort((a, b) => a.diffDays - b.diffDays);
+    nearDeadline.sort((a, b) => a.diffDays - b.diffDays);
+    
+    return { overdue, nearDeadline, safe, total: safeWorks.length };
+  }, [projectWorks]);
+
+  const isManager = ['ADMIN', 'PR_MANAGER'].includes(currentUser?.role || '');
+
+  const handleCompleteHandlerFromDashboard = async (workId: number) => {
+    setCompletingHandlerId(workId);
+    let dbSuccess = false;
+    try {
+      const { error } = await supabase.from('project_works').update({
+        handler_status: 'completed'
+      }).eq('id', workId);
+      if (!error) dbSuccess = true;
+      else console.warn('⚠️ عمود handler_status غير متوفر:', error.message);
+    } catch (err) {
+      console.warn('⚠️ فشل تحديث handler_status:', err);
+    }
+    // بديل: تسجيل الإنجاز كتعليق
+    if (!dbSuccess) {
+      // البحث عن الجهة من enrichedWorks أو من projectWorks
+      const enrichedWork = handlerStats.enrichedWorks.find(w => w.id === workId);
+      const handlerName = enrichedWork?.current_handler || (projectWorks ?? []).find(w => w.id === workId)?.current_handler || '';
+      try {
+        await supabase.from('work_comments').insert({
+          work_id: workId,
+          user_name: currentUser?.name || 'النظام',
+          content: `✅ تم إنجاز الترميز @${handlerName}`
+        });
+      } catch (e) { console.error('فشل تسجيل تعليق الإنجاز:', e); }
+    }
+    refreshData();
+    setCompletingHandlerId(null);
+  };
 
   // ─── دالة تصدير Excel ───
   const exportToExcel = () => {
@@ -626,6 +802,210 @@ const StatisticsDashboard: React.FC = () => {
           onClick={() => navigate('/deeds')}
         />
       </div>
+
+      {/* ═══ الأعمال المرمزة لدى الجهات (@) ═══ */}
+      {handlerStats.totalActive > 0 && (
+        <div
+          className={`bg-white rounded-[35px] shadow-sm border border-gray-100 p-8 transition-all duration-700 ${chartsVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}
+        >
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-2xl bg-purple-50 flex items-center justify-center">
+                <AtSign size={22} className="text-purple-600" />
+              </div>
+              <div>
+                <h3 className="text-lg font-black text-[#1B2B48]">الأعمال لدى الجهات</h3>
+                <p className="text-xs text-gray-400 font-bold">
+                  الأعمال المرمزة بـ@ والموجودة حالياً لدى جهات خارجية أو أقسام
+                </p>
+              </div>
+            </div>
+            <div className="bg-purple-50 px-4 py-2 rounded-xl border border-purple-200">
+              <span className="text-2xl font-black text-purple-700">{handlerStats.totalActive}</span>
+              <span className="text-[10px] font-bold text-purple-400 mr-1">عمل نشط</span>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            {handlerStats.handlers.map(handler => (
+              <div key={handler} className="bg-purple-50/50 rounded-2xl border border-purple-100 overflow-hidden">
+                <div className="flex items-center justify-between p-4 bg-purple-50 border-b border-purple-100">
+                  <div className="flex items-center gap-2">
+                    <Tag size={14} className="text-purple-600" />
+                    <span className="font-black text-sm text-purple-800">@{handler}</span>
+                  </div>
+                  <span className="bg-purple-600 text-white px-3 py-1 rounded-full text-[10px] font-black">
+                    {handlerStats.byHandler[handler].length} عمل
+                  </span>
+                </div>
+                <div className="divide-y divide-purple-100">
+                  {handlerStats.byHandler[handler].map(work => (
+                    <div key={work.id} className="flex items-center justify-between p-4 hover:bg-purple-50/70 transition-colors">
+                      <div className="flex-1 min-w-0">
+                        <p className="font-bold text-sm text-[#1B2B48] truncate">{work.task_name}</p>
+                        <div className="flex items-center gap-3 mt-1">
+                          <span className="text-[10px] text-gray-400 font-bold flex items-center gap-1">
+                            <Building2 size={10} /> {work.project_name || 'مشروع'}
+                          </span>
+                          {work.handler_tagged_at && (() => {
+                            const tagged = new Date(work.handler_tagged_at);
+                            const diffDays = Math.floor((Date.now() - tagged.getTime()) / (1000*60*60*24));
+                            return (
+                              <>
+                                <span className="text-[10px] text-purple-600 font-black">
+                                  منذ {tagged.toLocaleDateString('ar-SA')}
+                                </span>
+                                {diffDays > 0 && (
+                                  <span className={`px-2 py-0.5 rounded-lg text-[9px] font-black ${
+                                    diffDays > 7 ? 'bg-red-100 text-red-600' : diffDays > 3 ? 'bg-amber-100 text-amber-600' : 'bg-gray-100 text-gray-500'
+                                  }`}>
+                                    {diffDays} يوم
+                                  </span>
+                                )}
+                              </>
+                            );
+                          })()}
+                        </div>
+                      </div>
+                      {isManager && (
+                        <button
+                          onClick={() => handleCompleteHandlerFromDashboard(work.id)}
+                          disabled={completingHandlerId === work.id}
+                          className="px-4 py-2 bg-green-600 text-white rounded-xl font-bold text-[10px] flex items-center gap-1 hover:bg-green-700 transition-colors disabled:opacity-50 mr-3"
+                        >
+                          {completingHandlerId === work.id 
+                            ? <Loader2 size={12} className="animate-spin" /> 
+                            : <CheckCircle2 size={12} />
+                          } منجز
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ═══ متابعة المواعيد النهائية — أعمال متأخرة وقريبة ═══ */}
+      {(deadlineStats.overdue.length > 0 || deadlineStats.nearDeadline.length > 0) && (
+        <div
+          className={`bg-white rounded-[35px] shadow-sm border border-gray-100 p-8 transition-all duration-700 ${chartsVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}
+        >
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-2xl bg-red-50 flex items-center justify-center">
+                <Calendar size={22} className="text-red-600" />
+              </div>
+              <div>
+                <h3 className="text-lg font-black text-[#1B2B48]">متابعة المواعيد النهائية</h3>
+                <p className="text-xs text-gray-400 font-bold">
+                  الأعمال المتأخرة عن موعد الإنجاز والأعمال القريبة من الموعد
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              {deadlineStats.overdue.length > 0 && (
+                <div className="bg-red-50 px-4 py-2 rounded-xl border border-red-200">
+                  <span className="text-2xl font-black text-red-600">{deadlineStats.overdue.length}</span>
+                  <span className="text-[10px] font-bold text-red-400 mr-1">متأخر</span>
+                </div>
+              )}
+              {deadlineStats.nearDeadline.length > 0 && (
+                <div className="bg-amber-50 px-4 py-2 rounded-xl border border-amber-200">
+                  <span className="text-2xl font-black text-amber-600">{deadlineStats.nearDeadline.length}</span>
+                  <span className="text-[10px] font-bold text-amber-400 mr-1">قريب</span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* الأعمال المتأخرة */}
+          {deadlineStats.overdue.length > 0 && (
+            <div className="mb-6">
+              <div className="flex items-center gap-2 mb-3">
+                <AlertCircle size={16} className="text-red-500" />
+                <h4 className="font-black text-sm text-red-700">أعمال متأخرة عن الموعد</h4>
+              </div>
+              <div className="space-y-2">
+                {deadlineStats.overdue.map(work => (
+                  <div key={work.id} 
+                    onClick={() => navigate(`/projects/${work.projectId}`)}
+                    className="flex items-center justify-between p-4 bg-red-50/60 rounded-2xl border border-red-200 hover:bg-red-50 transition-colors cursor-pointer group"
+                  >
+                    <div className="flex items-center gap-4 flex-1 min-w-0">
+                      <div className="w-2 h-10 rounded-full bg-red-500 flex-shrink-0"></div>
+                      <div className="min-w-0">
+                        <p className="font-bold text-sm text-[#1B2B48] truncate group-hover:text-red-700 transition-colors">{work.task_name}</p>
+                        <div className="flex items-center gap-3 mt-1">
+                          <span className="text-[10px] text-gray-400 font-bold flex items-center gap-1">
+                            <Building2 size={10} /> {work.project_name || 'مشروع'}
+                          </span>
+                          <span className="text-[10px] text-red-500 font-black">
+                            الموعد: {new Date(work.expected_completion_date!).toLocaleDateString('ar-SA')}
+                          </span>
+                          {work.current_handler && (
+                            <span className="text-[10px] text-purple-600 font-black flex items-center gap-1">
+                              <AtSign size={9} /> {work.current_handler}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    <span className="bg-red-500 text-white px-3 py-1.5 rounded-xl text-[10px] font-black flex items-center gap-1 flex-shrink-0">
+                      <Timer size={11} /> متأخر {Math.abs(work.diffDays)} يوم
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* الأعمال القريبة من الموعد */}
+          {deadlineStats.nearDeadline.length > 0 && (
+            <div>
+              <div className="flex items-center gap-2 mb-3">
+                <Timer size={16} className="text-amber-500" />
+                <h4 className="font-black text-sm text-amber-700">أعمال قريبة من الموعد (≤ 3 أيام)</h4>
+              </div>
+              <div className="space-y-2">
+                {deadlineStats.nearDeadline.map(work => (
+                  <div key={work.id}
+                    onClick={() => navigate(`/projects/${work.projectId}`)}
+                    className="flex items-center justify-between p-4 bg-amber-50/60 rounded-2xl border border-amber-200 hover:bg-amber-50 transition-colors cursor-pointer group"
+                  >
+                    <div className="flex items-center gap-4 flex-1 min-w-0">
+                      <div className="w-2 h-10 rounded-full bg-amber-500 flex-shrink-0"></div>
+                      <div className="min-w-0">
+                        <p className="font-bold text-sm text-[#1B2B48] truncate group-hover:text-amber-700 transition-colors">{work.task_name}</p>
+                        <div className="flex items-center gap-3 mt-1">
+                          <span className="text-[10px] text-gray-400 font-bold flex items-center gap-1">
+                            <Building2 size={10} /> {work.project_name || 'مشروع'}
+                          </span>
+                          <span className="text-[10px] text-amber-600 font-black">
+                            الموعد: {new Date(work.expected_completion_date!).toLocaleDateString('ar-SA')}
+                          </span>
+                          {work.current_handler && (
+                            <span className="text-[10px] text-purple-600 font-black flex items-center gap-1">
+                              <AtSign size={9} /> {work.current_handler}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    <span className={`px-3 py-1.5 rounded-xl text-[10px] font-black flex items-center gap-1 flex-shrink-0 ${
+                      work.diffDays === 0 ? 'bg-red-500 text-white' : 'bg-amber-500 text-white'
+                    }`}>
+                      <Calendar size={11} /> {work.diffDays === 0 ? 'اليوم آخر موعد!' : `${work.diffDays} يوم متبقي`}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ═══ الرسوم البيانية ═══ */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

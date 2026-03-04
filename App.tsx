@@ -1,11 +1,11 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Routes, Route, useNavigate, useLocation, useParams, Navigate } from 'react-router-dom';
-import { 
-  AlertTriangle, Loader2, Plus, 
+import { AlertTriangle, Loader2, Plus, 
   CheckCircle2, Clock,
   ChevronLeft, ShieldAlert,
-  MessageSquare, Send, Sheet
+  MessageSquare, Send, Sheet, AtSign, Tag, Calendar, Timer, AlertCircle,
+  FileWarning
 } from 'lucide-react';
 import { supabase } from './supabaseClient';
 import { ProjectWork, UserRole, User } from './types';
@@ -30,6 +30,8 @@ import StatisticsDashboard from './components/StatisticsDashboard';
 import LoginPage from './components/LoginPage';
 import SystemGuide from './components/SystemGuide';
 import InteractiveOperationsMap from './components/InteractiveOperationsMap';
+import TaskAssignment from './components/TaskAssignment';
+import MyTasksDashboard from './components/MyTasksDashboard';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -109,9 +111,15 @@ const ProjectDetailWrapper = ({ projects = [], currentUser }: any) => {
    const [isActionLoading, setIsActionLoading] = useState(false);
    const [isBulkLoading, setIsBulkLoading] = useState(false);
    
-   const [newWorkForm, setNewWorkForm] = useState({ task_name: '', authority: '', department: '', notes: '' });
+   const [newWorkForm, setNewWorkForm] = useState({ task_name: '', authority: '', department: '', notes: '', expected_completion_date: '' });
    const commentsEndRef = useRef<HTMLDivElement>(null);
    const excelInputRef = useRef<HTMLInputElement>(null);
+   
+   // حالات نظام تبرير التأخير وتعديل التاريخ
+   const [showJustificationForm, setShowJustificationForm] = useState(false);
+   const [justificationText, setJustificationText] = useState('');
+   const [newDeadlineDate, setNewDeadlineDate] = useState('');
+   const [isSavingDeadline, setIsSavingDeadline] = useState(false);
 
    const project = useMemo(() => projects.find((p: any) => p.id === Number(id)), [projects, id]);
    const isManager = ['ADMIN', 'PR_MANAGER'].includes(currentUser?.role || '');
@@ -236,6 +244,42 @@ const ProjectDetailWrapper = ({ projects = [], currentUser }: any) => {
      } catch (err) { console.error("Comments error:", err); } finally { setLoadingComments(false); }
    };
 
+   // ═══ حساب الجهة المرمَّزة من التعليقات كبديل عن أعمدة قاعدة البيانات ═══
+   // يعمل حتى لو لم يتم تشغيل ملفات الترحيل (migration)
+   const computeHandlerFromComments = (comments: any[]): { handler: string | null; date: string | null; isCompleted: boolean } => {
+     const reversed = [...comments].reverse();
+     for (const comment of reversed) {
+       const content = comment.content || '';
+       // التحقق من علامة الإنجاز أولاً
+       if (content.includes('✅ تم إنجاز الترميز @')) {
+         const match = content.match(/@([\u0600-\u06FFa-zA-Z0-9_]+)/u);
+         return { handler: match ? match[1] : null, date: comment.created_at, isCompleted: true };
+       }
+       // البحث عن @ترميز
+       const tagMatch = content.match(/@([\u0600-\u06FFa-zA-Z0-9_]+)/u);
+       if (tagMatch) {
+         return { handler: tagMatch[1], date: comment.created_at, isCompleted: false };
+       }
+     }
+     return { handler: null, date: null, isCompleted: false };
+   };
+
+   // عند جلب التعليقات: إذا لم تكن أعمدة الترميز متوفرة، نحسب من التعليقات
+   useEffect(() => {
+     if (!selectedWork || workComments.length === 0) return;
+     if (selectedWork.current_handler) return; // البيانات موجودة من قاعدة البيانات
+     
+     const { handler, date, isCompleted } = computeHandlerFromComments(workComments);
+     if (handler) {
+       setSelectedWork(prev => prev ? {
+         ...prev,
+         current_handler: handler,
+         handler_tagged_at: date || undefined,
+         handler_status: isCompleted ? 'completed' : 'active'
+       } : prev);
+     }
+   }, [workComments]);
+
    const handleOpenWorkDetail = (work: ProjectWork) => {
      setSelectedWork(work);
      setIsWorkDetailOpen(true);
@@ -308,9 +352,40 @@ const ProjectDetailWrapper = ({ projects = [], currentUser }: any) => {
        });
        if (error) throw error;
        
+       // استخراج @ترميز من التعليق وتحديث الجهة الحالية
+       const tagMatch = newComment.match(/@([\u0600-\u06FFa-zA-Z0-9_]+)/u);
+       if (tagMatch && tagMatch[1]) {
+         const handler = tagMatch[1];
+         const taggedAt = new Date().toISOString();
+         
+         // محاولة تحديث أعمدة قاعدة البيانات (قد تفشل إذا لم يتم تشغيل الترحيل)
+         try {
+           const { error: hErr } = await supabase.from('project_works').update({
+             current_handler: handler,
+             handler_tagged_at: taggedAt,
+             handler_status: 'active'
+           }).eq('id', selectedWork.id);
+           if (hErr) console.warn('⚠️ أعمدة الترميز غير متوفرة في قاعدة البيانات - البيانات محفوظة في التعليقات:', hErr.message);
+         } catch (e) {
+           console.warn('⚠️ أعمدة الترميز غير متوفرة:', e);
+         }
+         
+         // تحديث الحالة المحلية دائماً (يعمل من التعليقات)
+         setSelectedWork({ ...selectedWork, current_handler: handler, handler_tagged_at: taggedAt, handler_status: 'active' });
+         
+         notificationService.send('ADMIN', 
+           `🏷️ تم ترميز "${selectedWork.task_name}" إلى @${handler}`, 
+           `/projects/${id}`, currentUser?.name);
+         notificationService.send('PR_MANAGER', 
+           `🏷️ تم ترميز "${selectedWork.task_name}" إلى @${handler}`, 
+           `/projects/${id}`, currentUser?.name);
+       }
+       
        notificationService.send('PR_MANAGER', `💬 ملاحظة جديدة في ${selectedWork.task_name}`, `/projects/${id}`, currentUser?.name);
 
        setNewComment('');
+       setLocalWorksFetched(false);
+       refreshData();
        fetchWorkComments(selectedWork.id);
      } catch (err: any) { alert("خطأ: " + err.message); } finally { setLoadingComments(false); }
    };
@@ -318,15 +393,77 @@ const ProjectDetailWrapper = ({ projects = [], currentUser }: any) => {
      const handleAddWork = async () => {
        if (!newWorkForm.task_name || !project) return;
        const projectName = project.name || project.title || project.client || '';
-       const { error } = await supabase.from('project_works').insert({ ...newWorkForm, project_name: projectName, projectId: project.id, status: 'in_progress' });
+       const baseData: any = { 
+         task_name: newWorkForm.task_name,
+         authority: newWorkForm.authority || null,
+         department: newWorkForm.department || null,
+         notes: newWorkForm.notes || null,
+         project_name: projectName, 
+         projectId: project.id, 
+         status: 'in_progress'
+       };
+       
+       // محاولة الإدراج مع تاريخ الإنجاز المتوقع (إن وُجد)
+       let insertData = { ...baseData };
+       if (newWorkForm.expected_completion_date) {
+         insertData.expected_completion_date = newWorkForm.expected_completion_date;
+       }
+       let { error } = await supabase.from('project_works').insert(insertData);
+       
+       // إذا فشل بسبب عمود غير موجود، إعادة المحاولة بدون expected_completion_date
+       if (error && error.message?.includes('schema cache')) {
+         console.warn('⚠️ عمود expected_completion_date غير متوفر، إعادة المحاولة بدون تاريخ الإنجاز');
+         const { error: retryErr } = await supabase.from('project_works').insert(baseData);
+         error = retryErr;
+       }
+       
        if (!error) { 
          notificationService.send('PR_MANAGER', `🆕 تم تسجيل عمل جديد بمشروع ${project.name}`, `/projects/${id}`, currentUser?.name);
          
          setIsAddWorkOpen(false); 
-         setNewWorkForm({ task_name: '', authority: '', department: '', notes: '' });
+         setNewWorkForm({ task_name: '', authority: '', department: '', notes: '', expected_completion_date: '' });
          setLocalWorksFetched(false);
          refreshData(); 
+       } else {
+         alert('فشل إضافة العمل: ' + error.message);
        }
+   };
+
+   // تحديث حالة الترميز إلى منجز (للمدير والعلاقات العامة)
+   const handleCompleteHandler = async (work: ProjectWork) => {
+     if (!work.current_handler) return;
+     let dbSuccess = false;
+     
+     // محاولة 1: تحديث عمود handler_status في قاعدة البيانات
+     try {
+       const { error } = await supabase.from('project_works').update({
+         handler_status: 'completed'
+       }).eq('id', work.id);
+       if (!error) dbSuccess = true;
+       else console.warn('⚠️ عمود handler_status غير متوفر:', error.message);
+     } catch (err) {
+       console.warn('⚠️ فشل تحديث عمود handler_status:', err);
+     }
+     
+     // محاولة 2 (بديل): تسجيل الإنجاز كتعليق إذا فشل التحديث المباشر
+     if (!dbSuccess) {
+       try {
+         await supabase.from('work_comments').insert({
+           work_id: work.id,
+           user_name: currentUser?.name || 'النظام',
+           content: `✅ تم إنجاز الترميز @${work.current_handler}`
+         });
+       } catch (e) {
+         console.error('فشل تسجيل الإنجاز:', e);
+       }
+     }
+     
+     // تحديث الحالة المحلية
+     if (selectedWork?.id === work.id) {
+       setSelectedWork({ ...selectedWork, handler_status: 'completed' });
+     }
+     setLocalWorksFetched(false);
+     refreshData();
    };
 
    if (!project) return <div className="p-20 text-center font-bold text-gray-400">جاري تحميل بيانات المشروع...</div>;
@@ -389,6 +526,39 @@ const ProjectDetailWrapper = ({ projects = [], currentUser }: any) => {
                               </div>
                           </div>
                           <div className="flex items-center gap-3">
+                            {work.current_handler && work.handler_status === 'active' && (
+                              <span className="px-3 py-1.5 rounded-xl font-black text-[10px] bg-purple-50 text-purple-700 border border-purple-200 flex items-center gap-1">
+                                <AtSign size={10} /> {work.current_handler}
+                              </span>
+                            )}
+                            {work.expected_completion_date && (() => {
+                              const today = new Date(); today.setHours(0,0,0,0);
+                              const target = new Date(work.expected_completion_date); target.setHours(0,0,0,0);
+                              const diffDays = Math.ceil((target.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+                              const isCompleted = work.status === 'completed';
+                              const isOverdue = diffDays < 0 && !isCompleted;
+                              const isNear = diffDays >= 0 && diffDays <= 3 && !isCompleted;
+                              const isSafe = diffDays > 3 || isCompleted;
+                              const dateStr = target.toLocaleDateString('ar-SA');
+                              return (
+                                <span className={`px-3 py-1.5 rounded-xl font-black text-[10px] flex items-center gap-1.5 border ${
+                                  isCompleted ? 'bg-green-50 text-green-600 border-green-200' :
+                                  isOverdue ? 'bg-red-50 text-red-600 border-red-300' : 
+                                  isNear ? 'bg-amber-50 text-amber-600 border-amber-200' : 
+                                  'bg-blue-50 text-blue-600 border-blue-200'
+                                }`}>
+                                  {isOverdue ? <AlertCircle size={11} /> : isNear ? <Timer size={11} /> : <Calendar size={11} />}
+                                  <span>{dateStr}</span>
+                                  {!isCompleted && (
+                                    <span className={`px-1.5 py-0.5 rounded-md text-[8px] font-black ${
+                                      isOverdue ? 'bg-red-500 text-white' : isNear ? 'bg-amber-500 text-white' : 'bg-blue-100 text-blue-700'
+                                    }`}>
+                                      {isOverdue ? `متأخر ${Math.abs(diffDays)}ي` : diffDays === 0 ? 'اليوم!' : `${diffDays}ي`}
+                                    </span>
+                                  )}
+                                </span>
+                              );
+                            })()}
                             <span className={`px-4 py-2 rounded-xl font-black text-[10px] border ${work.status === 'completed' ? 'bg-green-50 text-green-700 border-green-100' : 'bg-orange-50 text-orange-700 border-orange-100'}`}>
                               {work.status === 'completed' ? 'منجز ✅' : 'قيد المتابعة ⏳'}
                             </span>
@@ -405,6 +575,18 @@ const ProjectDetailWrapper = ({ projects = [], currentUser }: any) => {
                 <div className="grid grid-cols-2 gap-3">
                   <input className="w-full p-4 bg-gray-50 rounded-2xl border outline-none font-bold text-sm focus:border-[#E95D22]" placeholder="جهة المراجعة" onChange={e => setNewWorkForm({...newWorkForm, authority: e.target.value})} />
                   <input className="w-full p-4 bg-gray-50 rounded-2xl border outline-none font-bold text-sm focus:border-[#E95D22]" placeholder="القسم الداخلي" onChange={e => setNewWorkForm({...newWorkForm, department: e.target.value})} />
+                </div>
+                <div>
+                  <label className="block text-xs font-black text-gray-500 mb-2 flex items-center gap-1">
+                    <Calendar size={14} className="text-[#E95D22]" /> تاريخ الإنجاز المتوقع
+                  </label>
+                  <input 
+                    type="date" 
+                    className="w-full p-4 bg-gray-50 rounded-2xl border outline-none font-bold text-sm focus:border-[#E95D22]" 
+                    value={newWorkForm.expected_completion_date} 
+                    onChange={e => setNewWorkForm({...newWorkForm, expected_completion_date: e.target.value})} 
+                    min={new Date().toISOString().split('T')[0]}
+                  />
                 </div>
                 <textarea className="w-full p-4 bg-gray-50 rounded-2xl border outline-none font-bold text-sm min-h-[100px] focus:border-[#E95D22]" placeholder="ملاحظات..." onChange={e => setNewWorkForm({...newWorkForm, notes: e.target.value})}></textarea>
                 <button onClick={handleAddWork} className="w-full bg-[#1B2B48] text-white py-4 rounded-2xl font-black shadow-lg">حفظ البيانات</button>
@@ -427,6 +609,267 @@ const ProjectDetailWrapper = ({ projects = [], currentUser }: any) => {
                         <span className="font-bold text-[#1B2B48]">{selectedWork.department || '-'}</span>
                       </div>
                   </div>
+                  {/* تاريخ الإنجاز المتوقع */}
+                  {selectedWork.expected_completion_date && (() => {
+                    const today = new Date();
+                    today.setHours(0,0,0,0);
+                    const target = new Date(selectedWork.expected_completion_date);
+                    target.setHours(0,0,0,0);
+                    const diffDays = Math.ceil((target.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+                    const isCompleted = selectedWork.status === 'completed';
+                    const isOverdue = diffDays < 0 && !isCompleted;
+                    const isNear = diffDays >= 0 && diffDays <= 3 && !isCompleted;
+                    return (
+                      <div className={`p-4 rounded-2xl border flex items-center justify-between ${
+                        isCompleted ? 'bg-green-50 border-green-200' :
+                        isOverdue ? 'bg-red-50 border-red-300' : 
+                        isNear ? 'bg-amber-50 border-amber-200' : 
+                        'bg-blue-50 border-blue-200'
+                      }`}>
+                        <div className="flex items-center gap-3">
+                          <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+                            isCompleted ? 'bg-green-100' :
+                            isOverdue ? 'bg-red-100' : isNear ? 'bg-amber-100' : 'bg-blue-100'
+                          }`}>
+                            {isOverdue ? <AlertCircle size={18} className="text-red-600" /> : <Calendar size={18} className={isCompleted ? 'text-green-600' : isNear ? 'text-amber-600' : 'text-blue-600'} />}
+                          </div>
+                          <div>
+                            <p className={`font-black text-sm ${
+                              isCompleted ? 'text-green-700' :
+                              isOverdue ? 'text-red-700' : isNear ? 'text-amber-700' : 'text-blue-700'
+                            }`}>
+                              تاريخ الإنجاز المتوقع: {new Date(selectedWork.expected_completion_date).toLocaleDateString('ar-SA')}
+                            </p>
+                            <p className={`text-[10px] font-bold ${
+                              isCompleted ? 'text-green-500' :
+                              isOverdue ? 'text-red-500' : isNear ? 'text-amber-500' : 'text-gray-400'
+                            }`}>
+                              {isCompleted ? 'تم الإنجاز ✅' :
+                               isOverdue ? `⚠️ متأخر ${Math.abs(diffDays)} يوم` :
+                               diffDays === 0 ? '❗ اليوم آخر موعد' :
+                               `متبقي ${diffDays} يوم`}
+                            </p>
+                          </div>
+                        </div>
+                        {isOverdue && !isCompleted && (
+                          <span className="bg-red-500 text-white px-3 py-1.5 rounded-xl text-[10px] font-black flex items-center gap-1">
+                            <Timer size={12} /> متأخر
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })()}
+                  {/* شارة الترميز الحالي */}
+                  {selectedWork.current_handler && (
+                    <div className={`p-4 rounded-2xl border flex items-center justify-between ${
+                      selectedWork.handler_status === 'completed' 
+                        ? 'bg-green-50 border-green-200' 
+                        : 'bg-purple-50 border-purple-200'
+                    }`}>
+                      <div className="flex items-center gap-3">
+                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+                          selectedWork.handler_status === 'completed' ? 'bg-green-100' : 'bg-purple-100'
+                        }`}>
+                          {selectedWork.handler_status === 'completed' 
+                            ? <CheckCircle2 size={18} className="text-green-600" />
+                            : <AtSign size={18} className="text-purple-600" />
+                          }
+                        </div>
+                        <div>
+                          <p className={`font-black text-sm ${
+                            selectedWork.handler_status === 'completed' ? 'text-green-700' : 'text-purple-700'
+                          }`}>
+                            لدى @{selectedWork.current_handler}
+                            {selectedWork.handler_tagged_at && (
+                              <span className="text-xs font-bold opacity-70 mr-2">
+                                منذ {new Date(selectedWork.handler_tagged_at).toLocaleDateString('ar-SA')}
+                              </span>
+                            )}
+                          </p>
+                          <p className="text-[10px] text-gray-400 font-bold">
+                            {selectedWork.handler_status === 'completed' ? 'تم الإنجاز ✅' : 'الإجراء الحالي لدى هذه الجهة'}
+                            {selectedWork.handler_tagged_at && (() => {
+                              const tagged = new Date(selectedWork.handler_tagged_at);
+                              const now = new Date();
+                              const diffDays = Math.floor((now.getTime() - tagged.getTime()) / (1000*60*60*24));
+                              return diffDays > 0 ? (
+                                <span className={`mr-2 px-2 py-0.5 rounded-lg text-[9px] font-black ${
+                                  diffDays > 7 ? 'bg-red-100 text-red-600' : diffDays > 3 ? 'bg-amber-100 text-amber-600' : 'bg-gray-100 text-gray-500'
+                                }`}>
+                                  {diffDays} يوم
+                                </span>
+                              ) : null;
+                            })()}
+                          </p>
+                        </div>
+                      </div>
+                      {isManager && selectedWork.handler_status === 'active' && (
+                        <button 
+                          onClick={() => handleCompleteHandler(selectedWork)}
+                          className="px-4 py-2 bg-green-600 text-white rounded-xl font-bold text-xs flex items-center gap-1 hover:bg-green-700 transition-colors"
+                        >
+                          <CheckCircle2 size={14} /> منجز
+                        </button>
+                      )}
+                    </div>
+                  )}
+                  {/* تعديل/إضافة تاريخ الإنجاز المتوقع — للمدير و PR */}
+                  {isManager && selectedWork.status !== 'completed' && (() => {
+                    const hasDate = !!selectedWork.expected_completion_date;
+                    const isOverdueNow = hasDate && (() => {
+                      const today = new Date(); today.setHours(0,0,0,0);
+                      const target = new Date(selectedWork.expected_completion_date!); target.setHours(0,0,0,0);
+                      return target < today;
+                    })();
+                    
+                    // ─── حفظ تاريخ جديد مع إشعارات ───
+                    const handleSaveDate = async (date: string, justification?: string) => {
+                      if (!date) return;
+                      setIsSavingDeadline(true);
+                      try {
+                        // حفظ في قاعدة البيانات
+                        const { error } = await supabase.from('project_works').update({ expected_completion_date: date }).eq('id', selectedWork.id);
+                        if (error && !error.message?.includes('schema cache')) throw error;
+                        
+                        const dateStr = new Date(date).toLocaleDateString('ar-SA');
+                        const projectName = project?.name || selectedWork.project_name || 'مشروع';
+                        
+                        // تسجيل كتعليق (يحفظ دائماً حتى لو الأعمدة غير موجودة)
+                        const commentContent = justification 
+                          ? `📅 تم تحديث تاريخ الإنجاز المتوقع إلى ${dateStr}\n📝 سبب التأخير: ${justification}`
+                          : `📅 تم تسجيل تاريخ الإنجاز المتوقع: ${dateStr}`;
+                        
+                        await supabase.from('work_comments').insert({
+                          work_id: selectedWork.id,
+                          user_name: currentUser?.name || 'النظام',
+                          content: commentContent
+                        });
+                        
+                        // إرسال إشعارات
+                        const handlerInfo = selectedWork.current_handler ? ` (لدى @${selectedWork.current_handler})` : '';
+                        const notification = justification
+                          ? `⚠️ تم تمديد موعد "${selectedWork.task_name}"${handlerInfo} إلى ${dateStr} — السبب: ${justification}`
+                          : `📅 تم تحديد موعد إنجاز "${selectedWork.task_name}"${handlerInfo}: ${dateStr}`;
+                        
+                        // إشعار المدير والعلاقات العامة
+                        notificationService.send(['ADMIN', 'PR_MANAGER'], notification, `/projects/${id}`, currentUser?.name);
+                        
+                        // إشعار الموظف المُسند إليه
+                        if (selectedWork.assigned_to) {
+                          notificationService.send('TECHNICAL', notification, `/projects/${id}`, currentUser?.name);
+                          notificationService.send('CONVEYANCE', notification, `/projects/${id}`, currentUser?.name);
+                        }
+                        
+                        setSelectedWork({ ...selectedWork, expected_completion_date: date });
+                        setShowJustificationForm(false);
+                        setJustificationText('');
+                        setNewDeadlineDate('');
+                        setLocalWorksFetched(false);
+                        fetchWorkComments(selectedWork.id);
+                        refreshData();
+                      } catch (err: any) { 
+                        alert('فشل حفظ التاريخ: ' + err.message); 
+                      } finally {
+                        setIsSavingDeadline(false);
+                      }
+                    };
+                    
+                    return (
+                      <div className="space-y-3">
+                        {/* الحالة العادية: تعيين/تعديل تاريخ */}
+                        {!showJustificationForm && (
+                          <div className="bg-gray-50 p-4 rounded-2xl border">
+                            <div className="flex items-center gap-3 mb-3">
+                              <Calendar size={16} className="text-[#E95D22] flex-shrink-0" />
+                              <label className="text-xs font-black text-gray-500">{hasDate ? 'تعديل تاريخ الإنجاز المتوقع:' : 'تحديد تاريخ الإنجاز المتوقع:'}</label>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <input 
+                                type="date" 
+                                className="flex-1 p-2.5 bg-white border rounded-xl font-bold text-sm outline-none focus:border-[#E95D22]"
+                                value={selectedWork.expected_completion_date || ''}
+                                min={new Date().toISOString().split('T')[0]}
+                                onChange={(e) => {
+                                  if (isOverdueNow && hasDate) {
+                                    // العمل متأخر — فتح نموذج التبرير
+                                    setNewDeadlineDate(e.target.value);
+                                    setShowJustificationForm(true);
+                                  } else {
+                                    // حفظ مباشر مع إشعارات
+                                    handleSaveDate(e.target.value);
+                                  }
+                                }}
+                              />
+                              {isOverdueNow && hasDate && (
+                                <button 
+                                  onClick={() => { setShowJustificationForm(true); setNewDeadlineDate(''); }}
+                                  className="px-4 py-2.5 bg-red-500 text-white rounded-xl font-black text-[10px] flex items-center gap-1 hover:bg-red-600 transition-colors"
+                                >
+                                  <FileWarning size={13} /> تبرير التأخير
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                        
+                        {/* نموذج تبرير التأخير */}
+                        {showJustificationForm && (
+                          <div className="bg-red-50/50 p-5 rounded-2xl border-2 border-red-200 space-y-4">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <FileWarning size={18} className="text-red-500" />
+                                <h4 className="font-black text-sm text-red-700">تبرير التأخير وتحديث الموعد</h4>
+                              </div>
+                              <button onClick={() => { setShowJustificationForm(false); setJustificationText(''); setNewDeadlineDate(''); }}
+                                className="text-gray-400 hover:text-gray-600 font-bold text-lg">
+                                ✕
+                              </button>
+                            </div>
+                            
+                            <div className="bg-white p-3 rounded-xl border border-red-100">
+                              <p className="text-[10px] text-red-500 font-black mb-1">الموعد السابق:</p>
+                              <p className="font-bold text-sm text-red-700">{new Date(selectedWork.expected_completion_date!).toLocaleDateString('ar-SA')}</p>
+                            </div>
+                            
+                            <div>
+                              <label className="text-xs font-black text-gray-600 mb-1.5 block">📝 سبب التأخير <span className="text-red-500">*</span></label>
+                              <textarea 
+                                className="w-full p-3 bg-white border border-red-200 rounded-xl font-bold text-sm outline-none focus:border-red-400 resize-none"
+                                rows={3}
+                                placeholder="اكتب سبب التأخير..."
+                                value={justificationText}
+                                onChange={(e) => setJustificationText(e.target.value)}
+                              />
+                            </div>
+                            
+                            <div>
+                              <label className="text-xs font-black text-gray-600 mb-1.5 block">📅 التاريخ الجديد المتوقع <span className="text-red-500">*</span></label>
+                              <input 
+                                type="date" 
+                                className="w-full p-2.5 bg-white border border-red-200 rounded-xl font-bold text-sm outline-none focus:border-red-400"
+                                value={newDeadlineDate}
+                                min={new Date().toISOString().split('T')[0]}
+                                onChange={(e) => setNewDeadlineDate(e.target.value)}
+                              />
+                            </div>
+                            
+                            <button 
+                              onClick={() => {
+                                if (!justificationText.trim()) { alert('يرجى كتابة سبب التأخير'); return; }
+                                if (!newDeadlineDate) { alert('يرجى تحديد التاريخ الجديد'); return; }
+                                handleSaveDate(newDeadlineDate, justificationText.trim());
+                              }}
+                              disabled={isSavingDeadline || !justificationText.trim() || !newDeadlineDate}
+                              className="w-full py-3 bg-[#1B2B48] text-white rounded-xl font-black text-sm flex items-center justify-center gap-2 hover:bg-[#243a5e] transition-colors disabled:opacity-50"
+                            >
+                              {isSavingDeadline ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />}
+                              حفظ التبرير والتاريخ الجديد
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
                   {isManager && (
                     <div className="flex gap-2">
                        {selectedWork.status !== 'completed' ? (
@@ -450,14 +893,16 @@ const ProjectDetailWrapper = ({ projects = [], currentUser }: any) => {
                                     <span className="font-black text-[10px] text-[#1B2B48]">{c.user_name}</span>
                                     <span className="text-[9px] text-gray-400" dir="ltr">{new Date(c.created_at).toLocaleTimeString('ar-SA', {hour: '2-digit', minute:'2-digit'})}</span>
                                 </div>
-                                <p className="text-xs text-gray-700 font-bold leading-relaxed">{c.content}</p>
+                                <p className="text-xs text-gray-700 font-bold leading-relaxed">{c.content.split(/(@[\u0600-\u06FFa-zA-Z0-9_]+)/gu).map((part: string, i: number) => 
+                                  part.match(/^@/) ? <span key={i} className="text-purple-600 font-black bg-purple-50 px-1 rounded">{part}</span> : part
+                                )}</p>
                             </div>
                           ))
                         }
                         <div ref={commentsEndRef} />
                     </div>
                     <div className="flex gap-2">
-                        <input className="flex-1 p-3 bg-gray-50 border rounded-xl outline-none text-xs font-bold" placeholder="أضف تعليق..." value={newComment} onChange={e => setNewComment(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAddComment()} />
+                        <input className="flex-1 p-3 bg-gray-50 border rounded-xl outline-none text-xs font-bold" placeholder="أضف تعليق... (استخدم @الجهة للترميز)" value={newComment} onChange={e => setNewComment(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAddComment()} />
                         <button onClick={handleAddComment} disabled={!newComment.trim() || loadingComments} className="p-3 bg-[#1B2B48] text-white rounded-xl"><Send size={16}/></button>
                     </div>
                   </div>
@@ -528,6 +973,12 @@ const AppContent: React.FC = () => {
         
         {/* إدارة المستخدمين: للمدير فقط */}
         <Route path="/users" element={<ProtectedRoute allowedRoles={['ADMIN']}><UserManagement /></ProtectedRoute>} />
+        
+        {/* إسناد المهام: للمدير فقط */}
+        <Route path="/task-assignment" element={<ProtectedRoute allowedRoles={['ADMIN']}><TaskAssignment /></ProtectedRoute>} />
+        
+        {/* لوحة مهامي: لجميع الأدوار */}
+        <Route path="/my-tasks" element={<ProtectedRoute allowedRoles={['ADMIN', 'PR_MANAGER', 'TECHNICAL', 'CONVEYANCE']}><MyTasksDashboard /></ProtectedRoute>} />
         
         {/* إدارة سير الموافقات: للمدير فقط */}
         <Route path="/workflow" element={<ProtectedRoute allowedRoles={['ADMIN']}><WorkflowManagement currentUser={currentUser} /></ProtectedRoute>} />

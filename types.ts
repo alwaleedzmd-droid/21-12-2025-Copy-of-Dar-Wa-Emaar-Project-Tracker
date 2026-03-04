@@ -65,6 +65,16 @@ export interface ProjectWork {
   department?: string;
   notes?: string; 
   created_at: string;
+  assigned_to?: string;
+  assigned_to_name?: string;
+  assignment_description?: string;
+  assigned_at?: string;
+  assignment_status?: 'pending' | 'in_progress' | 'completed' | 'overdue';
+  completed_at?: string;
+  current_handler?: string;
+  handler_tagged_at?: string;
+  handler_status?: 'active' | 'completed';
+  expected_completion_date?: string;
 }
 
 export interface WorkComment {

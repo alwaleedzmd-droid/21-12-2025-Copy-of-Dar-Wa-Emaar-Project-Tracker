@@ -22,8 +22,11 @@ import {
   generateExecutiveSummary,
   formatExecutiveSummary,
   analyzeBottlenecks,
+  runComprehensiveAnalysis,
+  formatComprehensiveAnalysis,
 } from '../services/aiAnalysisEngine';
 import { notificationService } from '../services/notificationService';
+import { supabase } from '../supabaseClient';
 
 interface AIAssistantProps {
   currentUser: any;
@@ -59,13 +62,36 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
   const [isTyping, setIsTyping] = useState(false);
   const [hasShownSummary, setHasShownSummary] = useState(false);
   const [alertBadge, setAlertBadge] = useState(0);
+  const [workComments, setWorkComments] = useState<any[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const lastProactiveCheck = useRef<number>(0);
+  const commentsLoaded = useRef(false);
 
   const timeNow = () => new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' });
 
   const isAdmin = currentUser?.role === 'ADMIN';
   const isPRManager = currentUser?.role === 'PR_MANAGER';
+
+  // ============================================================================
+  //  جلب التعليقات من قاعدة البيانات (لتحليل المعالجين)
+  // ============================================================================
+
+  useEffect(() => {
+    if (!isOpen || commentsLoaded.current) return;
+    const fetchComments = async () => {
+      try {
+        const { data } = await supabase
+          .from('work_comments')
+          .select('*')
+          .order('created_at', { ascending: true });
+        if (data) {
+          setWorkComments(data);
+          commentsLoaded.current = true;
+        }
+      } catch { /* تعليقات غير متوفرة */ }
+    };
+    fetchComments();
+  }, [isOpen]);
 
   // ============================================================================
   //  التحليل الاستباقي - الفحص التلقائي عند تحميل البيانات
@@ -76,11 +102,21 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
     return analyzeBottlenecks(technicalRequests, clearanceRequests, projectWorks, projects);
   }, [technicalRequests, clearanceRequests, projectWorks, projects]);
 
-  // تحديث بادج التنبيهات
+  // تحديث بادج التنبيهات (يشمل التأخيرات + المواعيد المنتهية)
   useEffect(() => {
     const criticalCount = proactiveAlerts.filter(a => a.severity === 'critical').length;
-    setAlertBadge(criticalCount);
-  }, [proactiveAlerts]);
+    // إضافة أعمال متأخرة عن الموعد النهائي
+    let overdueCount = 0;
+    try {
+      const now = new Date();
+      (projectWorks || []).forEach((w: any) => {
+        if (w.expected_completion_date && !['completed', 'منجز', 'مكتمل'].includes(w.status?.toLowerCase?.())) {
+          if (new Date(w.expected_completion_date) < now) overdueCount++;
+        }
+      });
+    } catch { /* تجاهل */ }
+    setAlertBadge(criticalCount + overdueCount);
+  }, [proactiveAlerts, projectWorks]);
 
   // إرسال إشعارات استباقية للموظفين عند اكتشاف تأخير حرج (مرة واحدة كل 6 ساعات)
   useEffect(() => {
@@ -133,16 +169,18 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
     if (isAdmin || isPRManager) {
       setIsTyping(true);
       setTimeout(() => {
-        const summary = generateExecutiveSummary(projects, technicalRequests, clearanceRequests, projectWorks);
-        const summaryText = formatExecutiveSummary(summary);
+        // تحليل شامل (يقرأ كل البيانات)
+        const analysis = runComprehensiveAnalysis(projects, technicalRequests, clearanceRequests, projectWorks, appUsers, workComments);
+        const summaryText = formatComprehensiveAnalysis(analysis);
 
         // إضافة تنبيهات حرجة إن وجدت
         let alertMsg = '';
-        if (summary.alerts.length > 0) {
-          const critCount = summary.alerts.filter(a => a.severity === 'critical').length;
-          if (critCount > 0) {
-            alertMsg = `\n\n🚨 **تنبيه عاجل:** ${critCount} طلبات وصلت لمرحلة حرجة!`;
-          }
+        const critCount = analysis.summary.alerts.filter(a => a.severity === 'critical').length;
+        if (critCount > 0) {
+          alertMsg = `\n\n🚨 **تنبيه عاجل:** ${critCount} طلبات وصلت لمرحلة حرجة!`;
+        }
+        if (analysis.deadlines.overdue.length > 0) {
+          alertMsg += `\n⏰ **${analysis.deadlines.overdue.length} أعمال متأخرة عن الموعد النهائي!**`;
         }
 
         setMessages(prev => [...prev, {
@@ -150,13 +188,45 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
           text: summaryText + alertMsg,
           sender: 'bot',
           time: timeNow(),
-          alertLevel: summary.alerts.some(a => a.severity === 'critical') ? 'critical' : 'info'
+          alertLevel: (analysis.summary.alerts.some(a => a.severity === 'critical') || analysis.deadlines.overdue.length > 0) ? 'critical' : 'info'
         }]);
         setIsTyping(false);
         setHasShownSummary(true);
       }, 1200);
     } else {
-      setHasShownSummary(true);
+      // ملخص شخصي لبقية الموظفين
+      setIsTyping(true);
+      setTimeout(() => {
+        const userName = currentUser?.name || '';
+        const myWorks = (projectWorks || []).filter((w: any) =>
+          (w.assigned_to_name === userName || w.assigned_to === userName || w.assigned_to === currentUser?.email)
+          && !['completed', 'منجز', 'مكتمل'].includes(w.status?.toLowerCase?.() || '')
+        );
+        const overdueWorks = myWorks.filter((w: any) =>
+          w.expected_completion_date && new Date(w.expected_completion_date) < new Date()
+        );
+
+        let personalText = `📊 **ملخصك الشخصي:**\n`;
+        personalText += `• المهام المسندة إليك: ${myWorks.length}\n`;
+        if (overdueWorks.length > 0) {
+          personalText += `• 🔴 متأخر عن الموعد: ${overdueWorks.length}\n`;
+          overdueWorks.slice(0, 3).forEach((w: any) => {
+            personalText += `  - ${w.task_name || 'عمل'}\n`;
+          });
+        }
+        if (myWorks.length === 0) {
+          personalText += `\nلا توجد مهام مسندة إليك حالياً.`;
+        }
+
+        setMessages(prev => [...prev, {
+          id: Date.now() + 1,
+          text: personalText,
+          sender: 'bot',
+          time: timeNow()
+        }]);
+        setIsTyping(false);
+        setHasShownSummary(true);
+      }, 800);
     }
   }, [isOpen, hasShownSummary, currentUser, isAdmin, isPRManager, projects, technicalRequests, clearanceRequests, projectWorks]);
 
@@ -215,12 +285,12 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
     const name = currentUser?.name || '';
 
     if (isAdmin) {
-      return `${greeting} ${name} 👋\nأنا محلل المخاطر واستشاريك الإداري.\n\nجاري تحضير ملخص القيادة التنفيذي...`;
+      return `${greeting} ${name} 👋\nأنا محلل المخاطر واستشاريك الإداري.\nأقرأ وأحلل كل البيانات: المشاريع، الأعمال، المواعيد، التكليفات، المعالجين، والطلبات.\n\nجاري تحضير التحليل الشامل...`;
     }
     if (isPRManager) {
-      return `${greeting} ${name} 👋\nأنا مساعدك الذكي لمتابعة المشاريع والطلبات.\n\nجاري تجهيز تقريرك...`;
+      return `${greeting} ${name} 👋\nأنا مساعدك الذكي لمتابعة كل شيء في التطبيق.\nأحلل المشاريع والمواعيد والتكليفات والمعالجين.\n\nجاري تجهيز التحليل الشامل...`;
     }
-    return `${greeting} ${name} 👋\nأنا مساعدك الذكي. يمكنني مساعدتك في:\n• متابعة طلباتك المعلقة\n• تحليل أداء المشاريع\n• اكتشاف التأخيرات\n\nاسألني عن أي شيء!`;
+    return `${greeting} ${name} 👋\nأنا مساعدك الذكي. يمكنني مساعدتك في:\n• متابعة طلباتك ومهامك المسندة\n• تحليل المواعيد النهائية والتكليفات\n• اكتشاف التأخيرات والمخاطر\n• تحليل أداء المشاريع\n\nاسألني عن أي شيء!`;
   }
 
   // ============================================================================
@@ -257,11 +327,13 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
   // ============================================================================
 
   const quickActions = [
+    { icon: <Brain size={14} />, label: 'تحليل شامل', query: 'تحليل شامل', color: 'bg-gradient-to-l from-[#1B2B48] to-[#2a3f63]' },
     { icon: <Shield size={14} />, label: 'ملخص القيادة', query: 'ملخص تنفيذي', color: 'bg-blue-500' },
-    { icon: <AlertTriangle size={14} />, label: 'تحليل المخاطر', query: 'مخاطر وتأخيرات', color: 'bg-red-500' },
-    { icon: <TrendingUp size={14} />, label: 'التنبؤ بالتأخير', query: 'تنبؤ بالتأخير', color: 'bg-amber-500' },
-    { icon: <Users size={14} />, label: 'عبء الموظفين', query: 'عبء الموظفين', color: 'bg-purple-500' },
-    { icon: <Zap size={14} />, label: 'طلبات فنية', query: 'تحليل الطلبات الفنية', color: 'bg-cyan-500' },
+    { icon: <AlertTriangle size={14} />, label: 'مخاطر', query: 'مخاطر وتأخيرات', color: 'bg-red-500' },
+    { icon: <TrendingUp size={14} />, label: 'تنبؤ بالتأخير', query: 'تنبؤ بالتأخير', color: 'bg-amber-500' },
+    { icon: <FileText size={14} />, label: 'مواعيد نهائية', query: 'تحليل المواعيد النهائية', color: 'bg-rose-500' },
+    { icon: <Zap size={14} />, label: 'تكليفات', query: 'تحليل التكليفات', color: 'bg-cyan-500' },
+    { icon: <Users size={14} />, label: 'موظفين', query: 'عبء الموظفين', color: 'bg-purple-500' },
     { icon: <FileText size={14} />, label: 'إفراغات', query: 'تحليل الإفراغات', color: 'bg-emerald-500' },
   ];
 
@@ -324,7 +396,7 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
             </div>
             <div className="flex-1">
               <span className="font-bold text-sm">المحلل الذكي لدار وإعمار</span>
-              <p className="text-[9px] text-gray-300 font-bold">محلل مخاطر • استشاري إداري • ذاكرة تراكمية</p>
+              <p className="text-[9px] text-gray-300 font-bold">يقرأ كل البيانات • تحليل شامل • ذاكرة تراكمية</p>
             </div>
             <button onClick={() => setIsOpen(false)} className="text-white/50 hover:text-white transition-colors" title="إغلاق">
               <X size={18} />
