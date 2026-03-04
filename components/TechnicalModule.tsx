@@ -9,6 +9,7 @@ import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
 import { supabase } from '../supabaseClient';
 import { TechnicalRequest, ProjectSummary, User } from '../types';
 import { notificationService } from '../services/notificationService';
+import { activityLogService } from '../services/activityLogService';
 import { updateProjectProgress } from '../services/projectProgressService';
 import { 
   TECHNICAL_SERVICE_OPTIONS,
@@ -82,6 +83,10 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
   const [isManageModalOpen, setIsManageModalOpen] = useState(false);
   const [activeRequest, setActiveRequest] = useState<TechnicalRequest | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState(() => {
+    const params = new URLSearchParams(location.search);
+    return params.get('status') || '';
+  });
   
   const [isUploading, setIsUploading] = useState(false);
   const [isBulkLoading, setIsBulkLoading] = useState(false);
@@ -348,6 +353,7 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
       setIsAddModalOpen(false);
       await onRefresh();
       alert("تم حفظ البيانات بنجاح ✅");
+      activityLogService.log({ userId: currentUser?.id || '', userName: currentUser?.name || '', userRole: currentUser?.role || '', actionType: techForm.id === 0 ? 'create' : 'update', entityType: 'technical_request', entityId: techForm.id > 0 ? String(techForm.id) : undefined, entityName: techForm.service_type, description: `${techForm.id === 0 ? 'إنشاء' : 'تحديث'} طلب فني: ${techForm.service_type}`, metadata: { project_id: techForm.project_id, assigned_to: payload.assigned_to } });
     } catch (err: any) {
         console.error("❌ خطأ قاعدة البيانات:", err);
         alert("حدث خطأ في قاعدة البيانات:\n" + (err?.message || JSON.stringify(err)));
@@ -405,6 +411,7 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
           setActiveRequest({ ...activeRequest, ...advanceData });
           await onRefresh();
           logActivity?.('تحويل موافقة فنية', `${activeRequest.service_type} → ${nextApprover.name}`, 'text-blue-500');
+          activityLogService.log({ userId: currentUser?.id || '', userName: currentUser?.name || '', userRole: currentUser?.role || '', actionType: 'approve', entityType: 'technical_request', entityId: String(activeRequest.id), entityName: activeRequest.service_type, description: `موافقة وتحويل طلب فني "${activeRequest.service_type}" إلى ${nextApprover.name}`, metadata: { nextApprover: nextApprover.name } });
           return;
         }
       }
@@ -428,6 +435,7 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
           ? `✅ تمت الموافقة بواسطة: ${currentUser?.name}${reason ? ` | السبب: ${reason}` : ''} → موافقة نهائية ✓`
           : `❌ تم الرفض بواسطة: ${currentUser?.name}${reason ? ` | السبب: ${reason}` : ''}`
       }]);
+      activityLogService.log({ userId: currentUser?.id || '', userName: currentUser?.name || '', userRole: currentUser?.role || '', actionType: isApproval ? 'approve' : 'reject', entityType: 'technical_request', entityId: String(activeRequest.id), entityName: activeRequest.service_type, description: `${isApproval ? 'موافقة نهائية' : 'رفض'} طلب فني "${activeRequest.service_type}"${reason ? ` - ${reason}` : ''}`, newValue: { status: newStatus } });
 
       // جلب سير الموافقة من قاعدة البيانات
       const { getWorkflowRoute } = await import('../services/requestWorkflowService');
@@ -486,14 +494,24 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
   }, [requests, filteredByProject, scopeFilter]);
 
   const filteredRequests = useMemo(() => {
-    if (!searchTerm) return scopedRequests;
-    const term = searchTerm.toLowerCase();
-    return scopedRequests.filter(r => (
-      r?.project_name?.toLowerCase()?.includes(term) ||
-      r?.service_type?.toLowerCase()?.includes(term) ||
-      r?.reviewing_entity?.toLowerCase()?.includes(term)
-    ));
-  }, [scopedRequests, searchTerm]);
+    let result = scopedRequests;
+    if (searchTerm) {
+      const term = searchTerm.toLowerCase();
+      result = result.filter(r => (
+        r?.project_name?.toLowerCase()?.includes(term) ||
+        r?.service_type?.toLowerCase()?.includes(term) ||
+        r?.reviewing_entity?.toLowerCase()?.includes(term)
+      ));
+    }
+    if (statusFilter) {
+      const COMPLETED = ['completed', 'منجز', 'مكتمل'];
+      const REJECTED = ['rejected', 'مرفوض', 'cancelled', 'ملغى'];
+      if (statusFilter === 'completed') result = result.filter(r => COMPLETED.includes(r?.status || ''));
+      else if (statusFilter === 'rejected') result = result.filter(r => REJECTED.includes(r?.status || ''));
+      else if (statusFilter === 'in_progress') result = result.filter(r => !COMPLETED.includes(r?.status || '') && !REJECTED.includes(r?.status || ''));
+    }
+    return result;
+  }, [scopedRequests, searchTerm, statusFilter]);
 
   const techSummary = useMemo(() => {
     const isCompleted = (status: string) => ['completed', 'منجز', 'مكتمل'].includes(status);
@@ -565,9 +583,9 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
         </div>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-center">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 lg:col-span-2">
-            <SummaryStatCard label="مرفوض" value={techSummary.rejected} icon={<XCircle size={18} />} color="text-rose-600" bg="bg-rose-50 border-rose-100" />
-            <SummaryStatCard label="تحت الإجراء" value={techSummary.inProgress} icon={<Clock size={18} />} color="text-sky-600" bg="bg-sky-50 border-sky-100" />
-            <SummaryStatCard label="منجز" value={techSummary.completed} icon={<CheckCircle2 size={18} />} color="text-emerald-600" bg="bg-emerald-50 border-emerald-100" />
+            <SummaryStatCard label="مرفوض" value={techSummary.rejected} icon={<XCircle size={18} />} color="text-rose-600" bg="bg-rose-50 border-rose-100" isActive={statusFilter === 'rejected'} onClick={() => setStatusFilter(statusFilter === 'rejected' ? '' : 'rejected')} />
+            <SummaryStatCard label="تحت الإجراء" value={techSummary.inProgress} icon={<Clock size={18} />} color="text-sky-600" bg="bg-sky-50 border-sky-100" isActive={statusFilter === 'in_progress'} onClick={() => setStatusFilter(statusFilter === 'in_progress' ? '' : 'in_progress')} />
+            <SummaryStatCard label="منجز" value={techSummary.completed} icon={<CheckCircle2 size={18} />} color="text-emerald-600" bg="bg-emerald-50 border-emerald-100" isActive={statusFilter === 'completed'} onClick={() => setStatusFilter(statusFilter === 'completed' ? '' : 'completed')} />
           </div>
           <div className="bg-gray-50 rounded-[28px] p-4 border border-gray-100">
             <div className="h-44">
@@ -615,6 +633,13 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
           <Search className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-300" size={18} />
           <input type="text" placeholder="البحث..." className="w-full pr-12 pl-4 py-3 bg-gray-50 rounded-xl border border-transparent focus:border-[#1B2B48] outline-none font-bold text-sm" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}/>
         </div>
+        {statusFilter && (
+          <button onClick={() => setStatusFilter('')}
+            className="flex items-center gap-2 px-4 py-2.5 bg-[#E95D22]/10 text-[#E95D22] border border-[#E95D22]/20 rounded-xl font-bold text-xs hover:bg-[#E95D22]/20 transition-all whitespace-nowrap">
+            <span>فلتر: {statusFilter === 'completed' ? 'منجز' : statusFilter === 'rejected' ? 'مرفوض' : 'تحت الإجراء'}</span>
+            <XCircle size={14} />
+          </button>
+        )}
       </div>
 
       <div className="bg-white rounded-[30px] border border-gray-100 shadow-sm overflow-hidden">
@@ -686,8 +711,8 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
   );
 };
 
-const SummaryStatCard = ({ label, value, icon, color, bg }: any) => (
-  <div className={`rounded-2xl border p-4 ${bg}`}>
+const SummaryStatCard = ({ label, value, icon, color, bg, isActive, onClick }: any) => (
+  <div onClick={onClick} className={`rounded-2xl border p-4 ${bg} transition-all cursor-pointer hover:shadow-md ${isActive ? 'ring-2 ring-[#E95D22] shadow-md scale-[1.02]' : 'hover:scale-[1.01]'}`}>
     <div className="flex items-center justify-between">
       <div className="w-10 h-10 rounded-xl bg-white/70 flex items-center justify-center text-gray-400">
         {icon}

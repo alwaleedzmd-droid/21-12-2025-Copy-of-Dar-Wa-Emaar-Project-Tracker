@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import { ProjectSummary, User, ProjectWork } from '../types';
+import { activityLogService } from '../services/activityLogService';
 import ProjectCard from './ProjectCard';
 import Modal from './Modal';
 import ProjectDetailView from './ProjectDetailView';
@@ -144,6 +145,7 @@ const ProjectsModule: React.FC<ProjectsModuleProps> = ({
     if (error) alert("خطأ: " + error.message);
     else {
       alert("تم إنشاء المشروع بنجاح ✅");
+      activityLogService.log({ userId: currentUser?.id || '', userName: currentUser?.name || '', userRole: currentUser?.role || '', actionType: 'create', entityType: 'project', entityName: addForm.name, description: `تم إنشاء مشروع جديد: ${addForm.name}`, metadata: { location: addForm.location } });
       setIsAddModalOpen(false);
       setAddForm({ name: '', location: '' });
       onRefresh();
@@ -152,8 +154,12 @@ const ProjectsModule: React.FC<ProjectsModuleProps> = ({
 
   const handleDeleteProject = async (id: number) => {
     if (!window.confirm("هل أنت متأكد من حذف هذا المشروع؟")) return;
+    const project = projects.find(p => p.id === id);
     const { error } = await supabase.from('projects').delete().eq('id', id);
-    if (!error) onRefresh();
+    if (!error) {
+      activityLogService.log({ userId: currentUser?.id || '', userName: currentUser?.name || '', userRole: currentUser?.role || '', actionType: 'delete', entityType: 'project', entityId: String(id), entityName: project?.name || project?.title || '', description: `تم حذف المشروع: ${project?.name || project?.title || id}` });
+      onRefresh();
+    }
   };
 
   if (selectedProject) {

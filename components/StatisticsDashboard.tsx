@@ -12,6 +12,8 @@ import {
 import { useData } from '../contexts/DataContext';
 import { notificationService } from '../services/notificationService';
 import { supabase } from '../supabaseClient';
+import { statisticsSnapshotService } from '../services/statisticsSnapshotService';
+import { activityLogService } from '../services/activityLogService';
 import * as XLSX from 'xlsx';
 
 // ─── ألوان هوية دار وإعمار ───
@@ -253,6 +255,17 @@ const StatisticsDashboard: React.FC = () => {
   useEffect(() => {
     const timer = setTimeout(() => setChartsVisible(true), 600);
     return () => clearTimeout(timer);
+  }, []);
+
+  // ═══ لقطات الإحصائيات + سجل النشاطات ═══
+  const [snapshots, setSnapshots] = useState<any[]>([]);
+  const [recentActivity, setRecentActivity] = useState<any[]>([]);
+  const [showTrend, setShowTrend] = useState(false);
+
+  useEffect(() => {
+    statisticsSnapshotService.saveDaily();
+    statisticsSnapshotService.getLastDays(30).then(setSnapshots);
+    activityLogService.getRecent(15).then(setRecentActivity);
   }, []);
 
   // ─── حساب الإحصائيات مع useMemo ───
@@ -1222,23 +1235,26 @@ const StatisticsDashboard: React.FC = () => {
               )}
             </div>
 
-            {/* بطاقات تفصيلية للطلبات الفنية */}
+            {/* بطاقات تفصيلية للطلبات الفنية — تفاعلية */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 content-center">
-              <div className="bg-green-50 rounded-2xl p-5 text-center border border-green-100">
+              <div onClick={(e) => { e.stopPropagation(); navigate('/technical?status=completed'); }}
+                className="bg-green-50 rounded-2xl p-5 text-center border border-green-100 cursor-pointer hover:shadow-md hover:scale-[1.02] transition-all">
                 <div className="w-10 h-10 rounded-xl bg-green-100 flex items-center justify-center mx-auto mb-3">
                   <CheckCircle2 size={20} className="text-green-600" />
                 </div>
                 <p className="text-3xl font-black text-green-700">{stats.completedTechnical.toLocaleString('ar-EG')}</p>
                 <p className="text-xs font-bold text-green-500 mt-1">منجز</p>
               </div>
-              <div className="bg-sky-50 rounded-2xl p-5 text-center border border-sky-100">
+              <div onClick={(e) => { e.stopPropagation(); navigate('/technical?status=in_progress'); }}
+                className="bg-sky-50 rounded-2xl p-5 text-center border border-sky-100 cursor-pointer hover:shadow-md hover:scale-[1.02] transition-all">
                 <div className="w-10 h-10 rounded-xl bg-sky-100 flex items-center justify-center mx-auto mb-3">
                   <Clock size={20} className="text-sky-600" />
                 </div>
                 <p className="text-3xl font-black text-sky-700">{stats.inProgressTechnical.toLocaleString('ar-EG')}</p>
                 <p className="text-xs font-bold text-sky-500 mt-1">قيد العمل</p>
               </div>
-              <div className="bg-red-50 rounded-2xl p-5 text-center border border-red-100">
+              <div onClick={(e) => { e.stopPropagation(); navigate('/technical?status=rejected'); }}
+                className="bg-red-50 rounded-2xl p-5 text-center border border-red-100 cursor-pointer hover:shadow-md hover:scale-[1.02] transition-all">
                 <div className="w-10 h-10 rounded-xl bg-red-100 flex items-center justify-center mx-auto mb-3">
                   <XCircle size={20} className="text-red-500" />
                 </div>
@@ -1322,23 +1338,26 @@ const StatisticsDashboard: React.FC = () => {
             )}
           </div>
 
-          {/* بطاقات تفصيلية للإفراغات */}
+          {/* بطاقات تفصيلية للإفراغات — تفاعلية */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 content-center">
-            <div className="bg-green-50 rounded-2xl p-5 text-center border border-green-100">
+            <div onClick={(e) => { e.stopPropagation(); navigate('/deeds?status=completed'); }}
+              className="bg-green-50 rounded-2xl p-5 text-center border border-green-100 cursor-pointer hover:shadow-md hover:scale-[1.02] transition-all">
               <div className="w-10 h-10 rounded-xl bg-green-100 flex items-center justify-center mx-auto mb-3">
                 <CheckCircle2 size={20} className="text-green-600" />
               </div>
               <p className="text-3xl font-black text-green-700">{stats.completedClearance.toLocaleString('ar-EG')}</p>
               <p className="text-xs font-bold text-green-500 mt-1">مكتمل</p>
             </div>
-            <div className="bg-sky-50 rounded-2xl p-5 text-center border border-sky-100">
+            <div onClick={(e) => { e.stopPropagation(); navigate('/deeds?status=in_progress'); }}
+              className="bg-sky-50 rounded-2xl p-5 text-center border border-sky-100 cursor-pointer hover:shadow-md hover:scale-[1.02] transition-all">
               <div className="w-10 h-10 rounded-xl bg-sky-100 flex items-center justify-center mx-auto mb-3">
                 <Clock size={20} className="text-sky-600" />
               </div>
               <p className="text-3xl font-black text-sky-700">{stats.inProgressClearance.toLocaleString('ar-EG')}</p>
               <p className="text-xs font-bold text-sky-500 mt-1">تحت الإجراء</p>
             </div>
-            <div className="bg-red-50 rounded-2xl p-5 text-center border border-red-100">
+            <div onClick={(e) => { e.stopPropagation(); navigate('/deeds?status=rejected'); }}
+              className="bg-red-50 rounded-2xl p-5 text-center border border-red-100 cursor-pointer hover:shadow-md hover:scale-[1.02] transition-all">
               <div className="w-10 h-10 rounded-xl bg-red-100 flex items-center justify-center mx-auto mb-3">
                 <XCircle size={20} className="text-red-500" />
               </div>
@@ -1451,6 +1470,133 @@ const StatisticsDashboard: React.FC = () => {
           </div>
         ))}
       </div>
+
+      {/* ═══════ قسم تتبع الأداء عبر الزمن ═══════ */}
+      {snapshots.length > 1 && (
+        <div className="mt-8">
+          <button
+            onClick={() => setShowTrend(!showTrend)}
+            className="w-full flex items-center gap-3 text-white py-4 px-6 rounded-2xl font-bold text-base transition-all hover:opacity-90"
+            style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}
+          >
+            <span>📈</span>
+            <span>تتبع الأداء — آخر {snapshots.length} يوم</span>
+            <span className="mr-auto text-sm opacity-80">
+              {showTrend ? '▲ إخفاء' : '▼ عرض'}
+            </span>
+          </button>
+
+          {showTrend && (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+              {(() => {
+                const first = snapshots[0];
+                const last = snapshots[snapshots.length - 1];
+                const diffWorks = last.completed_works - first.completed_works;
+                const diffOverdue = last.overdue_works - first.overdue_works;
+                const diffProjects = last.total_projects - first.total_projects;
+                return (
+                  <>
+                    <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
+                      <p className="text-sm text-gray-500 mb-2">📊 الأعمال المنجزة</p>
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-3xl font-black text-emerald-600">{last.completed_works}</span>
+                        <span className={`text-sm font-bold ${diffWorks >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                          {diffWorks >= 0 ? `⬆ +${diffWorks}` : `⬇ ${diffWorks}`}
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-400 mt-1">مقارنة بـ {first.snapshot_date}</p>
+                    </div>
+                    <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
+                      <p className="text-sm text-gray-500 mb-2">⚠️ الأعمال المتأخرة</p>
+                      <div className="flex items-baseline gap-2">
+                        <span className={`text-3xl font-black ${last.overdue_works > 0 ? 'text-red-600' : 'text-emerald-600'}`}>{last.overdue_works}</span>
+                        <span className={`text-sm font-bold ${diffOverdue <= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                          {diffOverdue <= 0 ? `⬇ ${diffOverdue}` : `⬆ +${diffOverdue}`}
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-400 mt-1">{diffOverdue <= 0 ? 'تحسّن ✅' : 'يحتاج متابعة ⚠️'}</p>
+                    </div>
+                    <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
+                      <p className="text-sm text-gray-500 mb-2">📋 إجمالي المشاريع</p>
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-3xl font-black" style={{ color: NAVY }}>{last.total_projects}</span>
+                        {diffProjects > 0 && (
+                          <span className="text-sm font-bold text-blue-600">+{diffProjects} جديد</span>
+                        )}
+                      </div>
+                    </div>
+                  </>
+                );
+              })()}
+
+              {/* جدول اللقطات */}
+              <div className="md:col-span-3 bg-white rounded-2xl p-5 border border-gray-100 shadow-sm overflow-x-auto">
+                <p className="text-sm font-bold text-gray-600 mb-3">📅 سجل اللقطات اليومية</p>
+                <table className="w-full text-sm" dir="rtl">
+                  <thead>
+                    <tr className="border-b-2 border-gray-200 text-right">
+                      <th className="py-2 px-3">التاريخ</th>
+                      <th className="py-2 px-3">مشاريع</th>
+                      <th className="py-2 px-3">أعمال منجزة</th>
+                      <th className="py-2 px-3">متأخرة</th>
+                      <th className="py-2 px-3">تكليفات</th>
+                      <th className="py-2 px-3">طلبات فنية</th>
+                      <th className="py-2 px-3">إفراغات</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {snapshots.slice().reverse().slice(0, 14).map((s: any, i: number) => (
+                      <tr key={s.id} className={`border-b border-gray-50 ${i % 2 === 0 ? 'bg-gray-50/50' : ''}`}>
+                        <td className="py-2 px-3 font-bold">{s.snapshot_date}</td>
+                        <td className="py-2 px-3">{s.total_projects}</td>
+                        <td className="py-2 px-3 text-emerald-600 font-bold">{s.completed_works}</td>
+                        <td className={`py-2 px-3 font-bold ${s.overdue_works > 0 ? 'text-red-600' : 'text-emerald-600'}`}>{s.overdue_works}</td>
+                        <td className="py-2 px-3">{s.total_assignments}</td>
+                        <td className="py-2 px-3">{s.total_technical_requests}</td>
+                        <td className="py-2 px-3">{s.total_deed_requests}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ═══════ آخر النشاطات ═══════ */}
+      {recentActivity.length > 0 && (
+        <div className="mt-6 bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
+          <p className="text-base font-bold text-gray-600 mb-4 flex items-center gap-2">
+            <span>📝</span> آخر النشاطات في النظام
+          </p>
+          <div className="flex flex-col gap-2">
+            {recentActivity.slice(0, 10).map((a: any) => {
+              const icons: Record<string, string> = {
+                create: '➕', update: '✏️', delete: '🗑️', approve: '✅', reject: '❌',
+                assign: '👤', handler_change: '🔄', deadline_change: '📅', justify_delay: '📝',
+                complete: '🏁', status_change: '🔀', comment: '💬',
+              };
+              return (
+                <div key={a.id} className="flex gap-3 items-start p-3 bg-gray-50 rounded-xl text-sm">
+                  <span className="text-base">{icons[a.action_type] || '📌'}</span>
+                  <div className="flex-1">
+                    <p className="font-bold text-gray-800">{a.description}</p>
+                    <p className="text-xs text-gray-400 mt-1">
+                      {a.user_name} • {new Date(a.created_at).toLocaleString('ar-EG-u-nu-latn', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                    </p>
+                  </div>
+                  {a.entity_name && (
+                    <span className="text-[11px] bg-purple-50 text-purple-700 px-2 py-0.5 rounded-lg whitespace-nowrap">
+                      {a.entity_name}
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

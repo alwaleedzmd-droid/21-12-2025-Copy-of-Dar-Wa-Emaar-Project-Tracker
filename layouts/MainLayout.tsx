@@ -276,7 +276,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
              </button>
              <div className="hidden sm:block">
                 <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">التاريخ الحالي</p>
-                <p className="text-sm font-black text-[#1B2B48]">{new Date().toLocaleDateString('ar-SA')}</p>
+                <p className="text-sm font-black text-[#1B2B48]">{new Date().toLocaleDateString('ar-EG-u-nu-latn', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
              </div>
           </div>
           <div className="flex items-center gap-6">

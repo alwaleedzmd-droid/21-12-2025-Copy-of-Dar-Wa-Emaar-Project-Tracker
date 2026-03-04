@@ -9,6 +9,7 @@ import { useData } from '../contexts/DataContext';
 import { ProjectWork } from '../types';
 import Modal from './Modal';
 import { notificationService } from '../services/notificationService';
+import { activityLogService } from '../services/activityLogService';
 
 const TaskAssignment: React.FC = () => {
   const { projectWorks, projects, appUsers, currentUser, refreshData } = useData();
@@ -115,6 +116,7 @@ const TaskAssignment: React.FC = () => {
           `/my-tasks`, currentUser?.name);
       }
       alert(`✅ تم إسناد "${assignModalWork.task_name}" إلى ${userName} بنجاح`);
+      activityLogService.log({ userId: currentUser?.id || '', userName: currentUser?.name || '', userRole: currentUser?.role || '', actionType: 'assign', entityType: 'work', entityId: String(assignModalWork.id), entityName: assignModalWork.task_name, description: `تم إسناد "${assignModalWork.task_name}" إلى ${userName}`, newValue: { assigned_to: selectedUserId, assigned_to_name: userName }, metadata: { description: assignDescription } });
       setAssignModalWork(null); setSelectedUserId(''); setAssignDescription('');
       refreshData();
     } catch (err: any) { alert('فشل الإسناد: ' + err.message); }
@@ -140,6 +142,7 @@ const TaskAssignment: React.FC = () => {
           `/my-tasks`, currentUser?.name);
       }
       alert(`✅ تم إسناد ${ids.length} مهمة إلى ${userName} بنجاح`);
+      activityLogService.log({ userId: currentUser?.id || '', userName: currentUser?.name || '', userRole: currentUser?.role || '', actionType: 'assign', entityType: 'work', entityName: `${ids.length} مهمة`, description: `إسناد جماعي: ${ids.length} مهمة إلى ${userName}`, newValue: { assigned_to: bulkUserId, count: ids.length }, metadata: { description: bulkDescription } });
       setIsBulkAssignOpen(false); setSelectedWorks(new Set()); setBulkUserId(''); setBulkDescription('');
       refreshData();
     } catch (err: any) { alert('فشل الإسناد الجماعي: ' + err.message); }
@@ -154,6 +157,7 @@ const TaskAssignment: React.FC = () => {
         assigned_at: null, assignment_status: null,
       }).eq('id', work.id);
       if (error) throw error;
+      activityLogService.log({ userId: currentUser?.id || '', userName: currentUser?.name || '', userRole: currentUser?.role || '', actionType: 'assign', entityType: 'work', entityId: String(work.id), entityName: work.task_name, description: `إلغاء إسناد "${work.task_name}" من ${work.assigned_to_name}`, oldValue: { assigned_to: work.assigned_to, assigned_to_name: work.assigned_to_name } });
       refreshData();
     } catch (err: any) { alert('فشل إلغاء الإسناد: ' + err.message); }
   };
@@ -192,6 +196,7 @@ const TaskAssignment: React.FC = () => {
         }
       }
       alert('✅ تم إنشاء المهمة بنجاح');
+      activityLogService.log({ userId: currentUser?.id || '', userName: currentUser?.name || '', userRole: currentUser?.role || '', actionType: 'create', entityType: 'work', entityName: newTaskForm.task_name, description: `إنشاء مهمة جديدة: ${newTaskForm.task_name} - ${projectName}${assignedName ? ` (مسندة إلى ${assignedName})` : ''}`, metadata: { projectId: newTaskForm.project_id, projectName, assignedName } });
       setIsNewTaskOpen(false);
       setNewTaskForm({ task_name: '', project_id: '', authority: '', department: '', notes: '', assigned_to: '', assignment_description: '' });
       refreshData();
@@ -241,21 +246,31 @@ const TaskAssignment: React.FC = () => {
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
         {[
-          { label: 'إجمالي', value: stats.total, icon: <ClipboardList size={16} />, color: 'text-[#1B2B48]', iconColor: 'text-blue-600' },
-          { label: 'مُسندة', value: stats.assigned, icon: <UserCheck size={16} />, color: 'text-green-600', iconColor: 'text-green-600' },
-          { label: 'غير مُسندة', value: stats.unassigned, icon: <AlertTriangle size={16} />, color: 'text-orange-600', iconColor: 'text-orange-600' },
-          { label: 'تحت الإجراء', value: stats.inProgress, icon: <Clock size={16} />, color: 'text-blue-500', iconColor: 'text-blue-500' },
-          { label: 'منجزة', value: stats.completed, icon: <CheckCircle2 size={16} />, color: 'text-emerald-600', iconColor: 'text-emerald-600' },
-          { label: 'متأخرة ⚠️', value: stats.overdue, icon: <Sparkles size={16} />, color: 'text-red-600', iconColor: 'text-red-500', highlight: stats.overdue > 0 },
-        ].map((s, i) => (
-          <div key={i} className={`bg-white p-4 rounded-[20px] border shadow-sm ${s.highlight ? 'border-red-300 bg-red-50' : ''}`}>
-            <div className="flex items-center gap-2 mb-1">
-              <span className={s.iconColor}>{s.icon}</span>
-              <span className="text-gray-400 text-[10px] font-bold">{s.label}</span>
-            </div>
-            <p className={`text-2xl font-black ${s.color}`}>{s.value}</p>
-          </div>
-        ))}
+          { label: 'إجمالي', value: stats.total, icon: <ClipboardList size={16} />, color: 'text-[#1B2B48]', iconColor: 'text-blue-600', filterKey: '', filterVal: '' },
+          { label: 'مُسندة', value: stats.assigned, icon: <UserCheck size={16} />, color: 'text-green-600', iconColor: 'text-green-600', filterKey: 'assigned', filterVal: 'assigned' },
+          { label: 'غير مُسندة', value: stats.unassigned, icon: <AlertTriangle size={16} />, color: 'text-orange-600', iconColor: 'text-orange-600', filterKey: 'assigned', filterVal: 'unassigned' },
+          { label: 'تحت الإجراء', value: stats.inProgress, icon: <Clock size={16} />, color: 'text-blue-500', iconColor: 'text-blue-500', filterKey: 'status', filterVal: 'in_progress' },
+          { label: 'منجزة', value: stats.completed, icon: <CheckCircle2 size={16} />, color: 'text-emerald-600', iconColor: 'text-emerald-600', filterKey: 'status', filterVal: 'completed' },
+          { label: 'متأخرة ⚠️', value: stats.overdue, icon: <Sparkles size={16} />, color: 'text-red-600', iconColor: 'text-red-500', highlight: stats.overdue > 0, filterKey: 'status', filterVal: 'overdue' },
+        ].map((s, i) => {
+          const isActive = s.filterKey === 'assigned' ? filterAssigned === s.filterVal : s.filterKey === 'status' ? filterStatus === s.filterVal : (!filterStatus && !filterAssigned);
+          return (
+            <button key={i} onClick={() => {
+              if (s.filterKey === 'assigned') { setFilterAssigned(filterAssigned === s.filterVal ? '' : s.filterVal); setFilterStatus(''); }
+              else if (s.filterKey === 'status') { setFilterStatus(filterStatus === s.filterVal ? '' : s.filterVal); setFilterAssigned(''); }
+              else { setFilterStatus(''); setFilterAssigned(''); }
+            }}
+              className={`bg-white p-4 rounded-[20px] border shadow-sm text-right transition-all cursor-pointer hover:shadow-md ${
+                s.highlight ? 'border-red-300 bg-red-50' : ''
+              } ${isActive ? 'ring-2 ring-[#E95D22]' : ''}`}>
+              <div className="flex items-center gap-2 mb-1">
+                <span className={s.iconColor}>{s.icon}</span>
+                <span className="text-gray-400 text-[10px] font-bold">{s.label}</span>
+              </div>
+              <p className={`text-2xl font-black ${s.color}`}>{s.value}</p>
+            </button>
+          );
+        })}
       </div>
 
       {/* Employee Workload */}

@@ -38,8 +38,21 @@ const SAUDI_CITIES: CityLocation[] = [
   { id: 'qatif', nameAr: 'القطيف', nameEn: 'Qatif', lat: 26.5196, lng: 49.9982 },
 ];
 
-// ربط المشاريع بالمدن بناءً على الموقع
+// ربط المشاريع بالمدن بناءً على الموقع أو الإحداثيات من قاعدة البيانات
 function mapProjectToCity(project: any): string {
+  // إذا المشروع لديه إحداثيات من قاعدة البيانات → نبحث عن أقرب مدينة
+  if (project.latitude && project.longitude) {
+    const lat = parseFloat(project.latitude);
+    const lng = parseFloat(project.longitude);
+    let closestCity = 'riyadh';
+    let minDist = Infinity;
+    SAUDI_CITIES.forEach(city => {
+      const dist = Math.sqrt(Math.pow(lat - city.lat, 2) + Math.pow(lng - city.lng, 2));
+      if (dist < minDist) { minDist = dist; closestCity = city.id; }
+    });
+    return closestCity;
+  }
+  // Fallback: تحليل اسم المشروع/الموقع
   const loc = (project.location || project.name || '').toLowerCase();
   if (loc.includes('رياض') || loc.includes('riyadh')) return 'riyadh';
   if (loc.includes('جدة') || loc.includes('jeddah')) return 'jeddah';
@@ -48,6 +61,18 @@ function mapProjectToCity(project: any): string {
   if (loc.includes('مدينة') || loc.includes('medina')) return 'medina';
   if (loc.includes('قطيف') || loc.includes('qatif')) return 'qatif';
   return 'riyadh'; // افتراضي
+}
+
+// الحصول على إحداثيات المشروع (من DB أو من المدينة)
+function getProjectCoordinates(project: any, cityLookup: Map<string, CityLocation>): { lat: number; lng: number } {
+  // أولوية: إحداثيات من قاعدة البيانات
+  if (project.latitude && project.longitude) {
+    return { lat: parseFloat(project.latitude), lng: parseFloat(project.longitude) };
+  }
+  // Fallback: إحداثيات المدينة
+  const cityId = mapProjectToCity(project);
+  const city = cityLookup.get(cityId);
+  return city ? { lat: city.lat, lng: city.lng } : { lat: 24.7136, lng: 46.6753 };
 }
 
 // إنشاء أيقونة ماركر مخصصة بالألوان
@@ -138,9 +163,8 @@ function MapBoundsUpdater({ projects, cityMap }: { projects: any[]; cityMap: Map
     }
     const points: [number, number][] = [];
     projects.forEach(p => {
-      const cityId = mapProjectToCity(p);
-      const city = cityMap.get(cityId);
-      if (city) points.push([city.lat, city.lng]);
+      const coords = getProjectCoordinates(p, cityMap);
+      points.push([coords.lat, coords.lng]);
     });
     if (points.length > 0) {
       const bounds = L.latLngBounds(points.map(p => L.latLng(p[0], p[1])));

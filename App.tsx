@@ -13,6 +13,7 @@ import { DAR_LOGO } from './constants';
 import Modal from './components/Modal';
 import { useData } from './contexts/DataContext';
 import { notificationService } from './services/notificationService';
+import { activityLogService } from './services/activityLogService';
 import MainLayout from './layouts/MainLayout';
 import { parseProjectWorksExcel } from './utils/excelHandler';
 
@@ -377,6 +378,7 @@ const ProjectDetailWrapper = ({ projects = [], currentUser }: any) => {
 
       notificationService.send('PR_MANAGER', `تم استيراد ${data.length} عمل لمشروع ${project.name}`, `/projects/${id}`, currentUser?.name);
       logActivity?.('استيراد إكسل أعمال', `مشروع ${project.name}: ${data.length} عمل`, 'text-blue-500');
+      activityLogService.log({ userId: currentUser?.id || '', userName: currentUser?.name || '', userRole: currentUser?.role || '', actionType: 'create', entityType: 'work', entityName: project.name, description: `تم استيراد ${data.length} عمل لمشروع ${project.name}`, metadata: { projectId: project.id, count: data.length } });
       setLocalWorksFetched(false);
       refreshData();
       alert(`تم استيراد ${data.length} سجل بنجاح ✅`);
@@ -402,6 +404,7 @@ const ProjectDetailWrapper = ({ projects = [], currentUser }: any) => {
 
        setSelectedWork({ ...selectedWork, status });
        logActivity?.('تحديث حالة عمل', `${selectedWork.task_name} -> ${status}`, 'text-blue-500');
+       activityLogService.log({ userId: currentUser?.id || '', userName: currentUser?.name || '', userRole: currentUser?.role || '', actionType: 'status_change', entityType: 'work', entityId: String(selectedWork.id), entityName: selectedWork.task_name, description: `تغيير حالة "${selectedWork.task_name}" إلى ${status === 'completed' ? 'منجز' : 'قيد المتابعة'}`, oldValue: { status: selectedWork.status }, newValue: { status } });
        setLocalWorksFetched(false);
        refreshData();
      } catch (err: any) { alert("فشل التحديث: " + err.message); } finally { setIsActionLoading(false); }
@@ -414,6 +417,7 @@ const ProjectDetailWrapper = ({ projects = [], currentUser }: any) => {
        const { error } = await supabase.from('project_works').delete().eq('id', workId);
        if (error) throw error;
        logActivity?.('حذف عمل مشروع', taskName, 'text-orange-500');
+       activityLogService.log({ userId: currentUser?.id || '', userName: currentUser?.name || '', userRole: currentUser?.role || '', actionType: 'delete', entityType: 'work', entityId: String(workId), entityName: taskName, description: `تم حذف العمل "${taskName}"` });
        setIsWorkDetailOpen(false);
        setLocalWorksFetched(false);
        refreshData();
@@ -507,6 +511,7 @@ const ProjectDetailWrapper = ({ projects = [], currentUser }: any) => {
        
        if (!error) { 
          notificationService.send('PR_MANAGER', `🆕 تم تسجيل عمل جديد بمشروع ${project.name}`, `/projects/${id}`, currentUser?.name);
+         activityLogService.log({ userId: currentUser?.id || '', userName: currentUser?.name || '', userRole: currentUser?.role || '', actionType: 'create', entityType: 'work', entityName: newWorkForm.task_name, description: `تم إضافة عمل جديد "${newWorkForm.task_name}" في مشروع ${project.name}`, metadata: { projectId: project.id, projectName: project.name } });
          
          setIsAddWorkOpen(false); 
          setNewWorkForm({ task_name: '', authority: '', department: '', notes: '', expected_completion_date: '' });
@@ -557,6 +562,7 @@ const ProjectDetailWrapper = ({ projects = [], currentUser }: any) => {
      notificationService.send(['ADMIN', 'PR_MANAGER'],
        `${emoji} @${work.current_handler} — ${label} في "${work.task_name}"`,
        `/projects/${id}`, currentUser?.name);
+     activityLogService.log({ userId: currentUser?.id || '', userName: currentUser?.name || '', userRole: currentUser?.role || '', actionType: 'handler_change', entityType: 'work', entityId: String(work.id), entityName: work.task_name, description: `${emoji} إقفال ترميز @${work.current_handler} — ${label} في "${work.task_name}"`, oldValue: { handler: work.current_handler, handler_status: 'active' }, newValue: { handler_status: dbStatus } });
      
      // تحديث الحالة المحلية
      if (selectedWork?.id === work.id) {
@@ -991,6 +997,8 @@ const ProjectDetailWrapper = ({ projects = [], currentUser }: any) => {
                           ? `⚠️ تبرير التأخير: "${selectedWork.task_name}" في ${projectName}${handlerInfo}\nالموعد الجديد: ${dateStr}\nالسبب: ${justification}`
                           : `📅 تم تحديد موعد إنجاز "${selectedWork.task_name}"${handlerInfo}: ${dateStr}`;
                         
+                        activityLogService.log({ userId: currentUser?.id || '', userName: currentUser?.name || '', userRole: currentUser?.role || '', actionType: justification ? 'justify_delay' : 'deadline_change', entityType: 'work', entityId: String(selectedWork.id), entityName: selectedWork.task_name, description: justification ? `تبرير تأخير "${selectedWork.task_name}": ${justification}` : `تحديد موعد إنجاز "${selectedWork.task_name}": ${dateStr}`, oldValue: { expected_completion_date: selectedWork.expected_completion_date }, newValue: { expected_completion_date: date }, metadata: { projectName, justification } });
+
                         // إشعار المدير والعلاقات العامة
                         notificationService.send(['ADMIN', 'PR_MANAGER'], notification, `/projects/${id}`, currentUser?.name);
                         

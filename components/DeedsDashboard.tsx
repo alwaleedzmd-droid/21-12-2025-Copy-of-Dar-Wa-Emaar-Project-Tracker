@@ -14,6 +14,7 @@ import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
 // Fix: Removed ActivityLog import as it is not exported from DataContext
 import { useData } from '../contexts/DataContext';
 import { notificationService } from '../services/notificationService';
+import { activityLogService } from '../services/activityLogService';
 import { updateProjectProgress } from '../services/projectProgressService';
 import {
     WORKFLOW_ROUTES,
@@ -71,6 +72,10 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
     const location = useLocation();
     const { refreshData, currentUser, projects: allProjects } = useData();
     const [searchQuery, setSearchQuery] = useState('');
+    const [statusFilter, setStatusFilter] = useState(() => {
+      const params = new URLSearchParams(location.search);
+      return params.get('status') || '';
+    });
     const [isRegModalOpen, setIsRegModalOpen] = useState(false);
     const [isManageModalOpen, setIsManageModalOpen] = useState(false);
     const [selectedDeed, setSelectedDeed] = useState<any>(null);
@@ -431,6 +436,7 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
                     fetchComments(selectedDeed.id);
                     refreshData();
                     logActivity?.('تحويل موافقة', `${selectedDeed.client_name} → ${nextApprover.name}`, 'text-blue-500');
+                    activityLogService.log({ userId: currentUser?.id || '', userName: currentUserName || currentUser?.name || '', userRole: currentUser?.role || currentUserRole || '', actionType: 'approve', entityType: 'deed_request', entityId: String(selectedDeed.id), entityName: selectedDeed.client_name, description: `موافقة وتحويل طلب إفراغ ${selectedDeed.client_name} إلى ${nextApprover.name}`, metadata: { nextApprover: nextApprover.name } });
                     return;
                 }
             }
@@ -463,6 +469,7 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
                     ? `✅ تمت الموافقة بواسطة: ${currentUserName || currentUser?.name}${reason ? ` | السبب: ${reason}` : ''} → موافقة نهائية ✓`
                     : `❌ تم الرفض بواسطة: ${currentUserName || currentUser?.name}${reason ? ` | السبب: ${reason}` : ''}`
             }]);
+            activityLogService.log({ userId: currentUser?.id || '', userName: currentUserName || currentUser?.name || '', userRole: currentUser?.role || currentUserRole || '', actionType: isApproval ? 'approve' : 'reject', entityType: 'deed_request', entityId: String(selectedDeed.id), entityName: selectedDeed.client_name, description: `${isApproval ? 'موافقة نهائية' : 'رفض'} طلب إفراغ ${selectedDeed.client_name}${reason ? ` - ${reason}` : ''}`, newValue: { status } });
             
             // ✅ إنشاء ProjectWork عند الموافقة على طلب الإفراغ/نقل المليكة
             if (status === 'مقبول' && selectedDeed?.project_name) {
@@ -625,6 +632,7 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
             );
 
             logActivity?.('تسجيل إفراغ جديد', payload.client_name, 'text-green-500');
+            activityLogService.log({ userId: currentUser?.id || '', userName: currentUserName || currentUser?.name || '', userRole: currentUser?.role || currentUserRole || '', actionType: 'create', entityType: 'deed_request', entityName: payload.client_name, description: `تسجيل طلب إفراغ جديد: ${payload.client_name}`, metadata: { request_type: newDeedForm.request_type, project_name: payload.project_name } });
 
             setIsRegModalOpen(false);
             setNewDeedForm({
@@ -645,12 +653,23 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
     };
 
     const filteredDeeds = useMemo(() => {
-        return (deeds || []).filter(d => 
-            d.client_name?.includes(searchQuery) || 
-            d.id_number?.includes(searchQuery) || 
-            d.project_name?.includes(searchQuery)
-        );
-    }, [deeds, searchQuery]);
+        let result = (deeds || []);
+        if (searchQuery) {
+            result = result.filter(d => 
+                d.client_name?.includes(searchQuery) || 
+                d.id_number?.includes(searchQuery) || 
+                d.project_name?.includes(searchQuery)
+            );
+        }
+        if (statusFilter) {
+            const COMPLETED = ['مقبول', 'مكتمل', 'completed', 'منجز', 'approved'];
+            const REJECTED = ['مرفوض', 'rejected'];
+            if (statusFilter === 'completed') result = result.filter(d => COMPLETED.includes(d?.status || ''));
+            else if (statusFilter === 'rejected') result = result.filter(d => REJECTED.includes(d?.status || ''));
+            else if (statusFilter === 'in_progress') result = result.filter(d => !COMPLETED.includes(d?.status || '') && !REJECTED.includes(d?.status || ''));
+        }
+        return result;
+    }, [deeds, searchQuery, statusFilter]);
 
     const deedsSummary = useMemo(() => {
         const all = deeds || [];
@@ -780,9 +799,9 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
                 </div>
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-center">
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 lg:col-span-2">
-                        <SummaryStatCard label="مرفوض" value={deedsSummary.rejected} icon={<XCircle size={18} />} color="text-rose-600" bg="bg-rose-50 border-rose-100" />
-                        <SummaryStatCard label="تحت الإجراء" value={deedsSummary.inProgress} icon={<Clock size={18} />} color="text-sky-600" bg="bg-sky-50 border-sky-100" />
-                        <SummaryStatCard label="مكتمل" value={deedsSummary.completed} icon={<CheckCircle2 size={18} />} color="text-emerald-600" bg="bg-emerald-50 border-emerald-100" />
+                        <SummaryStatCard label="مرفوض" value={deedsSummary.rejected} icon={<XCircle size={18} />} color="text-rose-600" bg="bg-rose-50 border-rose-100" isActive={statusFilter === 'rejected'} onClick={() => setStatusFilter(statusFilter === 'rejected' ? '' : 'rejected')} />
+                        <SummaryStatCard label="تحت الإجراء" value={deedsSummary.inProgress} icon={<Clock size={18} />} color="text-sky-600" bg="bg-sky-50 border-sky-100" isActive={statusFilter === 'in_progress'} onClick={() => setStatusFilter(statusFilter === 'in_progress' ? '' : 'in_progress')} />
+                        <SummaryStatCard label="مكتمل" value={deedsSummary.completed} icon={<CheckCircle2 size={18} />} color="text-emerald-600" bg="bg-emerald-50 border-emerald-100" isActive={statusFilter === 'completed'} onClick={() => setStatusFilter(statusFilter === 'completed' ? '' : 'completed')} />
                     </div>
                     <div className="bg-gray-50 rounded-[28px] p-4 border border-gray-100">
                         <div className="h-44">
@@ -826,9 +845,18 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
             </div>
 
             <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
-                <div className="relative">
-                    <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-300" size={16}/>
-                    <input placeholder="بحث بالمستفيد، الهوية، أو المشروع..." className="w-full pr-10 pl-4 py-2.5 bg-gray-50 border border-gray-100 rounded-xl text-xs font-bold outline-none focus:border-[#E95D22]" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} />
+                <div className="flex items-center gap-3">
+                    <div className="relative flex-1">
+                        <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-300" size={16}/>
+                        <input placeholder="بحث بالمستفيد، الهوية، أو المشروع..." className="w-full pr-10 pl-4 py-2.5 bg-gray-50 border border-gray-100 rounded-xl text-xs font-bold outline-none focus:border-[#E95D22]" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} />
+                    </div>
+                    {statusFilter && (
+                        <button onClick={() => setStatusFilter('')}
+                            className="flex items-center gap-2 px-4 py-2.5 bg-[#E95D22]/10 text-[#E95D22] border border-[#E95D22]/20 rounded-xl font-bold text-xs hover:bg-[#E95D22]/20 transition-all whitespace-nowrap">
+                            <span>فلتر: {statusFilter === 'completed' ? 'مكتمل' : statusFilter === 'rejected' ? 'مرفوض' : 'تحت الإجراء'}</span>
+                            <XCircle size={14} />
+                        </button>
+                    )}
                 </div>
             </div>
 
@@ -1253,8 +1281,8 @@ const Detail = ({ label, value, icon }: any) => (
     </div>
 );
 
-const SummaryStatCard = ({ label, value, icon, color, bg }: any) => (
-    <div className={`rounded-2xl border p-4 ${bg}`}>
+const SummaryStatCard = ({ label, value, icon, color, bg, isActive, onClick }: any) => (
+    <div onClick={onClick} className={`rounded-2xl border p-4 ${bg} transition-all cursor-pointer hover:shadow-md ${isActive ? 'ring-2 ring-[#E95D22] shadow-md scale-[1.02]' : 'hover:scale-[1.01]'}`}>
         <div className="flex items-center justify-between">
             <div className="w-10 h-10 rounded-xl bg-white/70 flex items-center justify-center text-gray-400">
                 {icon}
