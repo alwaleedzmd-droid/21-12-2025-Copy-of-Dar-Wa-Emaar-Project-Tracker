@@ -589,6 +589,7 @@ export const analyzeHandlers = (
   let totalTagged = 0;
   let totalResolutionDays = 0;
   let resolvedCount = 0;
+  const seenWorkIds = new Set<number>();
 
   // أولاً: من أعمدة DB
   (projectWorks || []).forEach(w => {
@@ -597,6 +598,7 @@ export const analyzeHandlers = (
     if (!handler) return;
 
     totalTagged++;
+    seenWorkIds.add(w.id);
     const pid = Number((w as any).projectId ?? (w as any).projectid ?? (w as any).project_id);
     const project = projects.find(p => p.id === pid);
 
@@ -618,8 +620,8 @@ export const analyzeHandlers = (
     handlerDistribution[handler] = (handlerDistribution[handler] || 0) + 1;
   });
 
-  // ثانياً: من التعليقات (fallback)
-  if (comments && comments.length > 0 && activeHandlers.length === 0) {
+  // ثانياً: من التعليقات (يكمّل ما لم يُغطّ من DB)
+  if (comments && comments.length > 0) {
     const workCommentMap: Record<number, any[]> = {};
     comments.forEach((c: any) => {
       const wid = c.work_id || c.workId;
@@ -630,11 +632,14 @@ export const analyzeHandlers = (
     });
 
     (projectWorks || []).forEach(w => {
+      // إذا وُجد المعالج من DB لهذا العمل، لا نكرره
+      if (seenWorkIds.has(w.id)) return;
+
       const wComments = workCommentMap[w.id] || [];
-      // ابحث عن آخر @tag
+      // ابحث عن آخر @tag في التعليقات
       for (let i = wComments.length - 1; i >= 0; i--) {
-        const text = wComments[i].comment_text || wComments[i].text || '';
-        const match = text.match(/@(\S+)/);
+        const text = wComments[i].comment_text || wComments[i].text || wComments[i].content || '';
+        const match = text.match(/@([\u0600-\u06FFa-zA-Z0-9_]+)/);
         if (match) {
           const handler = match[1];
           totalTagged++;
@@ -643,7 +648,7 @@ export const analyzeHandlers = (
 
           // تحقق من وجود تعليق إتمام
           const hasCompletion = wComments.some((c2: any) => {
-            const t = c2.comment_text || c2.text || '';
+            const t = c2.comment_text || c2.text || c2.content || '';
             return t.includes('✅') && t.includes(handler);
           });
 
@@ -654,7 +659,7 @@ export const analyzeHandlers = (
               handlerName: handler,
               workId: w.id,
               workName: w.task_name || 'عمل غير مسمى',
-              projectName: project?.name || project?.title || `مشروع #${pid}`,
+              projectName: project?.name || project?.title || (w as any).project_name || `مشروع #${pid}`,
               taggedAt: wComments[i].created_at || '',
               daysActive: wComments[i].created_at ? daysSince(wComments[i].created_at) : 0
             });
@@ -1192,7 +1197,8 @@ export const processSmartQuery = (
   clearanceRequests: any[],
   projectWorks: ProjectWork[],
   appUsers: User[],
-  currentUser: any
+  currentUser: any,
+  comments?: any[]
 ): AIResponse => {
   const query = normalizeText(rawQuery);
   let actions: Array<{ label: string; type: string; data: any }> = [];
@@ -1201,7 +1207,7 @@ export const processSmartQuery = (
 
   // 0. تحليل شامل (الأولوية الأعلى)
   if (query.includes('شامل') || query.includes('كل شي') || query.includes('تحليل كامل') || query.includes('comprehensive') || query.includes('كل البيانات') || query.includes('تقرير كامل')) {
-    const analysis = runComprehensiveAnalysis(projects, technicalRequests, clearanceRequests, projectWorks, appUsers);
+    const analysis = runComprehensiveAnalysis(projects, technicalRequests, clearanceRequests, projectWorks, appUsers, comments);
     const text = formatComprehensiveAnalysis(analysis);
     saveToMemory('تحليل شامل', `شامل: ${analysis.summary.stats.totalProjects} مشروع, ${analysis.deadlines.overdue.length} متأخر, ${analysis.handlers.activeHandlers.length} معالج نشط`);
     return { text, actions };
@@ -1217,7 +1223,7 @@ export const processSmartQuery = (
 
   // 0b. معالجين/جهات
   if (query.includes('معالج') || query.includes('جهه') || query.includes('جهات') || query.includes('handler') || query.includes('تاغ') || query.includes('@') || query.includes('معين') || query.includes('مرمز')) {
-    const handlers = analyzeHandlers(projectWorks, projects);
+    const handlers = analyzeHandlers(projectWorks, projects, comments);
     const text = formatHandlerReport(handlers);
     saveToMemory('تحليل المعالجين', `${handlers.activeHandlers.length} نشط, ${handlers.completedHandlers} مكتمل`);
     return { text, actions };

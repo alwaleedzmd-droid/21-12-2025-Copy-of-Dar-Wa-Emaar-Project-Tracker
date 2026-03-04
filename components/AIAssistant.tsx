@@ -86,9 +86,9 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
           .order('created_at', { ascending: true });
         if (data) {
           setWorkComments(data);
-          commentsLoaded.current = true;
         }
       } catch { /* تعليقات غير متوفرة */ }
+      commentsLoaded.current = true;
     };
     fetchComments();
   }, [isOpen]);
@@ -165,12 +165,24 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
     };
     setMessages([welcomeMsg]);
 
-    // ملخص القيادة للمدير
+    // ملخص القيادة للمدير — ننتظر تحميل التعليقات أولاً
     if (isAdmin || isPRManager) {
       setIsTyping(true);
-      setTimeout(() => {
-        // تحليل شامل (يقرأ كل البيانات)
-        const analysis = runComprehensiveAnalysis(projects, technicalRequests, clearanceRequests, projectWorks, appUsers, workComments);
+      const runSummary = () => {
+        // جلب التعليقات من DB إذا لم تُحمَّل بعد ثم تحليل
+        const doAnalysis = async () => {
+          let comments = workComments;
+          if (!commentsLoaded.current || comments.length === 0) {
+            try {
+              const { data } = await supabase.from('work_comments').select('*').order('created_at', { ascending: true });
+              if (data) { comments = data; setWorkComments(data); commentsLoaded.current = true; }
+            } catch { /* تعليقات غير متوفرة */ }
+          }
+          return comments;
+        };
+        doAnalysis().then(comments => {
+        // تحليل شامل (يقرأ كل البيانات + التعليقات)
+        const analysis = runComprehensiveAnalysis(projects, technicalRequests, clearanceRequests, projectWorks, appUsers, comments);
         const summaryText = formatComprehensiveAnalysis(analysis);
 
         // إضافة تنبيهات حرجة إن وجدت
@@ -192,7 +204,9 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
         }]);
         setIsTyping(false);
         setHasShownSummary(true);
-      }, 1200);
+        });
+      };
+      setTimeout(runSummary, 800);
     } else {
       // ملخص شخصي لبقية الموظفين
       setIsTyping(true);
@@ -247,7 +261,7 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
         time: timeNow()
       }]);
       setTimeout(() => {
-        const result = processSmartQuery(queryText, projects, technicalRequests, clearanceRequests, projectWorks, appUsers, currentUser);
+        const result = processSmartQuery(queryText, projects, technicalRequests, clearanceRequests, projectWorks, appUsers, currentUser, workComments);
         setMessages(prev => [...prev, {
           id: Date.now() + 1,
           text: result.text,
@@ -310,7 +324,7 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
     setIsTyping(true);
 
     setTimeout(() => {
-      const result = processSmartQuery(userText, projects, technicalRequests, clearanceRequests, projectWorks, appUsers, currentUser);
+      const result = processSmartQuery(userText, projects, technicalRequests, clearanceRequests, projectWorks, appUsers, currentUser, workComments);
       setMessages(prev => [...prev, {
         id: Date.now() + 1,
         text: result.text,
@@ -347,7 +361,7 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
     setIsTyping(true);
 
     setTimeout(() => {
-      const result = processSmartQuery(query, projects, technicalRequests, clearanceRequests, projectWorks, appUsers, currentUser);
+      const result = processSmartQuery(query, projects, technicalRequests, clearanceRequests, projectWorks, appUsers, currentUser, workComments);
       setMessages(prev => [...prev, {
         id: Date.now() + 1,
         text: result.text,

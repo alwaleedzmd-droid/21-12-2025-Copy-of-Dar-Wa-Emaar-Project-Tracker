@@ -25,18 +25,24 @@ const CRITICAL_THRESHOLD = 48; // ساعة — تنبيه حرج
  * @param works - كل أعمال المشاريع
  * @param userId - معرف المستخدم الحالي (لإظهار تنبيهاته فقط)
  * @param users - قائمة المستخدمين (للأسماء)
+ * @param userName - اسم المستخدم (للمطابقة بالاسم)
+ * @param userEmail - بريد المستخدم (للمطابقة بالبريد)
  */
 export function checkTaskReminders(
   works: ProjectWork[],
   userId: string,
-  users: User[]
+  users: User[],
+  userName?: string,
+  userEmail?: string
 ): TaskReminder[] {
   const now = Date.now();
   const reminders: TaskReminder[] = [];
 
-  // المهام المُسندة إلى هذا المستخدم وغير مُنجزة
+  // المهام المُسندة إلى هذا المستخدم وغير مُنجزة (مطابقة بالمعرف أو الاسم أو البريد)
   const myTasks = works.filter(
-    w => w.assigned_to === userId &&
+    w => (w.assigned_to === userId ||
+         (userName && (w.assigned_to === userName || w.assigned_to_name === userName)) ||
+         (userEmail && w.assigned_to === userEmail)) &&
          w.assignment_status !== 'completed' &&
          w.status !== 'completed' &&
          w.assigned_at
@@ -86,11 +92,13 @@ export function checkTaskReminders(
     }
   }
 
-  // تنبيهات تاريخ الإنجاز المتوقع لجميع الأعمال غير المنجزة
+  // تنبيهات تاريخ الإنجاز المتوقع لأعمال المستخدم فقط
   const myDeadlineTasks = works.filter(
     w => w.expected_completion_date && 
          w.status !== 'completed' &&
-         (w.assigned_to === userId || !w.assigned_to)
+         (w.assigned_to === userId ||
+          (userName && (w.assigned_to === userName || w.assigned_to_name === userName)) ||
+          (userEmail && w.assigned_to === userEmail))
   );
 
   for (const work of myDeadlineTasks) {

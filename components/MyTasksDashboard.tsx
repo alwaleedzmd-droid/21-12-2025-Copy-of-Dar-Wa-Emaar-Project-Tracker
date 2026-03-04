@@ -2,14 +2,15 @@ import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import {
   ClipboardList, CheckCircle2, Clock, AlertTriangle, Play, Loader2,
   Building2, Calendar, MessageSquare, Timer, TrendingUp, Sparkles,
-  ChevronDown, ChevronUp, FileText, User as UserIcon, Bell
+  ChevronDown, ChevronUp, FileText, User as UserIcon, Bell, FileCheck2
 } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import { useData } from '../contexts/DataContext';
 import { ProjectWork } from '../types';
 import Modal from './Modal';
 import { notificationService } from '../services/notificationService';
-import { checkTaskReminders, TaskReminder } from '../services/taskReminderService';
+import { checkTaskReminders, checkAllTaskReminders, TaskReminder } from '../services/taskReminderService';
+import { useNavigate } from 'react-router-dom';
 
 // ============================
 // حالات المهام المُسندة
@@ -21,10 +22,20 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; 
   'overdue': { label: 'متأخر ⚠️', color: 'text-red-700', bg: 'bg-red-50 border-red-200', icon: <AlertTriangle size={16} /> },
 };
 
+// حالات الطلبات
+const REQUEST_STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; icon: React.ReactNode }> = {
+  'جديد': { label: 'جديد', color: 'text-blue-700', bg: 'bg-blue-50 border-blue-200', icon: <FileCheck2 size={16} /> },
+  'قيد العمل': { label: 'قيد العمل', color: 'text-amber-700', bg: 'bg-amber-50 border-amber-200', icon: <Clock size={16} /> },
+  'بانتظار الموافقة': { label: 'بانتظار الموافقة', color: 'text-purple-700', bg: 'bg-purple-50 border-purple-200', icon: <Timer size={16} /> },
+  'مقبول': { label: 'مقبول', color: 'text-green-700', bg: 'bg-green-50 border-green-200', icon: <CheckCircle2 size={16} /> },
+  'مرفوض': { label: 'مرفوض', color: 'text-red-700', bg: 'bg-red-50 border-red-200', icon: <AlertTriangle size={16} /> },
+};
+
 const MyTasksDashboard: React.FC = () => {
-  const { projectWorks, projects, currentUser, refreshData, appUsers } = useData();
+  const { projectWorks, projects, currentUser, refreshData, appUsers, technicalRequests, clearanceRequests } = useData();
+  const navigate = useNavigate();
   
-  const [activeTab, setActiveTab] = useState<'my_tasks' | 'coded_tasks'>('my_tasks');
+  const [activeTab, setActiveTab] = useState<'my_tasks' | 'my_requests' | 'coded_tasks'>('my_tasks');
   const [statusFilter, setStatusFilter] = useState('');
   const [detailWork, setDetailWork] = useState<ProjectWork | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
@@ -33,12 +44,68 @@ const MyTasksDashboard: React.FC = () => {
   const [showReminders, setShowReminders] = useState(false);
 
   // ============================
-  // المهام المُسندة إلى المستخدم الحالي
+  // المهام المُسندة إلى المستخدم الحالي (project_works)
   // ============================
   const myAssignedTasks = useMemo(() => {
     if (!currentUser) return [];
-    return (projectWorks || []).filter(w => w.assigned_to === currentUser.id);
+    const userId = currentUser.id;
+    const userName = currentUser.name;
+    const userEmail = currentUser.email;
+    
+    return (projectWorks || []).filter(w => {
+      // مطابقة بالمعرف أو الاسم أو الإيميل
+      if (w.assigned_to === userId) return true;
+      if (w.assigned_to === userName) return true;
+      if (w.assigned_to === userEmail) return true;
+      if (w.assigned_to_name === userName) return true;
+      return false;
+    });
   }, [projectWorks, currentUser]);
+
+  // ============================
+  // الطلبات المُسندة إلى المستخدم الحالي (إفراغات + فني)
+  // ============================
+  const myWorkflowRequests = useMemo(() => {
+    if (!currentUser) return [];
+    const userName = currentUser.name;
+    const userEmail = currentUser.email;
+    
+    // طلبات الإفراغ المُسندة للمستخدم الحالي
+    const myDeeds = (clearanceRequests || [])
+      .filter(d => {
+        if (!d.assigned_to) return false;
+        const assigned = d.assigned_to.trim();
+        // مطابقة بالاسم أو الإيميل
+        return assigned === userName || assigned === userEmail || 
+               assigned.toLowerCase() === userEmail?.toLowerCase();
+      })
+      .map(d => ({
+        ...d,
+        _type: 'DEED' as const,
+        _label: d.request_type === 'METER_TRANSFER' ? 'نقل ملكية عداد' : 'إفراغ صك',
+        _route: '/deeds',
+      }));
+    
+    // الطلبات الفنية المُسندة للمستخدم الحالي
+    const myTech = (technicalRequests || [])
+      .filter(t => {
+        if (!t.assigned_to) return false;
+        const assigned = t.assigned_to.trim();
+        return assigned === userName || assigned === userEmail ||
+               assigned.toLowerCase() === userEmail?.toLowerCase();
+      })
+      .map(t => ({
+        ...t,
+        _type: 'TECH' as const,
+        _label: t.service_type || 'طلب فني',
+        _route: '/technical',
+      }));
+    
+    // دمج وترتيب حسب التاريخ
+    return [...myDeeds, ...myTech].sort((a, b) => 
+      new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    );
+  }, [clearanceRequests, technicalRequests, currentUser]);
 
   // ============================
   // المهام المُرمَّز عليها (المشاريع التي المستخدم مسؤول عنها)
@@ -58,6 +125,16 @@ const MyTasksDashboard: React.FC = () => {
   // إحصائيات المهام
   // ============================
   const stats = useMemo(() => {
+    if (activeTab === 'my_requests') {
+      const requests = myWorkflowRequests;
+      const total = requests.length;
+      const pending = requests.filter(r => r.status === 'جديد' || r.status === 'بانتظار الموافقة').length;
+      const inProgress = requests.filter(r => r.status === 'قيد العمل').length;
+      const completed = requests.filter(r => r.status === 'مقبول' || r.status === 'مكتمل').length;
+      const overdue = requests.filter(r => r.status === 'مرفوض').length;
+      return { total, pending, inProgress, completed, overdue };
+    }
+    
     const tasks = activeTab === 'my_tasks' ? myAssignedTasks : myCodedTasks;
     const total = tasks.length;
     const pending = tasks.filter(t => t.assignment_status === 'pending' || (!t.assignment_status && t.status !== 'completed')).length;
@@ -71,12 +148,13 @@ const MyTasksDashboard: React.FC = () => {
     }).length;
 
     return { total, pending, inProgress, completed, overdue };
-  }, [myAssignedTasks, myCodedTasks, activeTab]);
+  }, [myAssignedTasks, myCodedTasks, myWorkflowRequests, activeTab]);
 
   // ============================
   // تصفية المهام
   // ============================
   const filteredTasks = useMemo(() => {
+    if (activeTab === 'my_requests') return []; // الطلبات تُعرض بشكل منفصل
     const tasks = activeTab === 'my_tasks' ? myAssignedTasks : myCodedTasks;
     if (!statusFilter) return tasks;
     
@@ -95,15 +173,37 @@ const MyTasksDashboard: React.FC = () => {
     });
   }, [myAssignedTasks, myCodedTasks, activeTab, statusFilter]);
 
+  // تصفية الطلبات
+  const filteredRequests = useMemo(() => {
+    if (activeTab !== 'my_requests') return [];
+    if (!statusFilter) return myWorkflowRequests;
+    
+    return myWorkflowRequests.filter(r => {
+      if (statusFilter === 'pending') return r.status === 'جديد' || r.status === 'بانتظار الموافقة';
+      if (statusFilter === 'in_progress') return r.status === 'قيد العمل';
+      if (statusFilter === 'completed') return r.status === 'مقبول' || r.status === 'مكتمل';
+      if (statusFilter === 'overdue') return r.status === 'مرفوض';
+      return true;
+    });
+  }, [myWorkflowRequests, activeTab, statusFilter]);
+
   // ============================
-  // فحص تنبيهات الذكاء الاصطناعي
+  // فحص تنبيهات الذكاء الاصطناعي — حسب الصلاحية
   // ============================
   useEffect(() => {
     if (!currentUser || !projectWorks) return;
-    const reminders = checkTaskReminders(projectWorks, currentUser.id, appUsers);
+    
+    let reminders: TaskReminder[];
+    if (currentUser.role === 'ADMIN') {
+      // المدير يرى تنبيهات جميع الموظفين
+      reminders = checkAllTaskReminders(projectWorks, appUsers);
+    } else {
+      // الموظف يرى تنبيهات أعماله فقط
+      reminders = checkTaskReminders(projectWorks, currentUser.id, appUsers, currentUser.name, currentUser.email);
+    }
     setAiReminders(reminders);
     
-    // إرسال إشعارات تلقائية للمهام المتأخرة
+    // إرسال إشعارات تلقائية للمهام المتأخرة (للمستخدم نفسه فقط)
     reminders.filter(r => r.severity === 'critical').forEach(r => {
       notificationService.send(
         currentUser.role,
@@ -261,6 +361,17 @@ const MyTasksDashboard: React.FC = () => {
           <Building2 size={16} className="inline ml-2" />
           أعمال مشاريعي ({myCodedTasks.length})
         </button>
+        <button
+          onClick={() => { setActiveTab('my_requests'); setStatusFilter(''); }}
+          className={`px-6 py-3 rounded-xl font-bold text-sm transition-all ${
+            activeTab === 'my_requests' 
+              ? 'bg-[#1B2B48] text-white shadow-lg' 
+              : 'text-gray-500 hover:bg-gray-100'
+          }`}
+        >
+          <FileCheck2 size={16} className="inline ml-2" />
+          طلباتي المُسندة ({myWorkflowRequests.length})
+        </button>
       </div>
 
       {/* Stats Cards */}
@@ -272,28 +383,101 @@ const MyTasksDashboard: React.FC = () => {
         </button>
         <button onClick={() => setStatusFilter('pending')}
           className={`bg-white p-4 rounded-[20px] border shadow-sm text-right transition-all ${statusFilter === 'pending' ? 'ring-2 ring-amber-400' : 'hover:shadow-md'}`}>
-          <p className="text-amber-500 text-[10px] font-bold mb-1">بانتظار البدء</p>
+          <p className="text-amber-500 text-[10px] font-bold mb-1">{activeTab === 'my_requests' ? 'جديد / بانتظار' : 'بانتظار البدء'}</p>
           <p className="text-2xl font-black text-amber-600">{stats.pending}</p>
         </button>
         <button onClick={() => setStatusFilter('in_progress')}
           className={`bg-white p-4 rounded-[20px] border shadow-sm text-right transition-all ${statusFilter === 'in_progress' ? 'ring-2 ring-blue-400' : 'hover:shadow-md'}`}>
-          <p className="text-blue-500 text-[10px] font-bold mb-1">تحت الإجراء</p>
+          <p className="text-blue-500 text-[10px] font-bold mb-1">{activeTab === 'my_requests' ? 'قيد العمل' : 'تحت الإجراء'}</p>
           <p className="text-2xl font-black text-blue-600">{stats.inProgress}</p>
         </button>
         <button onClick={() => setStatusFilter('completed')}
           className={`bg-white p-4 rounded-[20px] border shadow-sm text-right transition-all ${statusFilter === 'completed' ? 'ring-2 ring-green-400' : 'hover:shadow-md'}`}>
-          <p className="text-green-500 text-[10px] font-bold mb-1">منجز</p>
+          <p className="text-green-500 text-[10px] font-bold mb-1">{activeTab === 'my_requests' ? 'مقبول' : 'منجز'}</p>
           <p className="text-2xl font-black text-green-600">{stats.completed}</p>
         </button>
         <button onClick={() => setStatusFilter('overdue')}
           className={`bg-white p-4 rounded-[20px] border shadow-sm text-right transition-all ${statusFilter === 'overdue' ? 'ring-2 ring-red-400' : 'hover:shadow-md'}`}>
-          <p className="text-red-500 text-[10px] font-bold mb-1">متأخر ⚠️</p>
+          <p className="text-red-500 text-[10px] font-bold mb-1">{activeTab === 'my_requests' ? 'مرفوض ⚠️' : 'متأخر ⚠️'}</p>
           <p className="text-2xl font-black text-red-600">{stats.overdue}</p>
         </button>
       </div>
 
       {/* Tasks List */}
       <div className="space-y-3">
+        {/* === Workflow Requests Tab === */}
+        {activeTab === 'my_requests' && (
+          <>
+            {filteredRequests.length === 0 ? (
+              <div className="bg-white p-16 rounded-[30px] border shadow-sm text-center">
+                <FileCheck2 size={48} className="mx-auto mb-4 text-gray-300" />
+                <p className="font-bold text-gray-400 text-lg">لا توجد طلبات مُسندة إليك حالياً</p>
+              </div>
+            ) : (
+              filteredRequests.map((req: any) => {
+                const statusCfg = REQUEST_STATUS_CONFIG[req.status] || REQUEST_STATUS_CONFIG['جديد'];
+                return (
+                  <div
+                    key={`${req._type}-${req.id}`}
+                    onClick={() => navigate(req._route)}
+                    className="bg-white rounded-[25px] border shadow-sm overflow-hidden transition-all hover:shadow-md cursor-pointer hover:border-[#E95D22]/30"
+                  >
+                    <div className="p-5">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex items-start gap-4 flex-1">
+                          <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${statusCfg.bg} border ${statusCfg.color}`}>
+                            <FileCheck2 size={20} />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <h3 className="font-black text-[#1B2B48] text-base">
+                              {req._label}
+                            </h3>
+                            <div className="flex items-center gap-3 mt-1 flex-wrap">
+                              <span className="text-[10px] text-gray-400 font-bold flex items-center gap-1">
+                                <Building2 size={11} /> {req.client_name || req.project_name || 'طلب'}
+                              </span>
+                              {req._type === 'DEED' && req.deed_number && (
+                                <span className="text-[10px] text-gray-400 font-bold">
+                                  • صك #{req.deed_number}
+                                </span>
+                              )}
+                              {req.request_type && (
+                                <span className="text-[10px] text-[#E95D22] font-bold bg-orange-50 px-2 py-0.5 rounded-lg">
+                                  {req.request_type}
+                                </span>
+                              )}
+                              <span className="text-[10px] text-gray-400 font-bold flex items-center gap-1">
+                                <Calendar size={11} /> {new Date(req.created_at).toLocaleDateString('ar-SA')}
+                              </span>
+                            </div>
+                            {req.notes && (
+                              <p className="text-xs text-gray-500 font-bold mt-2 bg-gray-50 p-2 rounded-lg border border-gray-100">
+                                <FileText size={12} className="inline ml-1 text-[#E95D22]" />
+                                {req.notes}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3 flex-shrink-0">
+                          <span className={`px-3 py-1.5 rounded-xl text-[10px] font-black border ${statusCfg.bg} ${statusCfg.color}`}>
+                            {statusCfg.label}
+                          </span>
+                          <span className={`px-2 py-1 rounded-lg text-[10px] font-bold ${req._type === 'DEED' ? 'bg-purple-50 text-purple-600' : 'bg-teal-50 text-teal-600'}`}>
+                            {req._type === 'DEED' ? 'إفراغ' : 'فني'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </>
+        )}
+
+        {/* === Tasks Tabs (my_tasks / coded_tasks) === */}
+        {activeTab !== 'my_requests' && (
+          <>
         {filteredTasks.length === 0 ? (
           <div className="bg-white p-16 rounded-[30px] border shadow-sm text-center">
             <ClipboardList size={48} className="mx-auto mb-4 text-gray-300" />
@@ -455,6 +639,8 @@ const MyTasksDashboard: React.FC = () => {
               </div>
             );
           })
+        )}
+          </>
         )}
       </div>
 

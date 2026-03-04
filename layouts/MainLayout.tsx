@@ -164,6 +164,12 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
       roles: ['ADMIN', 'PR_MANAGER'] 
     },
     { 
+      label: 'الخريطة التفاعلية', 
+      icon: <MapIcon size={20} />, 
+      path: '/operations-map', 
+      roles: ['ADMIN', 'PR_MANAGER'] 
+    },
+    { 
       label: 'إدارة المشاريع', 
       icon: <Building2 size={20} />, 
       path: '/projects', 
@@ -204,12 +210,6 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
       icon: <Settings size={20} />, 
       path: '/workflow', 
       roles: ['ADMIN'] 
-    },
-    { 
-      label: 'الخريطة التفاعلية', 
-      icon: <MapIcon size={20} />, 
-      path: '/operations-map', 
-      roles: ['ADMIN', 'PR_MANAGER'] 
     },
     { 
       label: 'دليل النظام', 
