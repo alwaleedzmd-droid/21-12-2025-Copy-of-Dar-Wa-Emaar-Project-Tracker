@@ -1176,7 +1176,10 @@ const ProjectDetailWrapper = ({ projects = [], currentUser }: any) => {
                     </div>
                     <div className="flex gap-2">
                         <input className="flex-1 p-3 bg-gray-50 border rounded-xl outline-none text-xs font-bold" placeholder="أضف تعليق... (استخدم @الجهة للترميز)" value={newComment} onChange={e => setNewComment(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAddComment()} />
-                        <button onClick={handleAddComment} disabled={!newComment.trim() || loadingComments} className="p-3 bg-[#1B2B48] text-white rounded-xl"><Send size={16}/></button>
+                        <button onClick={handleAddComment} disabled={!newComment.trim() || loadingComments} aria-label="إرسال" className="p-3 bg-[#1B2B48] text-white rounded-xl flex items-center justify-center">
+                          <span className="sr-only">إرسال</span>
+                          <Send size={16}/>
+                        </button>
                     </div>
                   </div>
               </div>
@@ -1193,9 +1196,16 @@ const AppContent: React.FC = () => {
     currentUser, isAuthLoading, logout,
     projects, technicalRequests, clearanceRequests, projectWorks, appUsers, refreshData, logActivity 
   } = useData();
-  const [hasSeenHero, setHasSeenHero] = React.useState(() => 
-    localStorage.getItem('dar_seen_hero') === 'true'
-  );
+  const [hasSeenHero, setHasSeenHero] = React.useState(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const forceShow = params.get('hero') === '1' || params.get('showHero') === '1';
+      if (forceShow) return false; // force showing hero
+    } catch (e) {
+      // ignore
+    }
+    return localStorage.getItem('dar_seen_hero') === 'true';
+  });
 
   const getDefaultPath = (role: UserRole) => {
     switch (role) {
@@ -1212,10 +1222,11 @@ const AppContent: React.FC = () => {
   };
 
   useEffect(() => {
-    if (currentUser && !isAuthLoading && location.pathname === '/') {
+    // Only auto-redirect to the default path if the hero has been seen.
+    if (currentUser && !isAuthLoading && location.pathname === '/' && hasSeenHero) {
       navigate(getDefaultPath(currentUser.role), { replace: true });
     }
-  }, [currentUser, isAuthLoading, navigate, location.pathname]);
+  }, [currentUser, isAuthLoading, navigate, location.pathname, hasSeenHero]);
 
   if (isAuthLoading) return (
     <div className="min-h-screen flex items-center justify-center bg-white">
@@ -1229,11 +1240,16 @@ const AppContent: React.FC = () => {
   if (!currentUser) return <LoginPage />;
 
   // عرض صفحة البداية السينمائية أول مرة
-  if (!hasSeenHero && currentUser?.role === 'ADMIN') {
+  if (!hasSeenHero) {
     return (
-      <div onClick={() => { localStorage.setItem('dar_seen_hero', 'true'); setHasSeenHero(true); }}>
-        <AppleStyleHero />
-      </div>
+      <AppleStyleHero onSeen={(targetPath?: string) => {
+        try {
+          if (targetPath) navigate(targetPath, { replace: true });
+        } finally {
+          localStorage.setItem('dar_seen_hero', 'true');
+          setHasSeenHero(true);
+        }
+      }} />
     );
   }
 

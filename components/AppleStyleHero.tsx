@@ -1,9 +1,16 @@
 // AppleStyleHero.tsx - مشهد البداية السينمائي لنظام دار وإعمار
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { gsap } from 'gsap';
-import { Building2, ChevronLeft, Activity, ShieldCheck } from 'lucide-react';
+import { ChevronLeft, ShieldCheck, BarChart3, FileText, Wrench, MapPin, Users, List, BookOpen, Map } from 'lucide-react';
+import { useData } from '../contexts/DataContext';
+import { useNavigate } from 'react-router-dom';
+import { DAR_LOGO } from '../constants';
 
-const AppleStyleHero = () => {
+interface AppleStyleHeroProps {
+  onSeen?: (targetPath?: string) => void;
+}
+
+const AppleStyleHero: React.FC<AppleStyleHeroProps> = ({ onSeen }) => {
   const mapRef = useRef(null);
   const titleRef = useRef(null);
   const cardContainerRef = useRef(null);
@@ -50,19 +57,46 @@ const AppleStyleHero = () => {
     return () => ctx.revert();
   }, []);
 
-  const projects = [
-    { id: '01', name: 'مشروع نفاذ', status: 'الفني', color: 'border-[#1B2B48]', shadow: 'shadow-blue-900/20' },
-    { id: '02', name: 'سرايا النرجس', status: 'الإفراغات', color: 'border-[#E95D22]', shadow: 'shadow-orange-900/20' },
-    { id: '03', name: 'تلال الخبر', status: 'المرافق', color: 'border-green-500', shadow: 'shadow-green-900/20' },
+  const { currentUser } = useData();
+  const navigate = useNavigate();
+  const [logoOk, setLogoOk] = useState(true);
+
+  const sections = [
+    { id: 'dashboard', label: 'لوحة المعلومات', icon: <BarChart3 />, path: '/dashboard', roles: ['ADMIN', 'PR_MANAGER'] },
+    { id: 'projects', label: 'المشاريع', icon: <FileText />, path: '/projects', roles: ['ADMIN', 'PR_MANAGER'] },
+    { id: 'technical', label: 'الطلبات الفنية', icon: <Wrench />, path: '/technical', roles: ['ADMIN', 'TECHNICAL', 'PR_MANAGER'] },
+    { id: 'deeds', label: 'سجلات الإفراغ', icon: <MapPin />, path: '/deeds', roles: ['ADMIN', 'CONVEYANCE', 'PR_MANAGER'] },
+    { id: 'users', label: 'إدارة المستخدمين', icon: <Users />, path: '/users', roles: ['ADMIN'] },
+    { id: 'workflow', label: 'إدارة المسارات', icon: <List />, path: '/workflow', roles: ['ADMIN', 'PR_MANAGER'] },
+    { id: 'mytasks', label: 'مهامي', icon: <Map />, path: '/my-tasks', roles: ['ADMIN', 'TECHNICAL', 'PR_MANAGER', 'CONVEYANCE'] },
+    { id: 'assignment', label: 'تعيين المهام', icon: <FileText />, path: '/task-assignment', roles: ['ADMIN'] },
+    { id: 'guide', label: 'دليل النظام', icon: <BookOpen />, path: '/guide', roles: ['ADMIN', 'PR_MANAGER'] },
+    { id: 'operations-map', label: 'الخريطة التفاعلية', icon: <Map />, path: '/operations-map', roles: ['ADMIN', 'PR_MANAGER'] },
   ];
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const [active, setActive] = useState<string | null>(sections[0]?.id || null);
+  const [message, setMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    const nodes = containerRef.current?.querySelectorAll('.section-panel') || [];
+    const obs = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        const id = entry.target.getAttribute('data-id');
+        if (entry.isIntersecting && id) setActive(id);
+      });
+    }, { threshold: 0.6 });
+
+    nodes.forEach((n: Element) => obs.observe(n));
+    return () => obs.disconnect();
+  }, []);
 
   return (
-    <div className="relative h-screen w-screen bg-[#020617] overflow-hidden font-cairo text-white" dir="rtl">
+    <div className="relative h-screen w-screen bg-white overflow-hidden font-cairo text-[#1B2B48] pt-20" dir="rtl">
       
       {/* الخلفية: خارطة تقنية تجريدية */}
-      <div ref={mapRef} className="absolute inset-0 z-0 opacity-20">
-        <div className="absolute inset-0 bg-gradient-to-b from-transparent to-[#020617] z-10" />
-        <svg viewBox="0 0 1000 1000" className="w-full h-full stroke-blue-500/30 fill-none">
+      <div ref={mapRef} className="absolute inset-0 z-0 opacity-10">
+        <div className="absolute inset-0 bg-gradient-to-b from-transparent to-white z-10" />
+        <svg viewBox="0 0 1000 1000" className="w-full h-full stroke-[#1B2B48]/10 fill-none">
           <path d="M100,500 Q300,100 500,500 T900,500" strokeWidth="1" />
           <circle cx="500" cy="500" r="400" strokeDasharray="5 5" />
           <circle cx="500" cy="500" r="200" strokeDasharray="10 10" />
@@ -73,43 +107,79 @@ const AppleStyleHero = () => {
       <div className="relative z-20 h-full flex flex-col items-center justify-center px-10">
         
         {/* العنوان الرأسي بأسلوب آبل */}
-        <div ref={titleRef} className="text-center mb-20">
-          <span className="text-[#E95D22] font-black tracking-[0.3em] text-sm mb-4 block uppercase">Operations War Room</span>
-          <h1 className="text-6xl md:text-8xl font-black tracking-tighter mb-4">
+        <div ref={titleRef} className="text-center mb-6">
+          {logoOk ? (
+            <img src={DAR_LOGO} alt="دار وإعمار" className="w-40 mx-auto mt-6 mb-6 z-50 relative" style={{display: 'block'}} onError={() => setLogoOk(false)} onLoad={() => setLogoOk(true)} />
+          ) : (
+            <div className="w-40 mx-auto mt-6 mb-6 flex items-center justify-center relative z-50">
+              <svg width="160" height="40" viewBox="0 0 160 40" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
+                <rect width="160" height="40" rx="6" fill="#fff" stroke="#E95D22" />
+                <text x="50%" y="50%" dominantBaseline="middle" textAnchor="middle" fill="#1B2B48" fontSize="14" fontWeight="700">دار وإعمار</text>
+              </svg>
+            </div>
+          )}
+          <span className="text-[#E95D22] font-black tracking-[0.3em] text-sm mb-4 block uppercase">Building a Better Tomorrow</span>
+          <h1 className="text-6xl md:text-8xl font-black tracking-tighter mb-4 text-[#1B2B48]">
             دار وإعمار <br />
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-gray-200 to-gray-500 text-5xl md:text-7xl">
-              المستقبل.. بوضوح تام
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#1B2B48] to-[#2a4068] text-5xl md:text-7xl">
+              إتقان في التفاصيل
             </span>
           </h1>
         </div>
-
-        {/* كتل المشاريع العائمة */}
-        <div ref={cardContainerRef} className="flex flex-wrap justify-center gap-8 w-full max-w-6xl">
-          {projects.map((project) => (
-            <div 
-              key={project.id}
-              className={`project-block w-72 p-8 rounded-[35px] bg-white/5 backdrop-blur-2xl border-t-2 ${project.color} ${project.shadow} group hover:bg-white/10 transition-all cursor-pointer`}
-            >
-              <div className="flex justify-between items-start mb-10">
-                <span className="text-4xl font-black opacity-10 group-hover:opacity-30 transition-opacity">{project.id}</span>
-                <div className={`p-3 rounded-2xl bg-white/5`}>
-                  <Building2 size={24} className="text-white" />
+        {/* قسم التمرير: كل قسم شاشة كاملة (scroll-snap) */}
+        <div ref={cardContainerRef} className="w-full h-[65vh] max-w-6xl mt-8">
+          <div ref={containerRef} className="h-full overflow-y-auto snap-y snap-mandatory space-y-6 px-6">
+            {sections.map((sec) => {
+              const allowed = currentUser && sec.roles.includes(currentUser.role as string);
+              const isActive = active === sec.id;
+              return (
+                <div
+                  key={sec.id}
+                  data-id={sec.id}
+                  className={`section-panel snap-start h-full rounded-3xl p-8 relative flex flex-col items-center justify-center transition-transform duration-500 ${isActive ? 'scale-100 opacity-100' : 'scale-95 opacity-60'}`}
+                >
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    aria-disabled={!allowed}
+                        onClick={() => {
+                          if (!allowed) {
+                            setMessage('غير مصرح بالوصول لهذا القسم');
+                            setTimeout(() => setMessage(null), 2000);
+                            console.warn('Attempt to open', sec.path, 'was blocked for role', currentUser?.role);
+                            return;
+                          }
+                          console.log('Hero click, target:', sec.path, 'allowed:', allowed, 'role:', currentUser?.role);
+                          if (onSeen) {
+                            onSeen(sec.path);
+                            // fallback after short delay in case parent doesn't navigate
+                            setTimeout(() => navigate(sec.path), 300);
+                            return;
+                          }
+                          navigate(sec.path);
+                        }}
+                        onKeyDown={(e) => { if ((e as any).key === 'Enter' && allowed) { console.log('Hero key enter, target:', sec.path); if (onSeen) { onSeen(sec.path); setTimeout(() => navigate(sec.path), 300); return; } ; navigate(sec.path); } }}
+                    className={`w-full h-full rounded-2xl p-12 bg-white border border-gray-200 shadow-sm flex flex-col items-center justify-between ${allowed ? 'cursor-pointer hover:bg-gray-50' : 'cursor-not-allowed'}`}
+                  >
+                    <div className="flex items-center gap-6 text-[#1B2B48]">
+                      <div className="p-4 rounded-xl bg-gray-50 text-3xl">{sec.icon}</div>
+                      <h3 className="text-4xl font-black">{sec.label}</h3>
+                    </div>
+                    <p className="text-gray-600 text-center max-w-xl">انتقل إلى {sec.label} لعرض ومتابعة المهام ذات الصلة.</p>
+                    <div className="w-full flex items-center justify-between">
+                      <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest italic">النظام</span>
+                      <ChevronLeft className="text-gray-400" />
+                    </div>
+                    {!allowed && (
+                      <div className="absolute inset-0 rounded-2xl flex items-center justify-center pointer-events-none">
+                        <div className="bg-white/80 text-[#1B2B48] px-3 py-2 rounded-lg text-sm font-bold flex items-center gap-2 border border-gray-200"><ShieldCheck size={14}/> مقفول</div>
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
-              
-              <h3 className="text-2xl font-black mb-2">{project.name}</h3>
-              <p className="text-gray-400 text-sm mb-6 flex items-center gap-2">
-                <Activity size={14} className="text-[#E95D22]" /> قيد معالجة {project.status}
-              </p>
-
-              <div className="flex items-center justify-between pt-4 border-t border-white/10">
-                <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest italic flex items-center gap-1">
-                   Secure Node <ShieldCheck size={12} />
-                </span>
-                <ChevronLeft className="group-hover:-translate-x-2 transition-transform" />
-              </div>
-            </div>
-          ))}
+              );
+            })}
+          </div>
         </div>
 
         {/* مؤشر السكرول (The Apple Scroll Indicator) */}
