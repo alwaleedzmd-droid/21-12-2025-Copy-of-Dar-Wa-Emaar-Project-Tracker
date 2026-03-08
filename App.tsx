@@ -33,6 +33,7 @@ import SystemGuide from './components/SystemGuide';
 import InteractiveOperationsMap from './components/InteractiveOperationsMap';
 import TaskAssignment from './components/TaskAssignment';
 import MyTasksDashboard from './components/MyTasksDashboard';
+import AppleStyleHero from './components/AppleStyleHero';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -1192,6 +1193,9 @@ const AppContent: React.FC = () => {
     currentUser, isAuthLoading, logout,
     projects, technicalRequests, clearanceRequests, projectWorks, appUsers, refreshData, logActivity 
   } = useData();
+  const [hasSeenHero, setHasSeenHero] = React.useState(() => 
+    localStorage.getItem('dar_seen_hero') === 'true'
+  );
 
   const getDefaultPath = (role: UserRole) => {
     switch (role) {
@@ -1223,6 +1227,15 @@ const AppContent: React.FC = () => {
   );
 
   if (!currentUser) return <LoginPage />;
+
+  // عرض صفحة البداية السينمائية أول مرة
+  if (!hasSeenHero && currentUser?.role === 'ADMIN') {
+    return (
+      <div onClick={() => { localStorage.setItem('dar_seen_hero', 'true'); setHasSeenHero(true); }}>
+        <AppleStyleHero />
+      </div>
+    );
+  }
 
   return (
    <MainLayout>
