@@ -429,6 +429,33 @@ const ProjectDetailWrapper = ({ projects = [], currentUser }: any) => {
      } catch (err: any) { alert("خطأ أثناء الحذف: " + err.message); }
    };
 
+  // حفظ وصف العمل (قابل للحفظ من قبل مدير النظام)
+  const handleSaveWorkNotes = async () => {
+    if (!selectedWork) return;
+    if (currentUser?.role !== 'ADMIN') { alert('لا تملك الصلاحية لحفظ الوصف'); return; }
+    setIsActionLoading(true);
+    try {
+      const payload: any = { notes: noteDraft || null };
+      let { error } = await supabase.from('project_works').update(payload).eq('id', selectedWork.id);
+      if (error && error.message?.includes('schema cache')) {
+        const { error: retryErr } = await supabase.from('project_works').update({ notes: noteDraft }).eq('id', selectedWork.id);
+        error = retryErr;
+      }
+      if (error) throw error;
+
+      setSelectedWork({ ...selectedWork, notes: noteDraft });
+      setLocalWorksFetched(false);
+      refreshData();
+      activityLogService.log({ userId: currentUser?.id || '', userName: currentUser?.name || '', userRole: currentUser?.role || '', actionType: 'update', entityType: 'work', entityId: String(selectedWork.id), entityName: selectedWork.task_name, description: `تحديث وصف العمل: ${selectedWork.task_name}`, oldValue: { notes: selectedWork.notes }, newValue: { notes: noteDraft } });
+      alert('تم حفظ الوصف بنجاح');
+    } catch (err: any) {
+      alert('فشل حفظ الوصف: ' + (err?.message || String(err)));
+      console.error('Save notes error', err);
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
+
    const handleAddComment = async () => {
      if (!newComment.trim() || !selectedWork) return;
      
