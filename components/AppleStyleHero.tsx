@@ -78,6 +78,10 @@ const AppleStyleHero: React.FC<AppleStyleHeroProps> = ({ onSeen }) => {
   const [message, setMessage] = useState<string | null>(null);
 
   useEffect(() => {
+    console.log('AppleStyleHero mounted — currentUser:', currentUser);
+  }, [currentUser]);
+
+  useEffect(() => {
     const nodes = containerRef.current?.querySelectorAll('.section-panel') || [];
     const obs = new IntersectionObserver((entries) => {
       entries.forEach((entry) => {
@@ -187,6 +191,12 @@ const AppleStyleHero: React.FC<AppleStyleHeroProps> = ({ onSeen }) => {
             <span className="text-[10px] font-bold tracking-[0.2em] uppercase">حرك للأسفل للاستكشاف</span>
             <div className="w-px h-12 bg-gradient-to-b from-white to-transparent" />
         </div>
+        {/* رسالة حالة */}
+        {message && (
+          <div className="absolute top-6 left-1/2 transform -translate-x-1/2 bg-[#1B2B48] text-white px-4 py-2 rounded-md shadow-lg z-60">
+            {message}
+          </div>
+        )}
       </div>
     </div>
   );

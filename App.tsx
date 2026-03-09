@@ -1228,15 +1228,8 @@ const AppContent: React.FC = () => {
     }
   }, [currentUser, isAuthLoading, navigate, location.pathname, hasSeenHero]);
 
-  // If the user signs in (auth state becomes available) while the hero
-  // hasn't been dismissed, mark it as seen so the app can navigate normally
-  // (fixes production flow where auth redirect lands on '/' then nothing shows).
-  useEffect(() => {
-    if (currentUser && !hasSeenHero) {
-      localStorage.setItem('dar_seen_hero', 'true');
-      setHasSeenHero(true);
-    }
-  }, [currentUser, hasSeenHero]);
+  // Note: do not auto-mark hero as seen on auth state change — this caused
+  // the hero to disappear immediately after login in some deployments.
 
   if (isAuthLoading) return (
     <div className="min-h-screen flex items-center justify-center bg-white">
