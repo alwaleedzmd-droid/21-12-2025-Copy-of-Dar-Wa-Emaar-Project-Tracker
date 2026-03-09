@@ -442,12 +442,27 @@ const ProjectDetailWrapper = ({ projects = [], currentUser }: any) => {
      
      setLoadingComments(true);
      try {
-       const { error } = await supabase.from('work_comments').insert({
-         work_id: selectedWork.id,
-         user_name: currentUser?.name || 'مستخدم',
-         content: newComment.trim()
-       });
-       if (error) throw error;
+      const { error } = await supabase.from('work_comments').insert({
+        work_id: selectedWork.id,
+        user_name: currentUser?.name || 'مستخدم',
+        content: newComment.trim()
+      });
+      if (error) throw error;
+
+      // إضافة متفائلة محلياً لعرض التعليق فوراً قبل إعادة الجلب
+      try {
+        const optimisticComment = {
+          id: `tmp-${Date.now()}`,
+          work_id: selectedWork.id,
+          user_name: currentUser?.name || 'مستخدم',
+          content: newComment.trim(),
+          created_at: new Date().toISOString()
+        };
+        setWorkComments(prev => [...(prev || []), optimisticComment]);
+        setTimeout(() => commentsEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
+      } catch (e) {
+        console.warn('Optimistic comment append failed', e);
+      }
        
        // استخراج @ترميز من التعليق وتحديث الجهة الحالية
        if (tagMatch && tagMatch[1]) {
@@ -476,10 +491,11 @@ const ProjectDetailWrapper = ({ projects = [], currentUser }: any) => {
        
        notificationService.send('PR_MANAGER', `💬 ملاحظة جديدة في ${selectedWork.task_name}`, `/projects/${id}`, currentUser?.name);
 
-       setNewComment('');
-       setLocalWorksFetched(false);
-       refreshData();
-       fetchWorkComments(selectedWork.id);
+      setNewComment('');
+      setLocalWorksFetched(false);
+      refreshData();
+      // جلب التعليقات للتأكد من التزامن مع الخادم
+      fetchWorkComments(selectedWork.id);
      } catch (err: any) { alert("خطأ: " + err.message); } finally { setLoadingComments(false); }
    };
 
@@ -664,6 +680,11 @@ const ProjectDetailWrapper = ({ projects = [], currentUser }: any) => {
                               <div>
                                   <h3 className="font-bold text-[#1B2B48] group-hover:text-[#E95D22] transition-colors">{work.task_name}</h3>
                                   <p className="text-[10px] text-gray-400 font-bold uppercase">{work.authority || 'جهة غير محددة'}</p>
+                                  {work.notes && (
+                                    <p className="text-[12px] text-gray-600 mt-2 max-w-[44rem]" style={{whiteSpace: 'pre-wrap'}}>
+                                      {work.notes.length > 220 ? work.notes.slice(0,220) + '...' : work.notes}
+                                    </p>
+                                  )}
                               </div>
                           </div>
                           <div className="flex items-center gap-3">
@@ -751,6 +772,13 @@ const ProjectDetailWrapper = ({ projects = [], currentUser }: any) => {
                         <span className="font-bold text-[#1B2B48]">{selectedWork.department || '-'}</span>
                       </div>
                   </div>
+                  {/* وصف/ملاحظات العمل */}
+                  {selectedWork.notes && (
+                    <div className="bg-gray-50 p-4 rounded-2xl border">
+                      <span className="text-[10px] text-gray-400 font-bold block mb-1">الوصف</span>
+                      <p className="text-sm font-bold text-[#1B2B48]">{selectedWork.notes}</p>
+                    </div>
+                  )}
                   {/* تاريخ الإنجاز المتوقع */}
                   {selectedWork.expected_completion_date && (() => {
                     const today = new Date();
