@@ -6,6 +6,7 @@ import {
 import { ProjectSummary, TechnicalRequest, ClearanceRequest } from '../types';
 import { supabase } from '../supabaseClient';
 import { useData } from '../contexts/DataContext';
+import { activityLogService } from '../services/activityLogService';
 import Modal from './Modal';
 import ProjectRequestsView from './ProjectRequestsView';
 import ProjectLeadManager from './ProjectLeadManager';
@@ -37,6 +38,7 @@ const ProjectDetailView: React.FC<ProjectDetailViewProps> = ({
   const openEditModal = () => {
     setEditForm({
       id: project.id,
+      location: project.location || '',
       units_count: project.units_count || 0,
       electricity_meters: project.electricity_meters || 0,
       water_meters: project.water_meters || 0,
@@ -80,6 +82,24 @@ const ProjectDetailView: React.FC<ProjectDetailViewProps> = ({
       
       setIsEditModalOpen(false);
       setEditForm({});
+      // سجل النشاط لتغيّر بيانات المشروع (الموقع إن وُجد تغيّراً)
+      try {
+        await activityLogService.log({
+          userId: currentUser?.id || '',
+          userName: currentUser?.name || '',
+          userRole: currentUser?.role || '',
+          actionType: 'update',
+          entityType: 'project',
+          entityId: String(id),
+          entityName: project.name || project.title || String(id),
+          description: `تحديث بيانات المشروع${project.name ? ' - ' + project.name : ''}`,
+          oldValue: { location: project.location || '' },
+          newValue: { location: (editForm as any).location || '' }
+        });
+      } catch (e) {
+        console.warn('Activity log failed', e);
+      }
+
       alert('تم حفظ التعديلات بنجاح ✓');
       onRefresh();
     } catch (err: any) {
@@ -191,6 +211,10 @@ const ProjectDetailView: React.FC<ProjectDetailViewProps> = ({
               ⚠️ {error}
             </div>
           )}
+          {/* حقل تعديل الموقع */}
+          <div>
+            <InputText label="الموقع" value={editForm.location} onChange={(v: string) => setEditForm({...editForm, location: v})} icon={<MapPin size={16}/>} />
+          </div>
           
           <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100">
             <h4 className="text-xs font-black text-gray-400 mb-3 uppercase tracking-wider">الإحصائيات والعدادات</h4>
