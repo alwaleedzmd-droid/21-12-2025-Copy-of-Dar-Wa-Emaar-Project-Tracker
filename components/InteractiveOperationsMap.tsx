@@ -108,6 +108,13 @@ function getProjectCoordinates(project: any, cityLookup: Map<string, CityLocatio
   return city ? { lat: city.lat, lng: city.lng } : { lat: 24.7136, lng: 46.6753 };
 }
 
+// استخراج وصف المشروع من حقول متعددة
+function getProjectDescription(project: any): string | null {
+  const candidates = [project.details, project.description, project.notes, project.note, project.location_description, project.summary];
+  const found = candidates.find(c => typeof c === 'string' && c && String(c).trim().length > 0);
+  return found ? String(found) : null;
+}
+
 // إنشاء أيقونة ماركر مخصصة بالألوان
 function createColoredIcon(color: string, count: number, isDelayed: boolean): L.DivIcon {
   const pulse = isDelayed ? `
@@ -283,6 +290,24 @@ const InteractiveOperationsMap: React.FC = () => {
     window.addEventListener('project-updated', onProjectUpdated as EventListener);
     return () => { window.removeEventListener('project-updated', onProjectUpdated as EventListener); };
   }, [refreshData]);
+
+  // عندما يتغير pickedLocation، قم بتحريك الخريطة إلى الموقع وإظهار علامة معاينة
+  function PickedLocationHandler({ loc }: { loc: { lat: number; lng: number } | null }) {
+    const map = useMap();
+    useEffect(() => {
+      if (!loc || !map) return;
+      try {
+        map.setView([loc.lat, loc.lng], Math.max(map.getZoom(), 11), { animate: true });
+      } catch (e) { console.warn('Pan to picked location failed', e); }
+    }, [loc, map]);
+    return loc ? (
+      <Marker position={[loc.lat, loc.lng]}>
+        <Popup>
+          <div className="font-cairo text-sm">تم تحديث موقع المشروع هنا</div>
+        </Popup>
+      </Marker>
+    ) : null;
+  }
 
   // حساب حالات جميع المشاريع
   const unitStatuses = useMemo(() => {
@@ -731,6 +756,8 @@ const InteractiveOperationsMap: React.FC = () => {
 
               {/* تحديث حدود الخريطة */}
               <MapBoundsUpdater projects={filteredProjects} cityMap={cityLookup} />
+              {/* عند اختيار موقع محدث، حرك الخريطة وأظهر علامة معاينة */}
+              <PickedLocationHandler loc={pickedLocation} />
 
               {/* ماركرات المدن مع عدد المشاريع */}
               {SAUDI_CITIES.map(city => {
@@ -766,6 +793,11 @@ const InteractiveOperationsMap: React.FC = () => {
                         <div className="p-3 font-cairo" dir="rtl">
                           <h3 className="font-black text-sm text-[#1B2B48] mb-1">{project.name || project.title}</h3>
                           {project.location && <p className="text-[10px] text-gray-400 mb-2">{project.location}</p>}
+                          {(() => {
+                            const desc = getProjectDescription(project);
+                            if (desc) return <p className="text-[12px] text-gray-600 mb-2 truncate" style={{ maxWidth: 260 }}>{desc.length > 160 ? desc.slice(0,160) + '...' : desc}</p>;
+                            return null;
+                          })()}
                           <div className="flex items-center gap-2 mb-2">
                             <span className="text-[10px] font-bold px-2 py-1 rounded-full" style={{ backgroundColor: pColor + '20', color: pColor }}>
                               {status?.labelAr || 'غير محدد'}
@@ -837,6 +869,11 @@ const InteractiveOperationsMap: React.FC = () => {
                                   <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: pColor }} />
                                   <span className="font-bold text-[11px] text-[#1B2B48] truncate">{project.name || project.title}</span>
                                 </div>
+                                  {(() => {
+                                    const desc = getProjectDescription(project);
+                                    if (desc) return <p className="text-[11px] text-gray-500 mt-1 truncate">{desc.length > 120 ? desc.slice(0,120) + '...' : desc}</p>;
+                                    return null;
+                                  })()}
                                 <div className="flex items-center gap-1.5 pr-4 mb-1">
                                   <span className="text-[9px] font-bold px-2 py-0.5 rounded-full" style={{ backgroundColor: pColor + '20', color: pColor }}>
                                     {status?.labelAr || 'غير محدد'}

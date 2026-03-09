@@ -79,6 +79,21 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onClick, onTogglePin
             </div>
         </div>
 
+                {/* وصف المشروع (مقتطف) */}
+                {(() => {
+                    const descCandidates = [project.details, (project as any).description, (project as any).notes, (project as any).note];
+                    const desc = descCandidates.find(d => typeof d === 'string' && d && d.toString().trim().length > 0) as string | undefined;
+                    if (desc) {
+                        const short = desc.length > 140 ? desc.slice(0, 140) + '...' : desc;
+                        return (
+                            <div className="mb-4">
+                                <p className="text-sm text-gray-600 leading-relaxed" style={{ whiteSpace: 'pre-wrap' }}>{short}</p>
+                            </div>
+                        );
+                    }
+                    return null;
+                })()}
+
         <div className="flex justify-between items-center mb-1.5 text-[10px] text-gray-500 mt-auto">
             <span className="font-medium">نسبة الإنجاز</span>
             <span className="font-bold text-[#E95D22]">{Math.round(project.progress)}%</span>
