@@ -107,6 +107,7 @@ const ProjectDetailWrapper = ({ projects = [], currentUser }: any) => {
    const [isAddWorkOpen, setIsAddWorkOpen] = useState(false);
    const [isWorkDetailOpen, setIsWorkDetailOpen] = useState(false);
    const [selectedWork, setSelectedWork] = useState<ProjectWork | null>(null);
+  const [noteDraft, setNoteDraft] = useState('');
    const [workComments, setWorkComments] = useState<any[]>([]);
    const [newComment, setNewComment] = useState('');
    const [loadingComments, setLoadingComments] = useState(false);
@@ -355,6 +356,9 @@ const ProjectDetailWrapper = ({ projects = [], currentUser }: any) => {
      setShowHandlerHistory(false);
      setHandlerHistory([]);
      fetchWorkComments(work.id);
+
+    // prepare editable draft for notes
+    setNoteDraft(work.notes || '');
      
      // فتح نموذج التبرير تلقائياً للأعمال المتأخرة (للمديرين فقط)
      if (['ADMIN', 'PR_MANAGER'].includes(currentUser?.role || '') && work.status !== 'completed' && work.expected_completion_date) {
@@ -772,13 +776,31 @@ const ProjectDetailWrapper = ({ projects = [], currentUser }: any) => {
                         <span className="font-bold text-[#1B2B48]">{selectedWork.department || '-'}</span>
                       </div>
                   </div>
-                  {/* وصف/ملاحظات العمل */}
-                  {selectedWork.notes && (
-                    <div className="bg-gray-50 p-4 rounded-2xl border">
-                      <span className="text-[10px] text-gray-400 font-bold block mb-1">الوصف</span>
-                      <p className="text-sm font-bold text-[#1B2B48]">{selectedWork.notes}</p>
-                    </div>
-                  )}
+                  {/* وصف/ملاحظات العمل — قابل للتعديل من قِبل مدير النظام */}
+                  <div>
+                    <label className="text-[10px] text-gray-400 font-bold block mb-1">الوصف</label>
+                    {isAdmin ? (
+                      <div className="space-y-2">
+                        <textarea
+                          className="w-full p-3 bg-white border rounded-xl font-bold text-sm outline-none min-h-[100px]"
+                          value={noteDraft}
+                          onChange={e => setNoteDraft(e.target.value)}
+                        />
+                        <div className="flex gap-2">
+                          <button onClick={handleSaveWorkNotes} disabled={isActionLoading} className="bg-[#1B2B48] text-white px-4 py-2 rounded-xl font-bold hover:bg-[#243a5e]">
+                            {isActionLoading ? 'جاري الحفظ...' : 'حفظ الوصف'}
+                          </button>
+                          <button onClick={() => setNoteDraft(selectedWork.notes || '')} disabled={isActionLoading} className="bg-gray-100 text-gray-700 px-4 py-2 rounded-xl font-bold">
+                            إلغاء
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="bg-gray-50 p-4 rounded-2xl border">
+                        <p className="text-sm font-bold text-[#1B2B48]">{selectedWork.notes || '-'}</p>
+                      </div>
+                    )}
+                  </div>
                   {/* تاريخ الإنجاز المتوقع */}
                   {selectedWork.expected_completion_date && (() => {
                     const today = new Date();
@@ -1246,6 +1268,34 @@ const AppContent: React.FC = () => {
         return '/deeds';
       default:
         return '/dashboard';
+    }
+  };
+
+  const handleSaveWorkNotes = async () => {
+    if (!selectedWork) return;
+    if (!isAdmin) { alert('لا تملك الصلاحية لحفظ الوصف'); return; }
+    setIsActionLoading(true);
+    try {
+      const payload: any = { notes: noteDraft || null };
+      let { error } = await supabase.from('project_works').update(payload).eq('id', selectedWork.id);
+      // fallback for schema cache errors - try without nulls
+      if (error && error.message?.includes('schema cache')) {
+        const { error: retryErr } = await supabase.from('project_works').update({ notes: noteDraft }).eq('id', selectedWork.id);
+        error = retryErr;
+      }
+      if (error) throw error;
+
+      // update local state and refresh
+      setSelectedWork({ ...selectedWork, notes: noteDraft });
+      setLocalWorksFetched(false);
+      refreshData();
+      activityLogService.log({ userId: currentUser?.id || '', userName: currentUser?.name || '', userRole: currentUser?.role || '', actionType: 'update', entityType: 'work', entityId: String(selectedWork.id), entityName: selectedWork.task_name, description: `تحديث وصف العمل: ${selectedWork.task_name}`, oldValue: { notes: selectedWork.notes }, newValue: { notes: noteDraft } });
+      alert('تم حفظ الوصف بنجاح');
+    } catch (err: any) {
+      alert('فشل حفظ الوصف: ' + (err?.message || String(err)));
+      console.error('Save notes error', err);
+    } finally {
+      setIsActionLoading(false);
     }
   };
 
