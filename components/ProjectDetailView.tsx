@@ -153,6 +153,22 @@ const ProjectDetailView: React.FC<ProjectDetailViewProps> = ({
       }
 
       alert('تم حفظ التعديلات بنجاح ✓');
+
+      // أبلغ الخريطة التفاعلية أن المشروع تم تحديث (حتى تنعكس الإحداثيات فوراً)
+      try {
+        const dispatchedLat = Number(editForm.latitude ?? editForm.lat ?? editForm.location_lat ?? editForm.lat_dd ?? null);
+        const dispatchedLng = Number(editForm.longitude ?? editForm.lng ?? editForm.location_lng ?? editForm.lon_dd ?? null);
+        window.dispatchEvent(new CustomEvent('project-updated', {
+          detail: {
+            projectId: id,
+            latitude: Number.isFinite(dispatchedLat) ? dispatchedLat : null,
+            longitude: Number.isFinite(dispatchedLng) ? dispatchedLng : null
+          }
+        }));
+      } catch (e) {
+        console.warn('Failed to dispatch project-updated event', e);
+      }
+
       onRefresh();
     } catch (err: any) {
       const errorMsg = err?.message || 'حدث خطأ غير معروف';

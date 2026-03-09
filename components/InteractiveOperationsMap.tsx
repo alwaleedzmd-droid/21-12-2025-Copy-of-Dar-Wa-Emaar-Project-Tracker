@@ -260,6 +260,30 @@ const InteractiveOperationsMap: React.FC = () => {
     return () => { window.removeEventListener('cancel-map-pick', onCancel as EventListener); };
   }, []);
 
+  // استمع لحدث تحديث المشروع ليُحدّث الخريطة فوراً
+  useEffect(() => {
+    function onProjectUpdated(e: any) {
+      const projId = e?.detail?.projectId;
+      const lat = e?.detail?.latitude;
+      const lng = e?.detail?.longitude;
+      console.log('[Map] project-updated received', projId, lat, lng);
+      // حدث بسيط: أعد تحميل البيانات من المصدر المركزي
+      try { refreshData(); } catch (err) { console.warn('refreshData failed', err); }
+
+      // ضع مؤقتًا العلامة المكانية لتسليط الضوء على الموقع الجديد إذا توفر
+      if (Number.isFinite(lat) && Number.isFinite(lng)) {
+        setPickedLocation({ lat, lng });
+        setTimeout(() => setPickedLocation(null), 4000);
+      }
+
+      // أغلق أي وضع اختيار مفتوح
+      setPickMode({ active: false, projectId: null });
+    }
+
+    window.addEventListener('project-updated', onProjectUpdated as EventListener);
+    return () => { window.removeEventListener('project-updated', onProjectUpdated as EventListener); };
+  }, [refreshData]);
+
   // حساب حالات جميع المشاريع
   const unitStatuses = useMemo(() => {
     return getAllUnitStatuses(projects, technicalRequests, clearanceRequests, projectWorks);
@@ -756,7 +780,7 @@ const InteractiveOperationsMap: React.FC = () => {
                             <div className="space-y-1.5 mb-2 pt-2 border-t border-gray-100">
                               {(status as UnitStatus).workBreakdown.map(wb => {
                                 const emoji = wb.type === 'technical' ? '⚡' : wb.type === 'clearance' ? '📋' : '🔨';
-                                const clr = wb.type === 'technical' ? '#3B82F6' : wb.type === 'clearance' ? '#EAB308' : '#6366F1';
+                                const clr = wb.type === 'technical' ? '#1D4ED8' : wb.type === 'clearance' ? '#A16207' : '#4338CA';
                                 const targetRoute = wb.type === 'technical' ? '/technical' : wb.type === 'clearance' ? '/deeds' : `/projects/${project.id}`;
                                 return (
                                   <div key={wb.type} onClick={(e) => { e.stopPropagation(); navigate(targetRoute); }} className="rounded-lg p-1.5 cursor-pointer hover:opacity-80 transition-opacity" style={{ backgroundColor: clr + '10' }}>
@@ -825,8 +849,10 @@ const InteractiveOperationsMap: React.FC = () => {
                                   <div className="flex items-center gap-1 pr-4 flex-wrap">
                                     {wb.map(w => {
                                       const emoji = w.type === 'technical' ? '⚡' : w.type === 'clearance' ? '📋' : '🔨';
-                                      const bg = w.type === 'technical' ? '#DBEAFE' : w.type === 'clearance' ? '#FEF9C3' : '#E0E7FF';
-                                      const clr = w.type === 'technical' ? '#1D4ED8' : w.type === 'clearance' ? '#A16207' : '#4338CA';
+                                      const bg = w.type === 'project_work' ? 'bg-indigo-50' :
+                                        w.type === 'technical' ? 'bg-blue-50' : 'bg-yellow-50';
+                                      const clr = w.type === 'project_work' ? '#1D4ED8' :
+                                        w.type === 'technical' ? '#A16207' : '#4338CA';
                                       const targetRoute = w.type === 'technical' ? '/technical' : w.type === 'clearance' ? '/deeds' : `/projects/${project.id}`;
                                       return (
                                         <span
@@ -1089,3 +1115,6 @@ function MapClickHandler({ onPick }: { onPick: (lat: number, lng: number) => voi
   }, []);
   return null;
 }
+
+window.addEventListener('project-updated', e => console.log('project-updated', e.detail))
+window.addEventListener('map-location-selected', e => console.log('map-location-selected', e.detail))
