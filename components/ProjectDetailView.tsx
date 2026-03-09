@@ -71,9 +71,15 @@ const ProjectDetailView: React.FC<ProjectDetailViewProps> = ({
       
       const { id, ...dataToUpdate } = editForm;
 
+      // تجنّب إرسال أعمدة غير موجودة في مخطط القاعدة — فلتر الحقول إلى المفاتيح الموجودة في كائن المشروع
+      const allowedKeys = Object.keys(project || {});
+      const filteredData: Record<string, any> = Object.fromEntries(
+        Object.entries(dataToUpdate).filter(([k, v]) => allowedKeys.includes(k) && v !== undefined)
+      );
+
       const { error: updateError } = await supabase
         .from('projects')
-        .update(dataToUpdate)
+        .update(filteredData)
         .eq('id', id);
       
       if (updateError) {
@@ -82,20 +88,33 @@ const ProjectDetailView: React.FC<ProjectDetailViewProps> = ({
       
       setIsEditModalOpen(false);
       setEditForm({});
-      // سجل النشاط لتغيّر بيانات المشروع (الموقع إن وُجد تغيّراً)
+      // سجل النشاط لتغيّر بيانات المشروع — سجّل فقط الحقول التي تغيّرت
       try {
-        await activityLogService.log({
-          userId: currentUser?.id || '',
-          userName: currentUser?.name || '',
-          userRole: currentUser?.role || '',
-          actionType: 'update',
-          entityType: 'project',
-          entityId: String(id),
-          entityName: project.name || project.title || String(id),
-          description: `تحديث بيانات المشروع${project.name ? ' - ' + project.name : ''}`,
-          oldValue: { location: project.location || '' },
-          newValue: { location: (editForm as any).location || '' }
+        const changes: Record<string, any> = {};
+        const oldValues: Record<string, any> = {};
+        Object.entries(filteredData).forEach(([k, v]) => {
+          const oldVal = (project as any)[k];
+          // قارن السلاسل بعد تحويلها لتجنّب فروقات undefined/''
+          if (oldVal !== v) {
+            changes[k] = v;
+            oldValues[k] = oldVal;
+          }
         });
+
+        if (Object.keys(changes).length > 0) {
+          await activityLogService.log({
+            userId: currentUser?.id || '',
+            userName: currentUser?.name || '',
+            userRole: currentUser?.role || '',
+            actionType: 'update',
+            entityType: 'project',
+            entityId: String(id),
+            entityName: project.name || project.title || String(id),
+            description: `تحديث بيانات المشروع${project.name ? ' - ' + project.name : ''}`,
+            oldValue: oldValues,
+            newValue: changes,
+          });
+        }
       } catch (e) {
         console.warn('Activity log failed', e);
       }
