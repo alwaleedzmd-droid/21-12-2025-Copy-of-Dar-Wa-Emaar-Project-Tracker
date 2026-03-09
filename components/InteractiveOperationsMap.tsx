@@ -41,9 +41,14 @@ const SAUDI_CITIES: CityLocation[] = [
 // ربط المشاريع بالمدن بناءً على الموقع أو الإحداثيات من قاعدة البيانات
 function mapProjectToCity(project: any): string {
   // إذا المشروع لديه إحداثيات من قاعدة البيانات → نبحث عن أقرب مدينة
-  if (project.latitude && project.longitude) {
-    const lat = parseFloat(project.latitude);
-    const lng = parseFloat(project.longitude);
+  // محاولة استخراج حقول الإحداثيات من أسماء متعددة
+  const latCandidates = [project.latitude, project.lat, project.location_lat, project.y, project.lat_dd];
+  const lngCandidates = [project.longitude, project.lng, project.location_lng, project.x, project.lon, project.lon_dd];
+  const latVal = latCandidates.find(v => v !== undefined && v !== null && v !== '');
+  const lngVal = lngCandidates.find(v => v !== undefined && v !== null && v !== '');
+  if (latVal !== undefined && lngVal !== undefined) {
+    const lat = parseFloat(String(latVal).replace(',', '.'));
+    const lng = parseFloat(String(lngVal).replace(',', '.'));
     let closestCity = 'riyadh';
     let minDist = Infinity;
     SAUDI_CITIES.forEach(city => {
@@ -65,10 +70,38 @@ function mapProjectToCity(project: any): string {
 
 // الحصول على إحداثيات المشروع (من DB أو من المدينة)
 function getProjectCoordinates(project: any, cityLookup: Map<string, CityLocation>): { lat: number; lng: number } {
-  // أولوية: إحداثيات من قاعدة البيانات
-  if (project.latitude && project.longitude) {
-    return { lat: parseFloat(project.latitude), lng: parseFloat(project.longitude) };
+  // محاولة استخراج حقول إحداثيات من أسماء متعددة
+  const latCandidates = [project.latitude, project.lat, project.location_lat, project.y, project.lat_dd];
+  const lngCandidates = [project.longitude, project.lng, project.location_lng, project.x, project.lon, project.lon_dd];
+  const latVal = latCandidates.find(v => v !== undefined && v !== null && v !== '');
+  const lngVal = lngCandidates.find(v => v !== undefined && v !== null && v !== '');
+  if (latVal !== undefined && lngVal !== undefined) {
+    let lat = parseFloat(String(latVal).replace(',', '.'));
+    let lng = parseFloat(String(lngVal).replace(',', '.'));
+
+    // إذا كانت القيم غير رقمية اعد الفالباك
+    if (Number.isFinite(lat) && Number.isFinite(lng)) {
+      // تحقق إن كانت الإحداثيات داخل حدود السعودية، وإلا جرّب التبديل lat<->lng
+      const inLatRange = lat >= 15.5 && lat <= 32.5;
+      const inLngRange = lng >= 34.5 && lng <= 56.0;
+      if (!inLatRange || !inLngRange) {
+        // جرّب تبديل القيم
+        const swappedLat = lng;
+        const swappedLng = lat;
+        const swappedInLat = swappedLat >= 15.5 && swappedLat <= 32.5;
+        const swappedInLng = swappedLng >= 34.5 && swappedLng <= 56.0;
+        if (swappedInLat && swappedInLng) {
+          console.warn('[Map] اكتُشِف أن إحداثيات المشروع تبدو مقلوبة (lat/lng) — سيتم تبديلها تلقائياً', project.id, project.name || project.title);
+          lat = swappedLat;
+          lng = swappedLng;
+        } else {
+          console.warn('[Map] إحداثيات المشروع خارج نطاق السعودية:', { lat, lng }, 'لم يتم تبديلها', project.id, project.name || project.title);
+        }
+      }
+      return { lat, lng };
+    }
   }
+
   // Fallback: إحداثيات المدينة
   const cityId = mapProjectToCity(project);
   const city = cityLookup.get(cityId);
