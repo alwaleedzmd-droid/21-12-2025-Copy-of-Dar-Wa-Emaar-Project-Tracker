@@ -58,6 +58,12 @@ const ProjectRequestsView: React.FC<ProjectRequestsViewProps> = ({
     return combined.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }, [relatedTechnical, relatedClearance]);
 
+  // اعرض الطلبات النشطة فقط لتفادي تكرار العناصر بعد تحويلها إلى سجل أعمال المشروع
+  const activeRequests = useMemo(() => {
+    const CLOSED_STATUSES = ['approved', 'مقبول', 'completed', 'منجز'];
+    return allRequests.filter(req => !CLOSED_STATUSES.includes((req.status || '').toLowerCase()));
+  }, [allRequests]);
+
   const getStatusStyle = (status: string) => {
     const normalizedStatus = status?.toLowerCase() || '';
     if (['approved', 'مقبول', 'completed', 'منجز'].includes(normalizedStatus)) {
@@ -72,11 +78,11 @@ const ProjectRequestsView: React.FC<ProjectRequestsViewProps> = ({
     return { bg: 'bg-gray-50', text: 'text-gray-700', border: 'border-gray-100', icon: AlertCircle, label: '❓ غير محدد' };
   };
 
-  if (allRequests.length === 0) {
+  if (activeRequests.length === 0) {
     return (
       <div className="bg-white p-8 rounded-[25px] border border-gray-100 shadow-sm">
-        <h3 className="text-lg font-bold text-gray-400 text-center mb-2">لا توجد طلبات تقنية أو إفراغات مرتبطة</h3>
-        <p className="text-xs text-gray-300 text-center">الطلبات الجديدة ستظهر هنا تلقائياً</p>
+        <h3 className="text-lg font-bold text-gray-400 text-center mb-2">لا توجد طلبات نشطة مرتبطة بالمشروع</h3>
+        <p className="text-xs text-gray-300 text-center">الطلبات المقبولة تظهر في سجل أعمال المشروع</p>
       </div>
     );
   }
@@ -86,7 +92,7 @@ const ProjectRequestsView: React.FC<ProjectRequestsViewProps> = ({
       <h3 className="text-lg font-black text-[#1B2B48] mb-4">الطلبات المرتبطة بالمشروع</h3>
       
       <div className="space-y-3 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
-        {allRequests.map(req => {
+        {activeRequests.map(req => {
           const statusStyle = getStatusStyle(req.status);
           const StatusIcon = statusStyle.icon;
           

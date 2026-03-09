@@ -16,6 +16,7 @@ import { useData } from '../contexts/DataContext';
 import { notificationService } from '../services/notificationService';
 import { activityLogService } from '../services/activityLogService';
 import { updateProjectProgress } from '../services/projectProgressService';
+import { syncApprovedRequestToProjectWork } from '../services/requestToWorkSyncService';
 import {
     WORKFLOW_ROUTES,
     DEEDS_WORKFLOW_REQUEST_TYPE_OPTIONS,
@@ -471,33 +472,21 @@ const DeedsDashboard: React.FC<DeedsDashboardProps> = ({ currentUserRole, curren
             }]);
             activityLogService.log({ userId: currentUser?.id || '', userName: currentUserName || currentUser?.name || '', userRole: currentUser?.role || currentUserRole || '', actionType: isApproval ? 'approve' : 'reject', entityType: 'deed_request', entityId: String(selectedDeed.id), entityName: selectedDeed.client_name, description: `${isApproval ? 'موافقة نهائية' : 'رفض'} طلب إفراغ ${selectedDeed.client_name}${reason ? ` - ${reason}` : ''}`, newValue: { status } });
             
-            // ✅ إنشاء ProjectWork عند الموافقة على طلب الإفراغ/نقل المليكة
+                        // ✅ مزامنة عمل المشروع عند الموافقة على طلب الإفراغ/نقل الملكية
             if (status === 'مقبول' && selectedDeed?.project_name) {
               try {
-                // البحث عن ID المشروع بناءً على الاسم
-                const { data: projectData } = await supabase
-                  .from('projects')
-                  .select('id')
-                  .or(`name.eq.${selectedDeed.project_name},title.eq.${selectedDeed.project_name}`)
-                  .limit(1);
-                
-                if (projectData && projectData.length > 0) {
-                  const projectId = projectData[0].id;
-                  const requestTypeLabel = selectedDeed.request_type === 'METER_TRANSFER' ? 'نقل ملكية عداد' : 'إفراغ/تصفية';
-                  
-                  await supabase.from('project_works').insert({
-                    projectId: projectId,
-                    project_name: selectedDeed.project_name,
-                    task_name: `${requestTypeLabel} - عميل: ${selectedDeed.client_name}`,
-                    status: 'in_progress',
-                    authority: 'جهة حكومية',
-                    department: selectedDeed.request_type === 'METER_TRANSFER' ? 'نقل الملكية' : 'الإفراغ',
-                    notes: `طلب ${requestTypeLabel} مقبول - رقم الهوية: ${selectedDeed.id_number}${reason ? ` | ملاحظات: ${reason}` : ''} | رقم الطلب: #${selectedDeed.id}`,
-                    created_at: new Date().toISOString()
-                  });
-                }
+                                const requestTypeLabel = selectedDeed.request_type === 'METER_TRANSFER' ? 'نقل ملكية عداد' : 'إفراغ/تصفية';
+                                await syncApprovedRequestToProjectWork({
+                                    requestId: Number(selectedDeed.id),
+                                    projectName: selectedDeed.project_name,
+                                    taskName: `${requestTypeLabel} - عميل: ${selectedDeed.client_name}`,
+                                    authority: 'جهة حكومية',
+                                    department: selectedDeed.request_type === 'METER_TRANSFER' ? 'نقل الملكية' : 'الإفراغ',
+                                    notes: `طلب ${requestTypeLabel} مقبول - رقم الهوية: ${selectedDeed.id_number}${reason ? ` | ملاحظات: ${reason}` : ''} | رقم الطلب: #${selectedDeed.id}`,
+                                    matchKeywords: [selectedDeed.client_name, selectedDeed.project_name, requestTypeLabel],
+                                });
               } catch (workErr: any) {
-                console.warn('⚠️ تنبيه: فشل إنشاء ProjectWork:', workErr.message);
+                                console.warn('⚠️ تنبيه: فشل مزامنة عمل المشروع:', workErr.message);
                 // عدم إيقاف العملية إذا فشل إنشاء work
               }
             }

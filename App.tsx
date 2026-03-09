@@ -242,7 +242,31 @@ const ProjectDetailWrapper = ({ projects = [], currentUser }: any) => {
    }, [project, filteredWorks.length]);
 
    // دمج النتائج: أولوية للتصفية من DataContext، ثم الجلب المباشر
-   const projectWorks = filteredWorks.length > 0 ? filteredWorks : localWorks;
+   // مع إزالة التكرارات لنفس الطلب (إن وجدت) للحفاظ على عنصر واحد في سجل الأعمال.
+   const projectWorks = useMemo(() => {
+     const sourceWorks = filteredWorks.length > 0 ? filteredWorks : localWorks;
+     const sorted = [...sourceWorks].sort((a: any, b: any) => Number(b?.id || 0) - Number(a?.id || 0));
+     const seen = new Set<string>();
+     const deduped: any[] = [];
+
+     sorted.forEach((work: any) => {
+       const notes = String(work?.notes || '');
+       const reqMatch = notes.match(/#(\d+)/);
+       const requestRef = reqMatch ? `req-${reqMatch[1]}` : null;
+       const signature = [
+         String(work?.task_name || '').trim().toLowerCase(),
+         String(work?.authority || '').trim().toLowerCase(),
+         String(work?.department || '').trim().toLowerCase(),
+       ].join('|');
+       const dedupeKey = requestRef || `task-${signature}`;
+
+       if (seen.has(dedupeKey)) return;
+       seen.add(dedupeKey);
+       deduped.push(work);
+     });
+
+     return deduped;
+   }, [filteredWorks, localWorks]);
 
    const fetchWorkComments = async (workId: number) => {
      setLoadingComments(true);
@@ -1273,15 +1297,15 @@ const AppContent: React.FC = () => {
     currentUser, isAuthLoading, logout,
     projects, technicalRequests, clearanceRequests, projectWorks, appUsers, refreshData, logActivity 
   } = useData();
+  // الواجهة السينمائية تظهر بعد كل تسجيل دخول — تُخزّن في sessionStorage (تمسح عند إغلاق التبويب)
   const [hasSeenHero, setHasSeenHero] = React.useState(() => {
     try {
       const params = new URLSearchParams(window.location.search);
       const forceShow = params.get('hero') === '1' || params.get('showHero') === '1';
-      if (forceShow) return false; // force showing hero
-    } catch (e) {
-      // ignore
-    }
-    return localStorage.getItem('dar_seen_hero') === 'true';
+      if (forceShow) return false;
+    } catch (e) { /* ignore */ }
+    // sessionStorage = resets every browser tab/session = shows after every login
+    return sessionStorage.getItem('dar_seen_hero_session') === 'true';
   });
 
   const getDefaultPath = (role: UserRole) => {
@@ -1354,7 +1378,7 @@ const AppContent: React.FC = () => {
         try {
           if (targetPath) navigate(targetPath, { replace: true });
         } finally {
-          localStorage.setItem('dar_seen_hero', 'true');
+          sessionStorage.setItem('dar_seen_hero_session', 'true');
           setHasSeenHero(true);
         }
       }} />

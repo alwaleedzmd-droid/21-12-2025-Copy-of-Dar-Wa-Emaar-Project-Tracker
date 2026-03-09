@@ -449,6 +449,8 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     // حذف جميع جلسات Supabase والجلسة الاحتياطية الآمنة
     localStorage.removeItem('dar_secure_session');
     localStorage.removeItem('dar_demo_session');
+    // مسح جلسة الواجهة السينمائية لتظهر مجدداً بعد تسجيل الدخول القادم
+    sessionStorage.removeItem('dar_seen_hero_session');
     const keysToDelete = Object.keys(localStorage).filter(key => 
       key.includes('supabase') || key.includes('auth') || key.includes('sb-')
     );

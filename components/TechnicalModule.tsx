@@ -11,6 +11,7 @@ import { TechnicalRequest, ProjectSummary, User } from '../types';
 import { notificationService } from '../services/notificationService';
 import { activityLogService } from '../services/activityLogService';
 import { updateProjectProgress } from '../services/projectProgressService';
+import { syncApprovedRequestToProjectWork } from '../services/requestToWorkSyncService';
 import { 
   TECHNICAL_SERVICE_OPTIONS,
   WORKFLOW_ROUTES,
@@ -441,22 +442,22 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
       const { getWorkflowRoute } = await import('../services/requestWorkflowService');
       const workflowRoute = await getWorkflowRoute(workflowType);
       
-      // ✅ إنشاء ProjectWork عند الموافقة على الطلب
+      // ✅ مزامنة العمل المرتبط بالمشروع عند الموافقة النهائية
       if (newStatus === 'approved' && activeRequest?.project_id) {
         try {
           const projectName = activeRequest.project_name || activeRequest.project_title || 'مشروع';
-          await supabase.from('project_works').insert({
-            projectId: activeRequest.project_id,
-            project_name: projectName,
-            task_name: `${activeRequest.service_type} - طلب تقني مقبول`,
-            status: 'in_progress',
+          await syncApprovedRequestToProjectWork({
+            requestId: Number(activeRequest.id),
+            projectId: Number(activeRequest.project_id),
+            projectName,
+            taskName: `${activeRequest.service_type} - طلب تقني مقبول`,
             authority: activeRequest.reviewing_entity || 'غير محدد',
             department: activeRequest.scope || 'قسم فني',
             notes: `طلب تقني مقبول - ${activeRequest.service_type}${reason ? ` | ملاحظات: ${reason}` : ''} | رقم الطلب: #${activeRequest.id}`,
-            created_at: new Date().toISOString()
+            matchKeywords: [activeRequest.service_type, projectName],
           });
         } catch (workErr: any) {
-          console.warn('⚠️ تنبيه: فشل إنشاء ProjectWork:', workErr.message);
+          console.warn('⚠️ تنبيه: فشل مزامنة عمل المشروع:', workErr.message);
           // عدم إيقاف العملية إذا فشل إنشاء work
         }
       }
