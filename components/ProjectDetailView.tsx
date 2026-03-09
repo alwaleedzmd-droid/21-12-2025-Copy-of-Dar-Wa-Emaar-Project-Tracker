@@ -35,10 +35,28 @@ const ProjectDetailView: React.FC<ProjectDetailViewProps> = ({
 
   const { appUsers, currentUser } = useData();
 
+  // استمع لحدث اختيار الموقع من الخريطة
+  React.useEffect(() => {
+    function onMapPick(e: any) {
+      const lat = e?.detail?.lat;
+      const lng = e?.detail?.lng;
+      const projId = e?.detail?.projectId;
+      // تأكد أن الحدث مخصّص لهذا المشروع أو أنه عام
+      if (!lat || !lng) return;
+      if (projId && String(projId) !== String(project.id)) return;
+      setEditForm(prev => ({ ...prev, latitude: String(lat), longitude: String(lng) }));
+      alert('تم تعبئة الإحداثيات من الخريطة');
+    }
+    window.addEventListener('map-location-selected', onMapPick as EventListener);
+    return () => window.removeEventListener('map-location-selected', onMapPick as EventListener);
+  }, [project.id]);
+
   const openEditModal = () => {
     setEditForm({
       id: project.id,
       location: project.location || '',
+      latitude: project.latitude ?? project.lat ?? project.location_lat ?? project.lat_dd ?? '',
+      longitude: project.longitude ?? project.lng ?? project.location_lng ?? project.lon ?? project.lon_dd ?? '',
       units_count: project.units_count || 0,
       electricity_meters: project.electricity_meters || 0,
       water_meters: project.water_meters || 0,
@@ -71,10 +89,25 @@ const ProjectDetailView: React.FC<ProjectDetailViewProps> = ({
       
       const { id, ...dataToUpdate } = editForm;
 
+      // قبل الفلترة، حاول ربط حقول الإحداثيات إلى أسماء الأعمدة الموجودة في كائن المشروع
+      const latCandidates = ['latitude','lat','location_lat','lat_dd','y'];
+      const lngCandidates = ['longitude','lng','location_lng','lon','lon_dd','x'];
+      const existingKeys = Object.keys(project || {});
+      const existingLatKey = latCandidates.find(k => existingKeys.includes(k));
+      const existingLngKey = lngCandidates.find(k => existingKeys.includes(k));
+
+      // إذا المستخدم أدخل قيم إحداثيات، ضعها تحت اسم العمود الموجود (إن وجد)
+      if (existingLatKey && (dataToUpdate.latitude !== undefined || dataToUpdate.lat !== undefined)) {
+        dataToUpdate[existingLatKey] = (dataToUpdate.latitude ?? dataToUpdate.lat ?? '').toString();
+      }
+      if (existingLngKey && (dataToUpdate.longitude !== undefined || dataToUpdate.lng !== undefined)) {
+        dataToUpdate[existingLngKey] = (dataToUpdate.longitude ?? dataToUpdate.lng ?? '').toString();
+      }
+
       // تجنّب إرسال أعمدة غير موجودة في مخطط القاعدة — فلتر الحقول إلى المفاتيح الموجودة في كائن المشروع
-      const allowedKeys = Object.keys(project || {});
+      const allowedKeys = existingKeys;
       const filteredData: Record<string, any> = Object.fromEntries(
-        Object.entries(dataToUpdate).filter(([k, v]) => allowedKeys.includes(k) && v !== undefined)
+        Object.entries(dataToUpdate).filter(([k, v]) => allowedKeys.includes(k) && v !== undefined && v !== '')
       );
 
       const { error: updateError } = await supabase
@@ -95,7 +128,7 @@ const ProjectDetailView: React.FC<ProjectDetailViewProps> = ({
         Object.entries(filteredData).forEach(([k, v]) => {
           const oldVal = (project as any)[k];
           // قارن السلاسل بعد تحويلها لتجنّب فروقات undefined/''
-          if (oldVal !== v) {
+          if (String(oldVal || '') !== String(v || '')) {
             changes[k] = v;
             oldValues[k] = oldVal;
           }
@@ -233,6 +266,31 @@ const ProjectDetailView: React.FC<ProjectDetailViewProps> = ({
           {/* حقل تعديل الموقع */}
           <div>
             <InputText label="الموقع" value={editForm.location} onChange={(v: string) => setEditForm({...editForm, location: v})} icon={<MapPin size={16}/>} />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <InputText label="خط العرض (Latitude)" value={editForm.latitude} onChange={(v: string) => setEditForm({...editForm, latitude: v})} icon={<MapPin size={14}/>} />
+            <InputText label="خط الطول (Longitude)" value={editForm.longitude} onChange={(v: string) => setEditForm({...editForm, longitude: v})} icon={<MapPin size={14}/>} />
+          </div>
+          <div className="flex gap-3 items-center">
+            <button
+              type="button"
+              onClick={() => {
+                // اطلب من الخريطة الدخول في وضع اختيار الموقع للمشروع الحالي
+                window.dispatchEvent(new CustomEvent('start-map-pick', { detail: { projectId: project.id } }));
+              }}
+              className="bg-[#1B2B48] text-white px-4 py-2 rounded-xl font-bold"
+            >
+              تحديد من الخريطة
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                window.dispatchEvent(new CustomEvent('cancel-map-pick'));
+              }}
+              className="bg-gray-200 text-gray-700 px-4 py-2 rounded-xl font-bold"
+            >
+              إلغاء اختيار الخريطة
+            </button>
           </div>
           
           <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100">

@@ -16,7 +16,7 @@ import { useData } from '../contexts/DataContext';
 import { supabase } from '../supabaseClient';
 import { getUnitStatus, getAllUnitStatuses, STATUS_COLORS, UnitStatus, UnitStatusColor, WorkTypeBreakdown } from '../services/unitStatusService';
 import UnitProcessModal from './UnitProcessModal';
-import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvent } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
@@ -231,6 +231,33 @@ const InteractiveOperationsMap: React.FC = () => {
     const m = new Map<string, CityLocation>();
     SAUDI_CITIES.forEach(c => m.set(c.id, c));
     return m;
+  }, []);
+
+  // --- وضع اختيار الموقع (pick-on-map) ---
+  const [pickMode, setPickMode] = useState<{ active: boolean; projectId?: string | number | null }>({ active: false, projectId: null });
+  const [pickedLocation, setPickedLocation] = useState<{ lat: number; lng: number } | null>(null);
+
+  // استمع لحدث بدء اختيار الموقع
+  useEffect(() => {
+    function onStart(e: any) {
+      const projId = e?.detail?.projectId ?? null;
+      setPickMode({ active: true, projectId: projId });
+      setPickedLocation(null);
+      console.log('[Map] بدأ اختيار الموقع في الخريطة لمشروع:', projId);
+      alert('الوضع: انقر على الخريطة لتحديد الموقع للمشروع. اضغط ESC أو زر الإلغاء لإلغاء.');
+    }
+    window.addEventListener('start-map-pick', onStart as EventListener);
+    return () => { window.removeEventListener('start-map-pick', onStart as EventListener); };
+  }, []);
+
+  // إلغاء الاختيار عبر حدث
+  useEffect(() => {
+    function onCancel(e: any) {
+      setPickMode({ active: false, projectId: null });
+      setPickedLocation(null);
+    }
+    window.addEventListener('cancel-map-pick', onCancel as EventListener);
+    return () => { window.removeEventListener('cancel-map-pick', onCancel as EventListener); };
   }, []);
 
   // حساب حالات جميع المشاريع
@@ -647,6 +674,24 @@ const InteractiveOperationsMap: React.FC = () => {
               style={{ height: '600px' }}
               zoomControl={true}
             >
+              {/* Map click handler when pick mode is active */}
+              {/**
+               * MapClickHandler: listens for clicks on the map and, when pickMode.active,
+               * captures the lat/lng, shows a temporary marker and emits a global event
+               * `map-location-selected` with detail { lat, lng, projectId }.
+               */}
+              {pickMode.active && (
+                <MapClickHandler
+                  onPick={(lat, lng) => {
+                    setPickedLocation({ lat, lng });
+                    // أرسل الحدث للعناصر الأخرى (ProjectDetailView يستمع)
+                    window.dispatchEvent(new CustomEvent('map-location-selected', { detail: { lat, lng, projectId: pickMode.projectId } }));
+                    setPickMode({ active: false, projectId: null });
+                    alert('تم اختيار الموقع من الخريطة ✓');
+                  }}
+                />
+              )}
+
               {/* طبقة الخريطة - أسلوب شوارع أو قمر صناعي */}
               {mapLayer === 'street' ? (
                 <TileLayer
@@ -1022,3 +1067,25 @@ const InteractiveOperationsMap: React.FC = () => {
 };
 
 export default InteractiveOperationsMap;
+
+// --- Component: MapClickHandler ---
+function MapClickHandler({ onPick }: { onPick: (lat: number, lng: number) => void }) {
+  const map = useMap();
+  useMapEvent('click', (e: any) => {
+    const { lat, lng } = e.latlng || {};
+    if (lat && lng) {
+      onPick(lat, lng);
+    }
+  });
+  // also handle Esc key to cancel
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') {
+        window.dispatchEvent(new CustomEvent('cancel-map-pick'));
+      }
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+  return null;
+}
