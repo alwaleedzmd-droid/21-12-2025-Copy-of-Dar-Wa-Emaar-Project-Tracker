@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Plus, UserPlus, Shield, Mail, Trash2, Edit2, Loader2, AlertTriangle, UsersRound } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import { useData } from '../contexts/DataContext';
@@ -6,13 +6,12 @@ import Modal from './Modal';
 
 // قائمة الموظفين لإنشاء حساباتهم دفعة واحدة
 const ALL_EMPLOYEES = [
-  { email: 'adaldawsari@darwaemaar.com', name: 'الوليد الدوسري', role: 'ADMIN' },
-  { email: 'malageel@darwaemaar.com', name: 'مساعد العقيل', role: 'PR_MANAGER' },
-  { email: 'ssalyahya@darwaemaar.com', name: 'صالح اليحيى', role: 'PR_MANAGER' },
+  { email: 'malageel@darwaemaar.com', name: 'مساعد العقيل', role: 'ADMIN' },
+  { email: 'ssalyahya@darwaemaar.com', name: 'صالح اليحيي', role: 'PR_MANAGER' },
   { email: 'maashammari@darwaemaar.com', name: 'محمد الشمري', role: 'PR_MANAGER' },
   { email: 'malbahri@darwaemaar.com', name: 'محمد البحري', role: 'PR_MANAGER' },
   { email: 'easalama@darwaemaar.com', name: 'سيد سلامة', role: 'TECHNICAL' },
-  { email: 'emelshity@darwaemaar.com', name: 'إسلام الملشتي', role: 'TECHNICAL' },
+  { email: 'emelshity@darwaemaar.com', name: 'اسلام', role: 'TECHNICAL' },
   { email: 'mbuhaisi@darwaemaar.com', name: 'محمود بحيصي', role: 'TECHNICAL' },
   { email: 'hmaqel@darwaemaar.com', name: 'حمزة عقيل', role: 'TECHNICAL' },
   { email: 'saalabdulsalam@darwaemaar.com', name: 'سارة عبدالسلام', role: 'CONVEYANCE' },
@@ -38,6 +37,16 @@ const UserManagement = () => {
   const [isUpdatingRole, setIsUpdatingRole] = useState(false);
 
   const isAdmin = currentUser?.role === 'ADMIN';
+  const approvedEmails = useMemo(() => new Set(ALL_EMPLOYEES.map(emp => emp.email.toLowerCase())), []);
+  const visibleUsers = useMemo(() => {
+    return [...(appUsers || [])]
+      .filter((u) => approvedEmails.has(String(u.email || '').toLowerCase()))
+      .sort((a, b) => {
+        const ai = ALL_EMPLOYEES.findIndex(emp => emp.email.toLowerCase() === String(a.email || '').toLowerCase());
+        const bi = ALL_EMPLOYEES.findIndex(emp => emp.email.toLowerCase() === String(b.email || '').toLowerCase());
+        return ai - bi;
+      });
+  }, [appUsers, approvedEmails]);
 
   // تحديث كلمات المرور الاحتياطية في profiles لجميع المستخدمين
   const handleSyncPasswords = async () => {
@@ -74,7 +83,7 @@ const UserManagement = () => {
 
   const handleBulkCreateAccounts = async () => {
     if (!isAdmin) return;
-    const defaultPassword = prompt('أدخل كلمة المرور الافتراضية لجميع الحسابات:', 'Dar@2026');
+    const defaultPassword = prompt('أدخل كلمة المرور الافتراضية لجميع الحسابات:', '123456');
     if (!defaultPassword) return;
 
     setIsBulkCreating(true);
@@ -117,6 +126,37 @@ const UserManagement = () => {
       alert(`⚠️ تم إنشاء ${ALL_EMPLOYEES.length - errors.length} حساب بنجاح\n❌ فشل ${errors.length} حساب:\n${errors.join('\n')}`);
     }
     refreshData();
+  };
+
+  const handleCleanupUnapprovedAccounts = async () => {
+    if (!isAdmin) return;
+    const confirmCleanup = window.confirm('سيتم حذف جميع الحسابات غير الموجودة في القائمة المعتمدة. هل تريد المتابعة؟');
+    if (!confirmCleanup) return;
+
+    setIsLoading(true);
+    try {
+      const toDelete = (appUsers || []).filter(
+        (u) => !approvedEmails.has(String(u.email || '').toLowerCase())
+      );
+
+      let deleted = 0;
+      let failed = 0;
+
+      for (const user of toDelete) {
+        try {
+          await supabase.from('profiles').delete().eq('id', user.id);
+          await supabase.rpc('delete_user_by_id', { user_id: user.id });
+          deleted += 1;
+        } catch {
+          failed += 1;
+        }
+      }
+
+      alert(`✅ تم تنظيف الحسابات غير المعتمدة: ${deleted}${failed > 0 ? `\n❌ فشل: ${failed}` : ''}`);
+      refreshData();
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleDeleteUser = async (user: any) => {
@@ -207,6 +247,15 @@ const UserManagement = () => {
         <h2 className="text-2xl font-black text-[#1B2B48]">إدارة المستخدمين</h2>
         <div className="flex items-center gap-3 flex-wrap">
           {isAdmin && (
+            <button
+              onClick={handleCleanupUnapprovedAccounts}
+              disabled={isLoading}
+              className="bg-orange-600 text-white px-5 py-3 rounded-2xl font-bold flex items-center gap-2 shadow-lg hover:bg-orange-700 transition-colors disabled:opacity-50"
+            >
+              {isLoading ? <><Loader2 size={18} className="animate-spin" /> جاري التنظيف...</> : <><AlertTriangle size={18} /> تنظيف حسابات غير معتمدة</>}
+            </button>
+          )}
+          {isAdmin && (
             <button 
               onClick={handleSyncPasswords} 
               disabled={isSyncingPasswords}
@@ -249,7 +298,7 @@ const UserManagement = () => {
             </tr>
           </thead>
           <tbody className="divide-y">
-            {appUsers.map((user) => (
+            {visibleUsers.map((user) => (
               <tr key={user.id} className="hover:bg-gray-50 transition-colors">
                 <td className="p-5">
                   <div className="flex items-center gap-3">

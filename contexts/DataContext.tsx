@@ -28,24 +28,23 @@ const hashPassword = async (password: string) => {
     .join('');
 };
 
-// --- تعريف الموظفين حسب البيانات المحدثة ---
+// --- تعريف الحسابات المعتمدة فقط ---
 const EMPLOYEES_DATA: Record<string, { name: string; role: UserRole }> = {
-  // المدير العام
-  'adaldawsari@darwaemaar.com': { name: 'الوليد الدوسري', role: 'ADMIN' },
-  
-  // علاقات عامة (PR_MANAGER)
-  'malageel@darwaemaar.com': { name: 'مساعد العقيل', role: 'PR_MANAGER' },
-  'ssalyahya@darwaemaar.com': { name: 'صالح اليحيى', role: 'PR_MANAGER' },
+  // مدير النظام
+  'malageel@darwaemaar.com': { name: 'مساعد العقيل', role: 'ADMIN' },
+
+  // علاقات عامة
+  'ssalyahya@darwaemaar.com': { name: 'صالح اليحيي', role: 'PR_MANAGER' },
   'maashammari@darwaemaar.com': { name: 'محمد الشمري', role: 'PR_MANAGER' },
   'malbahri@darwaemaar.com': { name: 'محمد البحري', role: 'PR_MANAGER' },
-  
-  // القسم الفني (TECHNICAL)
+
+  // القسم الفني
   'easalama@darwaemaar.com': { name: 'سيد سلامة', role: 'TECHNICAL' },
-  'emelshity@darwaemaar.com': { name: 'إسلام الملشتي', role: 'TECHNICAL' },
+  'emelshity@darwaemaar.com': { name: 'اسلام', role: 'TECHNICAL' },
   'mbuhaisi@darwaemaar.com': { name: 'محمود بحيصي', role: 'TECHNICAL' },
   'hmaqel@darwaemaar.com': { name: 'حمزة عقيل', role: 'TECHNICAL' },
-  
-  // موظفو الإفراغات (CONVEYANCE)
+
+  // موظفو الإفراغات
   'saalabdulsalam@darwaemaar.com': { name: 'سارة عبدالسلام', role: 'CONVEYANCE' },
   'taalmalki@darwaemaar.com': { name: 'تماني المالكي', role: 'CONVEYANCE' },
   'smalsanawi@darwaemaar.com': { name: 'شذى الصنعاوي', role: 'CONVEYANCE' },
