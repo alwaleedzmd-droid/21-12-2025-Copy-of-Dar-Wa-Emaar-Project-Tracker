@@ -49,12 +49,9 @@ export const WORKFLOW_REQUEST_TYPE_OPTIONS: Array<{ value: WorkflowRequestType; 
   { value: 'METER_TRANSFER', label: 'إشعار نقل ملكية عداد (مياه/كهرباء)' }
 ];
 
-export const TECHNICAL_SERVICE_OPTIONS = [
-  'إصدار رخصة',
-  'طلب كهرباء',
-  'شهادة إتمام بناء',
-  'رسوم'
-];
+// مشتقة من TECHNICAL_ENTITY_MAPPING — مصدر الحقيقة الواحد في constants.ts
+import { TECHNICAL_ENTITY_MAPPING } from '../constants';
+export const TECHNICAL_SERVICE_OPTIONS: string[] = Object.values(TECHNICAL_ENTITY_MAPPING).flat();
 
 export const DEEDS_WORKFLOW_REQUEST_TYPE_OPTIONS: Array<{ value: WorkflowRequestType; label: string }> = [
   { value: 'DEED_CLEARANCE', label: 'طلب إفراغ صك' },

@@ -19,17 +19,30 @@ import {
   canApproveWorkflowRequest,
   getNextApprover
 } from '../services/requestWorkflowService';
+import { TECHNICAL_ENTITY_MAPPING } from '../constants';
+
+// خريطة عكسية: نوع الخدمة → الجهة المراجعة
+const SERVICE_TO_ENTITY: Record<string, string> = Object.entries(TECHNICAL_ENTITY_MAPPING)
+  .reduce<Record<string, string>>((acc, [entity, services]) => {
+    services.forEach(s => { acc[s] = entity; });
+    return acc;
+  }, {});
 import Modal from './Modal';
 import ManageRequestModal from './ManageRequestModal';
 import * as XLSX from 'xlsx';
 import { parseTechnicalRequestsExcel } from '../utils/excelHandler';
 
 // --- Constants ---
+// جهات المراجعة = مفاتيح TECHNICAL_ENTITY_MAPPING أولاً (مصدر الحقيقة) + جهات إضافية
+const EXTRA_REVIEW_ENTITIES = [
+  "بلدية شمال الرياض", "بلدية العقيق", "بلدية صفوى", "بلدية شرق الدمام",
+  "أمانة عاصمة المقدسة", "أمانة المنطقة الشرقية", "أمانة محافظة جدة",
+  "الهيئة الملكية لتطوير الرياض",
+];
 const RAW_REVIEW_ENTITIES = [
-  "وزارة الإسكان", "الشركة الوطنية للإسكان", "أمانة منطقة الرياض", "الشركة السعودية للكهرباء",
-  "المركز الوطني للرقابة على الالتزام البيئي", "الشرطة", "شركة المياه الوطنية", "بلدية شمال الرياض",
-  "وزارة الشؤون الإسلامية", "أمانة محافظة جدة", "بلدية العقيق", "الدفاع المدني", "أمانة المنطقة الشرقية",
-  "بلدية صفوى", "بلدية شرق الدمام", "أمانة العاصمة المقدسة", "الهيئة الملكية لتطوير الرياض", "أخرى"
+  ...Object.keys(TECHNICAL_ENTITY_MAPPING),
+  ...EXTRA_REVIEW_ENTITIES,
+  // ملاحظة: "أخرى" لا تُدرج هنا — تظهر كخيار مستقل في الـ select
 ];
 
 const REVIEW_ENTITIES = Array.from(new Set(RAW_REVIEW_ENTITIES));
@@ -203,7 +216,7 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
   };
 
   const handleSubmit = async () => {
-    if (!techForm.project_id || !techForm.service_type) return alert("يرجى تعبئة الحقول الأساسية");
+    if (!techForm.project_id || !techForm.service_type || techForm.service_type === '__other__') return alert("يرجى تعبئة الحقول الأساسية");
     setIsUploading(true); 
 
     let finalAttachmentUrl = techForm.attachment_url;
@@ -682,19 +695,63 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
             </select>
           </div>
           <div className="grid grid-cols-2 gap-4">
+            {/* نوع الطلب */}
             <div>
               <label className="text-xs text-gray-400 font-bold block mb-1">نوع الطلب</label>
-              <select className="w-full p-4 bg-gray-50 border rounded-2xl font-bold outline-none" value={techForm.service_type} onChange={e=>setTechForm({...techForm, service_type:e.target.value})}>
+              <select
+                className="w-full p-4 bg-gray-50 border rounded-2xl font-bold outline-none"
+                value={SERVICE_TO_ENTITY[techForm.service_type] ? techForm.service_type : (techForm.service_type ? '__other__' : '')}
+                onChange={e => {
+                  const val = e.target.value;
+                  if (val === '__other__') {
+                    setTechForm({ ...techForm, service_type: '__other__', reviewing_entity: '' });
+                  } else {
+                    setTechForm({ ...techForm, service_type: val, reviewing_entity: SERVICE_TO_ENTITY[val] || '' });
+                  }
+                }}
+              >
                 <option value="">اختر...</option>
-                {TECHNICAL_SERVICE_OPTIONS.map((option)=><option key={option} value={option}>{option}</option>)}
+                {Object.entries(TECHNICAL_ENTITY_MAPPING).map(([entity, services]) => (
+                  <optgroup key={entity} label={entity}>
+                    {services.map(s => <option key={s} value={s}>{s}</option>)}
+                  </optgroup>
+                ))}
+                <option value="__other__">أخرى...</option>
               </select>
+              {/* حقل نصي يظهر فقط عند اختيار "أخرى" */}
+              {!SERVICE_TO_ENTITY[techForm.service_type] && techForm.service_type !== '' && (
+                <input
+                  className="w-full mt-2 p-3 bg-gray-50 border rounded-2xl font-bold outline-none text-sm focus:border-[#1B2B48] transition-colors"
+                  placeholder="اكتب نوع الطلب..."
+                  value={techForm.service_type === '__other__' ? '' : techForm.service_type}
+                  onChange={e => setTechForm({ ...techForm, service_type: e.target.value || '__other__' })}
+                />
+              )}
             </div>
+            {/* جهة المراجعة */}
             <div>
               <label className="text-xs text-gray-400 font-bold block mb-1">جهة المراجعة</label>
-              <select className="w-full p-4 bg-gray-50 border rounded-2xl font-bold outline-none" value={techForm.reviewing_entity} onChange={e=>setTechForm({...techForm, reviewing_entity:e.target.value})}>
+              <select
+                className="w-full p-4 bg-gray-50 border rounded-2xl font-bold outline-none"
+                value={REVIEW_ENTITIES.includes(techForm.reviewing_entity) ? techForm.reviewing_entity : (techForm.reviewing_entity ? '__other__' : '')}
+                onChange={e => {
+                  const val = e.target.value;
+                  setTechForm({ ...techForm, reviewing_entity: val === '__other__' ? '__other__' : val });
+                }}
+              >
                 <option value="">اختر...</option>
-                {REVIEW_ENTITIES.map(e=><option key={e} value={e}>{e}</option>)}
+                {REVIEW_ENTITIES.map(e => <option key={e} value={e}>{e}</option>)}
+                <option value="__other__">أخرى...</option>
               </select>
+              {/* حقل نصي يظهر فقط عند اختيار "أخرى" */}
+              {!REVIEW_ENTITIES.includes(techForm.reviewing_entity) && techForm.reviewing_entity !== '' && (
+                <input
+                  className="w-full mt-2 p-3 bg-gray-50 border rounded-2xl font-bold outline-none text-sm focus:border-[#1B2B48] transition-colors"
+                  placeholder="اكتب جهة المراجعة..."
+                  value={techForm.reviewing_entity === '__other__' ? '' : techForm.reviewing_entity}
+                  onChange={e => setTechForm({ ...techForm, reviewing_entity: e.target.value || '__other__' })}
+                />
+              )}
             </div>
           </div>
           <div>

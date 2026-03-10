@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Plus, UserPlus, Shield, Mail, Trash2, Edit2, Loader2, AlertTriangle, UsersRound } from 'lucide-react';
+import { Plus, UserPlus, Shield, Mail, Trash2, Edit2, Loader2, AlertTriangle } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import { useData } from '../contexts/DataContext';
 import Modal from './Modal';
@@ -26,8 +26,6 @@ const UserManagement = () => {
   const { appUsers, refreshData, currentUser } = useData();
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [isBulkCreating, setIsBulkCreating] = useState(false);
-  const [bulkProgress, setBulkProgress] = useState({ done: 0, total: 0, errors: [] as string[] });
   const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
   const [deleteConfirmUser, setDeleteConfirmUser] = useState<any>(null);
   const [newUser, setNewUser] = useState({ name: '', email: '', password: '', role: 'CONVEYANCE', department: '' });
@@ -79,53 +77,6 @@ const UserManagement = () => {
     } finally {
       setIsSyncingPasswords(false);
     }
-  };
-
-  const handleBulkCreateAccounts = async () => {
-    if (!isAdmin) return;
-    const defaultPassword = prompt('أدخل كلمة المرور الافتراضية لجميع الحسابات:', '123456');
-    if (!defaultPassword) return;
-
-    setIsBulkCreating(true);
-    const errors: string[] = [];
-    setBulkProgress({ done: 0, total: ALL_EMPLOYEES.length, errors: [] });
-
-    for (let i = 0; i < ALL_EMPLOYEES.length; i++) {
-      const emp = ALL_EMPLOYEES[i];
-      try {
-        const { error } = await supabase.rpc('create_new_user', {
-          email: emp.email,
-          password: defaultPassword,
-          full_name: emp.name,
-          user_role: emp.role,
-          user_dept: ''
-        });
-        if (error) {
-          errors.push(`${emp.name} (${emp.email}): ${error.message}`);
-        }
-        // حفظ هاش كلمة المرور في profiles للمصادقة الاحتياطية الآمنة
-        try {
-          const hashData = new TextEncoder().encode(defaultPassword);
-          const hashBuffer = await crypto.subtle.digest('SHA-256', hashData);
-          const passwordHash = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
-          await supabase.from('profiles').update({
-            temp_password_hash: passwordHash,
-            temp_password_set_at: new Date().toISOString()
-          }).eq('email', emp.email);
-        } catch { /* تجاهل */ }
-      } catch (err: any) {
-        errors.push(`${emp.name} (${emp.email}): ${err.message}`);
-      }
-      setBulkProgress({ done: i + 1, total: ALL_EMPLOYEES.length, errors: [...errors] });
-    }
-
-    setIsBulkCreating(false);
-    if (errors.length === 0) {
-      alert(`✅ تم إنشاء جميع الحسابات بنجاح (${ALL_EMPLOYEES.length} حساب)\nكلمة المرور الافتراضية: ${defaultPassword}`);
-    } else {
-      alert(`⚠️ تم إنشاء ${ALL_EMPLOYEES.length - errors.length} حساب بنجاح\n❌ فشل ${errors.length} حساب:\n${errors.join('\n')}`);
-    }
-    refreshData();
   };
 
   const handleCleanupUnapprovedAccounts = async () => {
@@ -265,19 +216,6 @@ const UserManagement = () => {
                 <><Loader2 size={18} className="animate-spin" /> جاري التحديث...</>
               ) : (
                 <><Shield size={18} /> تحديث كلمات المرور</>
-              )}
-            </button>
-          )}
-          {isAdmin && (
-            <button 
-              onClick={handleBulkCreateAccounts} 
-              disabled={isBulkCreating}
-              className="bg-[#1B2B48] text-white px-5 py-3 rounded-2xl font-bold flex items-center gap-2 shadow-lg hover:bg-[#2a3f63] transition-colors disabled:opacity-50"
-            >
-              {isBulkCreating ? (
-                <><Loader2 size={18} className="animate-spin" /> إنشاء... ({bulkProgress.done}/{bulkProgress.total})</>
-              ) : (
-                <><UsersRound size={18} /> إنشاء حسابات الموظفين</>
               )}
             </button>
           )}

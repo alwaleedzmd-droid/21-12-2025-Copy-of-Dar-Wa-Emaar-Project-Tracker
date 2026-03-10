@@ -45,15 +45,42 @@ BEGIN
     ('hmalsenbel@darwaemaar.com', 'حسن السنبل', 'CONVEYANCE', ''),
     ('ffalotaibi@darwaemaar.com', 'فهد العتيبي', 'CONVEYANCE', '');
 
+  -- جمع معرفات الحسابات غير المعتمدة لاستخدامها في التنظيف الآمن
+  CREATE TEMP TABLE _unauthorized_user_ids (
+    id UUID PRIMARY KEY,
+    email TEXT
+  ) ON COMMIT DROP;
+
+  INSERT INTO _unauthorized_user_ids (id, email)
+  SELECT u.id, u.email
+  FROM auth.users u
+  WHERE lower(u.email) LIKE '%@darwaemaar.com'
+    AND lower(u.email) NOT IN (SELECT lower(email) FROM _approved_accounts);
+
+  -- فك ارتباط الإشعارات قبل حذف المستخدمين لتفادي أخطاء FK
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'notifications'
+      AND column_name = 'user_id'
+  ) THEN
+    UPDATE public.notifications n
+    SET user_id = NULL
+    WHERE n.user_id IN (SELECT id FROM _unauthorized_user_ids);
+  END IF;
+
   -- حذف كل حسابات الشركة غير المعتمدة من profiles
   DELETE FROM public.profiles p
-  WHERE lower(p.email) LIKE '%@darwaemaar.com'
-    AND lower(p.email) NOT IN (SELECT lower(email) FROM _approved_accounts);
+  WHERE p.id IN (SELECT id FROM _unauthorized_user_ids)
+     OR (
+       lower(p.email) LIKE '%@darwaemaar.com'
+       AND lower(p.email) NOT IN (SELECT lower(email) FROM _approved_accounts)
+     );
 
   -- حذف كل حسابات الشركة غير المعتمدة من auth.users
   DELETE FROM auth.users u
-  WHERE lower(u.email) LIKE '%@darwaemaar.com'
-    AND lower(u.email) NOT IN (SELECT lower(email) FROM _approved_accounts);
+  WHERE u.id IN (SELECT id FROM _unauthorized_user_ids);
 
   -- إنشاء/تحديث الحسابات المعتمدة بكلمة مرور 123456
   FOR r IN SELECT * FROM _approved_accounts LOOP
