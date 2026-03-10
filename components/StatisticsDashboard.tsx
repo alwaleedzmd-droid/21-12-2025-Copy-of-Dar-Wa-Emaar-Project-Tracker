@@ -278,7 +278,8 @@ const StatisticsDashboard: React.FC = () => {
     // إجماليات البطاقات
     const totalProjects = safeProjects.length;
     const totalTechnical = safeTechnical.length;
-    const COMPLETED_STATUSES = ['completed', 'done', 'منجز', 'مكتمل'];
+    // 'approved'/'معتمد' تُحسب ضمن المنجزة (للتوافق مع البيانات القديمة والجديدة)
+    const COMPLETED_STATUSES = ['completed', 'done', 'منجز', 'مكتمل', 'approved', 'معتمد'];
     const completedTechnical = safeTechnical.filter(
       (r) => COMPLETED_STATUSES.includes(r.status)
     ).length;
@@ -338,10 +339,10 @@ const StatisticsDashboard: React.FC = () => {
 
     // بيانات الطلبات الفنية التفصيلية
     const inProgressTechnical = safeTechnical.filter(
-      (r) => r.status === 'in_progress' || r.status === 'pending' || r.status === 'new' || r.status === 'جديد' || r.status === 'متابعة' || r.status === 'under_review' || r.status === 'pending_modification'
+      (r) => !COMPLETED_STATUSES.includes(r.status) && r.status !== 'rejected' && r.status !== 'مرفوض' && r.status !== 'cancelled' && r.status !== 'ملغى'
     ).length;
     const rejectedTechnical = safeTechnical.filter(
-      (r) => r.status === 'rejected' || r.status === 'مرفوض' || r.status === 'cancelled'
+      (r) => r.status === 'rejected' || r.status === 'مرفوض' || r.status === 'cancelled' || r.status === 'ملغى'
     ).length;
 
     // بيانات المخطط الدائري للطلبات الفنية

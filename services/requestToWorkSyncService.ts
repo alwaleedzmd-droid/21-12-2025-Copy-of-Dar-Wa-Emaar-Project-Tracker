@@ -29,6 +29,51 @@ const resolveProjectIdByName = async (projectName?: string | null): Promise<numb
   return exact?.id ?? null;
 };
 
+/**
+ * جلب أعمال المشروع بطرق متعددة تستوعب كل أسماء الأعمدة الممكنة
+ * ملاحظة: نستخدم select('*') بدلاً من تحديد أسماء أعمدة بحروف كبيرة لتفادي مشاكل حساسية الحالة
+ */
+const fetchProjectWorks = async (projectId: number, projectName?: string | null): Promise<any[]> => {
+  // محاولة 1: باستخدام eq مع projectId
+  const attempt1 = await supabase
+    .from('project_works')
+    .select('*')
+    .eq('projectId', projectId);
+
+  if (!attempt1.error && attempt1.data && attempt1.data.length > 0) {
+    return attempt1.data;
+  }
+
+  // محاولة 2: باستخدام eq مع project_id (snake_case)
+  const attempt2 = await supabase
+    .from('project_works')
+    .select('*')
+    .eq('project_id', projectId);
+
+  if (!attempt2.error && attempt2.data && attempt2.data.length > 0) {
+    return attempt2.data;
+  }
+
+  // محاولة 3: جلب الكل وتصفية في JavaScript (الأكثر موثوقية)
+  const attempt3 = await supabase
+    .from('project_works')
+    .select('*')
+    .order('id', { ascending: false })
+    .limit(2000);
+
+  if (!attempt3.error && attempt3.data) {
+    const projectNames = [projectName, `مشروع #${projectId}`].filter(Boolean).map(n => normalize(n!));
+    return attempt3.data.filter((w: any) => {
+      const wId = Number(w.projectId ?? w.projectid ?? w.project_id ?? -1);
+      if (wId === projectId) return true;
+      if (projectName && projectNames.includes(normalize(w.project_name))) return true;
+      return false;
+    });
+  }
+
+  return [];
+};
+
 export const syncApprovedRequestToProjectWork = async ({
   requestId,
   projectId,
@@ -40,59 +85,87 @@ export const syncApprovedRequestToProjectWork = async ({
   matchKeywords = [],
 }: SyncApprovedRequestToWorkParams): Promise<void> => {
   const resolvedProjectId = Number(projectId) || (await resolveProjectIdByName(projectName));
-  if (!resolvedProjectId) return;
+  if (!resolvedProjectId) {
+    console.warn('⚠️ syncApprovedRequestToProjectWork: لم يتم تحديد projectId');
+    return;
+  }
 
-  const { data: works, error: worksError } = await supabase
-    .from('project_works')
-    .select('id, task_name, notes, status')
-    .or(`projectId.eq.${resolvedProjectId},projectid.eq.${resolvedProjectId},project_id.eq.${resolvedProjectId}`)
-    .order('id', { ascending: false });
+  const works = await fetchProjectWorks(resolvedProjectId, projectName);
 
-  if (worksError) throw worksError;
+  const exactTag = `رقم الطلب: #${requestId}`;
+  const serviceTypeKeyword = matchKeywords[0] ? normalize(matchKeywords[0]) : '';
 
-  const refLabel = `#${requestId}`;
-  const normalizedKeywords = matchKeywords.map(k => normalize(k)).filter(Boolean);
-
-  const matchedWork = (works || []).find((w: any) => {
+  const matchedWork = works.find((w: any) => {
     const notesText = normalize(w?.notes);
     const taskText = normalize(w?.task_name);
 
-    if (notesText.includes(refLabel.toLowerCase()) || notesText.includes(`رقم الطلب: ${refLabel}`)) {
+    // الأولوية 1: وسم مرجعي دقيق في الملاحظات
+    if (notesText.includes(normalize(exactTag))) {
       return true;
     }
 
-    return normalizedKeywords.some(k => taskText.includes(k) || notesText.includes(k));
+    // الأولوية 2: اسم المهمة يحتوي على نوع الخدمة (بدون غموض)
+    if (serviceTypeKeyword && serviceTypeKeyword.length >= 4 && taskText.includes(serviceTypeKeyword)) {
+      return true;
+    }
+
+    return false;
   });
 
   if (matchedWork) {
     const existingNotes = String(matchedWork?.notes || '');
-    const approvalStamp = `تمت الموافقة النهائية على الطلب #${requestId}`;
-    const mergedNotes = existingNotes.includes(approvalStamp)
+    const mergedNotes = existingNotes.includes(exactTag)
       ? existingNotes
-      : `${existingNotes}${existingNotes ? ' | ' : ''}${approvalStamp}`;
+      : `${existingNotes}${existingNotes ? ' | ' : ''}${exactTag} | تمت الموافقة النهائية`;
 
     const { error: updateError } = await supabase
       .from('project_works')
-      .update({
-        status: 'completed',
-        notes: mergedNotes,
-      })
+      .update({ status: 'completed', notes: mergedNotes })
       .eq('id', matchedWork.id);
 
-    if (updateError) throw updateError;
+    if (updateError) {
+      console.error('❌ فشل تحديث سجل عمل المشروع:', updateError.message);
+    } else {
+      console.log(`✅ تم تحديث سجل عمل المشروع #${matchedWork.id} → منجز`);
+    }
     return;
   }
 
-  const { error: insertError } = await supabase.from('project_works').insert({
-    projectId: resolvedProjectId,
-    project_name: projectName || `مشروع #${resolvedProjectId}`,
+  // لا يوجد سجل مطابق — إنشاء سجل جديد
+  // ملاحظة مهمة: لا نُدرج created_at يدوياً — نترك قاعدة البيانات تضعها تلقائياً
+  // نُحاول أولاً بـ projectId ثم بـ project_id كبديل (لتوافق أسماء الأعمدة)
+  const baseInsertPayload: any = {
     task_name: taskName,
+    project_name: projectName || `مشروع #${resolvedProjectId}`,
     status: 'completed',
     authority: authority || 'غير محدد',
     department: department || 'عام',
     notes,
-    created_at: new Date().toISOString(),
+  };
+
+  // محاولة 1: مع projectId (camelCase)
+  let { error: insertError } = await supabase.from('project_works').insert({
+    ...baseInsertPayload,
+    projectId: resolvedProjectId,
   });
 
-  if (insertError) throw insertError;
+  if (!insertError) {
+    console.log(`✅ تم إنشاء سجل عمل المشروع (projectId) للمشروع #${resolvedProjectId}`);
+    return;
+  }
+
+  // محاولة 2: مع project_id (snake_case)
+  console.warn('⚠️ فشل الإدراج بـ projectId – إعادة المحاولة بـ project_id:', insertError.message);
+  const { error: retryError } = await supabase.from('project_works').insert({
+    ...baseInsertPayload,
+    project_id: resolvedProjectId,
+  });
+
+  if (retryError) {
+    const errMsg = `فشل إنشاء سجل عمل المشروع للمشروع #${resolvedProjectId}: ${retryError.message}`;
+    console.error('❌', errMsg);
+    throw new Error(errMsg);
+  }
+
+  console.log(`✅ تم إنشاء سجل عمل المشروع (project_id) للمشروع #${resolvedProjectId}`);
 };

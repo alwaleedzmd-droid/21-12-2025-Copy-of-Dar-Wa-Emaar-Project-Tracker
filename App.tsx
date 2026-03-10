@@ -134,6 +134,14 @@ const ProjectDetailWrapper = ({ projects = [], currentUser }: any) => {
    const isManager = ['ADMIN', 'PR_MANAGER'].includes(currentUser?.role || '');
    const isAdmin = currentUser?.role === 'ADMIN';
 
+   // تحديث البيانات عند فتح صفحة المشروع لضمان أحدث سجلات الأعمال
+   useEffect(() => {
+     if (project) {
+       refreshData();
+     }
+   // eslint-disable-next-line react-hooks/exhaustive-deps
+   }, [project?.id]);
+
    // جلب الأعمال مباشرة من Supabase كبديل احتياطي
    const [localWorks, setLocalWorks] = useState<ProjectWork[]>([]);
    const [localWorksFetched, setLocalWorksFetched] = useState(false);
@@ -167,6 +175,7 @@ const ProjectDetailWrapper = ({ projects = [], currentUser }: any) => {
    useEffect(() => {
      const fetchDirectWorks = async () => {
        if (!project || filteredWorks.length > 0) {
+         // إعادة تعيين حتى تُتاح إعادة الجلب عند التحديث التالي
          setLocalWorks([]);
          setLocalWorksFetched(true);
          return;
@@ -177,23 +186,18 @@ const ProjectDetailWrapper = ({ projects = [], currentUser }: any) => {
          const pid = Number(project.id);
          const projectNames = [project.name, project.title, project.client].filter(Boolean);
 
-         // محاولة 1: بواسطة projectId
-         let { data, error } = await supabase
-           .from('project_works')
-           .select('*')
-           .or(`projectId.eq.${pid},projectid.eq.${pid},project_id.eq.${pid}`);
-         
-         if (error) {
-           console.warn('⚠️ خطأ الجلب بـ projectId:', error.message);
-           // محاولة 2: بدون فلتر
-           const res2 = await supabase.from('project_works').select('*');
-           if (!res2.error && res2.data) {
-             data = res2.data.filter((w: any) => {
-               const wId = Number(w.projectId ?? w.projectid ?? w.project_id ?? w['"projectId"'] ?? -1);
-               if (wId === pid) return true;
-               if (!w.project_name) return false;
-               return projectNames.includes(String(w.project_name).trim());
-             });
+         // محاولة 1a: بواسطة projectId (camelCase)
+         let data: any[] | null = null;
+         const att1a = await supabase.from('project_works').select('*').eq('projectId', pid);
+         if (!att1a.error && att1a.data && att1a.data.length > 0) {
+           data = att1a.data;
+         }
+
+         // محاولة 1b: بواسطة project_id (snake_case)
+         if (!data || data.length === 0) {
+           const att1b = await supabase.from('project_works').select('*').eq('project_id', pid);
+           if (!att1b.error && att1b.data && att1b.data.length > 0) {
+             data = att1b.data;
            }
          }
 
@@ -1319,34 +1323,6 @@ const AppContent: React.FC = () => {
         return '/deeds';
       default:
         return '/dashboard';
-    }
-  };
-
-  const handleSaveWorkNotes = async () => {
-    if (!selectedWork) return;
-    if (!isAdmin) { alert('لا تملك الصلاحية لحفظ الوصف'); return; }
-    setIsActionLoading(true);
-    try {
-      const payload: any = { notes: noteDraft || null };
-      let { error } = await supabase.from('project_works').update(payload).eq('id', selectedWork.id);
-      // fallback for schema cache errors - try without nulls
-      if (error && error.message?.includes('schema cache')) {
-        const { error: retryErr } = await supabase.from('project_works').update({ notes: noteDraft }).eq('id', selectedWork.id);
-        error = retryErr;
-      }
-      if (error) throw error;
-
-      // update local state and refresh
-      setSelectedWork({ ...selectedWork, notes: noteDraft });
-      setLocalWorksFetched(false);
-      refreshData();
-      activityLogService.log({ userId: currentUser?.id || '', userName: currentUser?.name || '', userRole: currentUser?.role || '', actionType: 'update', entityType: 'work', entityId: String(selectedWork.id), entityName: selectedWork.task_name, description: `تحديث وصف العمل: ${selectedWork.task_name}`, oldValue: { notes: selectedWork.notes }, newValue: { notes: noteDraft } });
-      alert('تم حفظ الوصف بنجاح');
-    } catch (err: any) {
-      alert('فشل حفظ الوصف: ' + (err?.message || String(err)));
-      console.error('Save notes error', err);
-    } finally {
-      setIsActionLoading(false);
     }
   };
 

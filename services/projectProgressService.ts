@@ -23,10 +23,11 @@ export const updateProjectProgress = async (projectId: number) => {
       return;
     }
 
-    // حساب عدد الأعمال المنجزة
-    const COMPLETED_STATUSES = ['completed', 'منجز', 'مكتمل'];
+    // حساب عدد الأعمال المنجزة ('approved'/'معتمد' تُحسب منجزة أيضاً)
+    const COMPLETED_STATUSES = ['completed', 'منجز', 'مكتمل', 'approved', 'معتمد'];
     const completedCount = works.filter(w => 
-      COMPLETED_STATUSES.includes(w?.status?.toLowerCase() || '')
+      COMPLETED_STATUSES.includes(w?.status?.toLowerCase() || '') ||
+      COMPLETED_STATUSES.includes(w?.status || '')
     ).length;
 
     // حساب النسبة المئوية

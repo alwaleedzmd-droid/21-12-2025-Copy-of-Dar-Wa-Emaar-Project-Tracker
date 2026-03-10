@@ -388,7 +388,43 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
 
     try {
       const workflowType = normalizeWorkflowType(activeRequest.request_type || activeRequest.service_type);
-      
+
+      // ═══════════════════════════════════════════════════════════════════
+      // حالة خاصة: الطلب معتمد/منجز بالفعل ولكن لم يُسجَّل في سجل الأعمال
+      // → إعادة مزامنة فورية دون المرور عبر سلسلة الموافقات من جديد
+      // ═══════════════════════════════════════════════════════════════════
+      const FINAL_STATUSES = ['approved', 'معتمد', 'completed', 'منجز', 'مكتمل'];
+      if (newStatus === 'approved' && FINAL_STATUSES.includes(activeRequest?.status || '')) {
+        if (!activeRequest?.project_id) {
+          alert('⚠️ هذا الطلب لا يرتبط بمشروع — لا يمكن التسجيل في سجل الأعمال');
+          return;
+        }
+        const projectName = activeRequest.project_name || 'مشروع';
+        try {
+          await syncApprovedRequestToProjectWork({
+            requestId: Number(activeRequest.id),
+            projectId: Number(activeRequest.project_id),
+            projectName,
+            taskName: `${activeRequest.service_type} - طلب تقني مقبول`,
+            authority: activeRequest.reviewing_entity || 'غير محدد',
+            department: activeRequest.scope || 'قسم فني',
+            notes: `طلب تقني مقبول - ${activeRequest.service_type} | رقم الطلب: #${activeRequest.id}`,
+            matchKeywords: [activeRequest.service_type, projectName],
+          });
+          // ضمان صحة الحالة في قاعدة البيانات
+          await supabase.from('technical_requests')
+            .update({ status: 'completed', progress: 100 })
+            .eq('id', Number(activeRequest.id));
+          setTimeout(() => updateProjectProgress(Number(activeRequest.project_id!)), 500);
+          setActiveRequest({ ...activeRequest, status: 'completed', progress: 100 });
+          await onRefresh();
+          alert('✅ تم تسجيل الطلب في سجل أعمال المشروع بنجاح');
+        } catch (syncErr: any) {
+          alert(`❌ فشل التسجيل في سجل الأعمال:\n${syncErr.message}\n\nتأكد من تطبيق ملف الترحيل 20260311_fix_project_works_rls.sql في Supabase SQL Editor`);
+        }
+        return;
+      }
+
       // ═══════════════════════════════════════
       //  تسلسل الموافقات: تحقق إذا يوجد مسؤول تالي
       // ═══════════════════════════════════════
@@ -434,7 +470,8 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
       //  موافقة/رفض نهائي (آخر مسؤول أو رفض)
       // ═══════════════════════════════════════
       const updateData: any = {
-        status: newStatus,
+        // الموافقة النهائية تُغيّر الحالة إلى 'completed' (منجز) مباشرةً
+        status: newStatus === 'approved' ? 'completed' : newStatus,
         progress: newStatus === 'approved' ? 100 : (activeRequest?.progress || 0)
       };
       const { error } = await supabase.from('technical_requests').update(updateData).eq('id', Number(activeRequest?.id));
@@ -457,24 +494,22 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
       
       // ✅ مزامنة العمل المرتبط بالمشروع عند الموافقة النهائية
       if (newStatus === 'approved' && activeRequest?.project_id) {
-        try {
-          const projectName = activeRequest.project_name || activeRequest.project_title || 'مشروع';
-          await syncApprovedRequestToProjectWork({
-            requestId: Number(activeRequest.id),
-            projectId: Number(activeRequest.project_id),
-            projectName,
-            taskName: `${activeRequest.service_type} - طلب تقني مقبول`,
-            authority: activeRequest.reviewing_entity || 'غير محدد',
-            department: activeRequest.scope || 'قسم فني',
-            notes: `طلب تقني مقبول - ${activeRequest.service_type}${reason ? ` | ملاحظات: ${reason}` : ''} | رقم الطلب: #${activeRequest.id}`,
-            matchKeywords: [activeRequest.service_type, projectName],
-          });
-        } catch (workErr: any) {
-          console.warn('⚠️ تنبيه: فشل مزامنة عمل المشروع:', workErr.message);
-          // عدم إيقاف العملية إذا فشل إنشاء work
-        }
+        const projectName = activeRequest.project_name || 'مشروع';
+        await syncApprovedRequestToProjectWork({
+          requestId: Number(activeRequest.id),
+          projectId: Number(activeRequest.project_id),
+          projectName,
+          taskName: `${activeRequest.service_type} - طلب تقني مقبول`,
+          authority: activeRequest.reviewing_entity || 'غير محدد',
+          department: activeRequest.scope || 'قسم فني',
+          notes: `طلب تقني مقبول - ${activeRequest.service_type}${reason ? ` | ملاحظات: ${reason}` : ''} | رقم الطلب: #${activeRequest.id}`,
+          matchKeywords: [activeRequest.service_type, projectName],
+        }).catch((workErr: any) => {
+          // لا نوقف العملية لكن نسجل المشكلة
+          console.error('❌ فشل مزامنة سجل عمل المشروع:', workErr.message);
+        });
       }
-      
+
       notificationService.send(
         workflowRoute.notifyRoles,
         `تم ${newStatus === 'approved' ? 'قبول' : 'رفض'} الطلب: ${activeRequest.service_type}${reason ? ` | السبب: ${reason}` : ''}`,
@@ -482,12 +517,14 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
         currentUser?.name || 'النظام'
       );
       
-      // 🔄 تحديث نسبة إنجاز المشروع تلقائياً
+      // 🔄 تحديث نسبة إنجاز المشروع تلقائياً (بعد إنشاء سجل العمل)
       if (activeRequest?.project_id) {
-        await updateProjectProgress(activeRequest.project_id);
+        // تأخير بسيط لضمان إتمام الإدراج في قاعدة البيانات قبل احتساب النسبة
+        setTimeout(() => updateProjectProgress(Number(activeRequest.project_id)), 500);
       }
 
       setActiveRequest({ ...activeRequest, ...updateData });
+      // إعادة تحميل البيانات بعد كل العمليات
       await onRefresh();
     } catch (err: any) { alert("فشل تحديث الحالة"); }
   };
@@ -499,7 +536,6 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
       if (filteredByProject) {
         const projectMatch =
           r?.project_name === filteredByProject ||
-          r?.project_title === filteredByProject ||
           r?.project_id?.toString() === filteredByProject;
         if (!projectMatch) return false;
       }
@@ -518,7 +554,7 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
       ));
     }
     if (statusFilter) {
-      const COMPLETED = ['completed', 'منجز', 'مكتمل'];
+      const COMPLETED = ['completed', 'منجز', 'مكتمل', 'approved', 'معتمد'];
       const REJECTED = ['rejected', 'مرفوض', 'cancelled', 'ملغى'];
       if (statusFilter === 'completed') result = result.filter(r => COMPLETED.includes(r?.status || ''));
       else if (statusFilter === 'rejected') result = result.filter(r => REJECTED.includes(r?.status || ''));
@@ -528,7 +564,8 @@ const TechnicalModule: React.FC<TechnicalModuleProps> = ({
   }, [scopedRequests, searchTerm, statusFilter]);
 
   const techSummary = useMemo(() => {
-    const isCompleted = (status: string) => ['completed', 'منجز', 'مكتمل'].includes(status);
+    // 'approved'/'معتمد' تُعامَل كمنجزة (توافق مع البيانات القديمة وحالة الموافقة النهائية)
+    const isCompleted = (status: string) => ['completed', 'منجز', 'مكتمل', 'approved', 'معتمد'].includes(status);
     const isRejected = (status: string) => ['rejected', 'مرفوض', 'cancelled', 'ملغى'].includes(status);
 
     const completed = scopedRequests.filter(r => isCompleted(r?.status || '')).length;

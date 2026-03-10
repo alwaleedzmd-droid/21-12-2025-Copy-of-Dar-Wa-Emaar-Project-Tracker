@@ -79,10 +79,10 @@ const DashboardModule: React.FC<DashboardProps> = ({
 
     switch (activeFilter) {
         case 'COMPLETED':
-            combined = combined.filter(t => t?.status === 'completed' || t?.status === 'منجز' || t?.status === 'مكتمل');
+            combined = combined.filter(t => t?.status === 'completed' || t?.status === 'approved' || t?.status === 'منجز' || t?.status === 'مكتمل' || t?.status === 'معتمد');
             break;
         case 'PENDING':
-            combined = combined.filter(t => t?.status !== 'completed' && t?.status !== 'منجز' && t?.status !== 'مكتمل');
+            combined = combined.filter(t => t?.status !== 'completed' && t?.status !== 'approved' && t?.status !== 'منجز' && t?.status !== 'مكتمل' && t?.status !== 'معتمد');
             break;
         case 'DEEDS':
             combined = mappedDeeds;
@@ -99,7 +99,7 @@ const DashboardModule: React.FC<DashboardProps> = ({
             const wId = w?.projectId ?? w?.projectid ?? w?.project_id;
             return Number(wId) === p?.id;
           });
-          const completed = projectTasks.filter(w => w?.status === 'completed' || w?.status === 'منجز').length;
+          const completed = projectTasks.filter(w => w?.status === 'completed' || w?.status === 'approved' || w?.status === 'منجز' || w?.status === 'معتمد').length;
           const prog = projectTasks.length > 0 ? Math.round((completed / projectTasks.length) * 100) : (p?.progress || 0);
           return { ...p, calculatedProgress: prog };
       });
