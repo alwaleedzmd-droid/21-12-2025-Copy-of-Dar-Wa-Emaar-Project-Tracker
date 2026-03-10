@@ -12,12 +12,13 @@ import { DAR_LOGO } from '../constants';
 
 // ─── بيانات الرسوم البيانية ────────────────────────────────────
 const MODULE_DATA = [
-  { name: 'إدارة المشاريع', value: 25, color: '#1B2B48' },
-  { name: 'الطلبات الفنية', value: 25, color: '#3B82F6' },
-  { name: 'سجل الإفراغ', value: 20, color: '#E95D22' },
+  { name: 'إدارة المشاريع', value: 22, color: '#1B2B48' },
+  { name: 'الطلبات الفنية', value: 20, color: '#3B82F6' },
+  { name: 'سجل الإفراغ', value: 18, color: '#E95D22' },
   { name: 'سير الموافقات', value: 15, color: '#10B981' },
-  { name: 'الإشعارات', value: 10, color: '#8B5CF6' },
-  { name: 'التقارير', value: 5, color: '#F59E0B' },
+  { name: 'مراحل العمل', value: 12, color: '#7C3AED' },
+  { name: 'التقارير والمحلل', value: 8, color: '#F59E0B' },
+  { name: 'الإشعارات', value: 5, color: '#8B5CF6' },
 ];
 
 const ROLE_PERMISSIONS_DATA = [
@@ -28,12 +29,12 @@ const ROLE_PERMISSIONS_DATA = [
 ];
 
 const FEATURE_RADAR_DATA = [
-  { feature: 'الأمان', value: 95 },
-  { feature: 'السرعة', value: 88 },
-  { feature: 'سهولة الاستخدام', value: 90 },
-  { feature: 'التكامل', value: 92 },
-  { feature: 'التقارير', value: 85 },
-  { feature: 'المرونة', value: 87 },
+  { feature: 'الأمان', value: 97 },
+  { feature: 'السرعة', value: 92 },
+  { feature: 'سهولة الاستخدام', value: 93 },
+  { feature: 'التكامل', value: 95 },
+  { feature: 'التقارير', value: 91 },
+  { feature: 'المرونة', value: 90 },
 ];
 
 const BEFORE_AFTER_DATA = [
@@ -344,7 +345,7 @@ const SystemGuide: React.FC = () => {
     وتسلسل موافقات آلي ومتابعة حية لحالة كل طلب
   </p>
   <p class="version">
-    الإصدار 1.0 — ${new Date().toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' })}<br/>
+    الإصدار 2.5 — ${new Date().toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' })}<br/>
     إعداد: إدارة تقنية المعلومات — شركة دار وإعمار
   </p>
 </div>
@@ -358,18 +359,19 @@ const SystemGuide: React.FC = () => {
     <li>3. الأقسام والصلاحيات <span>6</span></li>
     <li>4. الربط بين الأقسام <span>8</span></li>
     <li>5. سير الموافقات والتسلسل <span>10</span></li>
-    <li>6. إدارة المشاريع <span>12</span></li>
-    <li>7. الطلبات الفنية <span>13</span></li>
-    <li>8. سجل الإفراغات (CX) <span>14</span></li>
-    <li>9. إسناد المهام ولوحة مهامي <span>15</span></li>
-    <li>10. الجهات المعالجة والمواعيد النهائية <span>16</span></li>
-    <li>11. المحلل الذكي (AI) <span>17</span></li>
-    <li>12. الخريطة التفاعلية للعمليات <span>18</span></li>
-    <li>13. لوحة الإحصائيات والتقارير <span>19</span></li>
-    <li>14. نظام الإشعارات <span>20</span></li>
-    <li>15. الفوائد والحلول <span>21</span></li>
-    <li>16. دليل الاستخدام السريع <span>23</span></li>
-    <li>17. التطويرات المستقبلية المقترحة <span>25</span></li>
+    <li>6. مراحل سير العمل <span>12</span></li>
+    <li>7. إدارة المشاريع <span>13</span></li>
+    <li>8. الطلبات الفنية <span>14</span></li>
+    <li>9. سجل الإفراغات (CX) <span>15</span></li>
+    <li>10. إسناد المهام ولوحة مهامي <span>16</span></li>
+    <li>11. الجهات المعالجة والمواعيد النهائية <span>17</span></li>
+    <li>12. المحلل الذكي (AI) <span>18</span></li>
+    <li>13. الخريطة التفاعلية للعمليات <span>19</span></li>
+    <li>14. لوحة الإحصائيات والتقارير <span>20</span></li>
+    <li>15. التقارير التنفيذية السينمائية <span>21</span></li>
+    <li>16. الفوائد والحلول <span>22</span></li>
+    <li>17. دليل الاستخدام السريع <span>24</span></li>
+    <li>18. التطويرات المستقبلية المقترحة <span>26</span></li>
   </ul>
 </div>
 
@@ -473,20 +475,22 @@ const SystemGuide: React.FC = () => {
   <p class="chart-sub">نسبة مئوية من الوظائف الأساسية</p>
   <table style="width:100%; border-collapse:collapse; margin-bottom:10px;">
     <tr>
-      <td style="width:25%; background:#1B2B48; color:white; text-align:center; padding:14px 4px; font-weight:900; font-size:16pt; border:2px solid white;">25%</td>
-      <td style="width:25%; background:#3B82F6; color:white; text-align:center; padding:14px 4px; font-weight:900; font-size:16pt; border:2px solid white;">25%</td>
-      <td style="width:20%; background:#E95D22; color:white; text-align:center; padding:14px 4px; font-weight:900; font-size:16pt; border:2px solid white;">20%</td>
+      <td style="width:22%; background:#1B2B48; color:white; text-align:center; padding:14px 4px; font-weight:900; font-size:16pt; border:2px solid white;">22%</td>
+      <td style="width:20%; background:#3B82F6; color:white; text-align:center; padding:14px 4px; font-weight:900; font-size:16pt; border:2px solid white;">20%</td>
+      <td style="width:18%; background:#E95D22; color:white; text-align:center; padding:14px 4px; font-weight:900; font-size:16pt; border:2px solid white;">18%</td>
       <td style="width:15%; background:#10B981; color:white; text-align:center; padding:14px 4px; font-weight:900; font-size:14pt; border:2px solid white;">15%</td>
-      <td style="width:10%; background:#8B5CF6; color:white; text-align:center; padding:14px 4px; font-weight:900; font-size:12pt; border:2px solid white;">10%</td>
-      <td style="width:5%; background:#F59E0B; color:white; text-align:center; padding:14px 4px; font-weight:900; font-size:10pt; border:2px solid white;">5%</td>
+      <td style="width:12%; background:#7C3AED; color:white; text-align:center; padding:14px 4px; font-weight:900; font-size:12pt; border:2px solid white;">12%</td>
+      <td style="width:8%; background:#F59E0B; color:white; text-align:center; padding:14px 4px; font-weight:900; font-size:11pt; border:2px solid white;">8%</td>
+      <td style="width:5%; background:#8B5CF6; color:white; text-align:center; padding:14px 4px; font-weight:900; font-size:10pt; border:2px solid white;">5%</td>
     </tr>
     <tr>
       <td style="text-align:center; font-size:9pt; padding:6px 2px; font-weight:700; color:#1B2B48;">إدارة المشاريع</td>
       <td style="text-align:center; font-size:9pt; padding:6px 2px; font-weight:700; color:#3B82F6;">الطلبات الفنية</td>
       <td style="text-align:center; font-size:9pt; padding:6px 2px; font-weight:700; color:#E95D22;">سجل الإفراغ</td>
       <td style="text-align:center; font-size:9pt; padding:6px 2px; font-weight:700; color:#10B981;">سير الموافقات</td>
+      <td style="text-align:center; font-size:9pt; padding:6px 2px; font-weight:700; color:#7C3AED;">مراحل العمل</td>
+      <td style="text-align:center; font-size:9pt; padding:6px 2px; font-weight:700; color:#F59E0B;">التقارير والمحلل</td>
       <td style="text-align:center; font-size:9pt; padding:6px 2px; font-weight:700; color:#8B5CF6;">الإشعارات</td>
-      <td style="text-align:center; font-size:9pt; padding:6px 2px; font-weight:700; color:#F59E0B;">التقارير</td>
     </tr>
   </table>
 </div>
@@ -821,8 +825,43 @@ const SystemGuide: React.FC = () => {
   <li>حفظ التغييرات (تُطبق فوراً على الطلبات الجديدة)</li>
 </ol>
 
-<!-- ═══════════════════════════ 6. إدارة المشاريع ═══════════════════════════ -->
-<h1>6. إدارة المشاريع</h1>
+<!-- ═══════════════════════════ 6. مراحل سير العمل ═══════════════════════════ -->
+<h1>6. مراحل سير العمل</h1>
+
+<h2>6.1 ما هي مراحل سير العمل؟</h2>
+<p>نظام مراحل سير العمل يتيح تقسيم كل مشروع إلى مراحل مخصصة متسلسلة (مثل: التصميم المعماري، التراخيص، الأعمال الإنشائية، التشطيبات، الإفراغ والتسليم)، مع إمكانية تتبع حالة كل مرحلة بشكل مستقل.</p>
+
+<h2>6.2 إدارة مراحل سير العمل (WorkflowStageManager)</h2>
+<ul>
+  <li>تحديد مراحل مخصصة لكل نوع مشروع من قِبَل المدير</li>
+  <li>ترتيب تسلسلي للمراحل مع إمكانية إعادة الترتيب</li>
+  <li>تعيين موعد مستهدف ومسؤول لكل مرحلة</li>
+  <li>تفعيل/تعطيل المراحل حسب نوع المشروع</li>
+</ul>
+
+<h2>6.3 تحديث المراحل (StageUpdateModal)</h2>
+<ul>
+  <li>تحديث حالة أي مرحلة: قيد التنفيذ / مكتملة / متوقفة</li>
+  <li>إضافة ملاحظات على كل تحديث</li>
+  <li>تسجيل تاريخ الانتقال بين المراحل تلقائياً</li>
+  <li>إرسال إشعار فوري بتحديث المرحلة لجميع المعنيين</li>
+</ul>
+
+<h2>6.4 معالجة الوحدات (UnitProcessModal)</h2>
+<ul>
+  <li>معالجة وحدات المشروع بشكل منفرد أو دفعي</li>
+  <li>تتبع حالة كل وحدة: جاهزة / قيد المعالجة / مكتملة</li>
+  <li>ربط الوحدة بطلب إفراغ أو عمل مشروع</li>
+  <li>تسجيل معلومات العميل وبيانات التمويل لكل وحدة</li>
+</ul>
+
+<div class="highlight-box">
+  <strong>مثال على مراحل مشروع عقاري:</strong><br/>
+  ✅ التصميم المعماري (مكتمل) → ⏳ التراخيص والرخص (جاري) → ⚪ الأعمال الإنشائية → ⚪ التشطيبات → ⚪ الإفراغ والتسليم
+</div>
+
+<!-- ═══════════════════════════ 7. إدارة المشاريع ═══════════════════════════ -->
+<h1>7. إدارة المشاريع</h1>
 
 <h2>6.1 إنشاء مشروع جديد</h2>
 <ul>
@@ -847,8 +886,8 @@ const SystemGuide: React.FC = () => {
   <li>أعمال المشروع مع حالة كل منها</li>
 </ul>
 
-<!-- ═══════════════════════════ 7. الطلبات الفنية ═══════════════════════════ -->
-<h1>7. الطلبات الفنية</h1>
+<!-- ═══════════════════════════ 8. الطلبات الفنية ═══════════════════════════ -->
+<h1>8. الطلبات الفنية</h1>
 
 <h2>7.1 أنواع الطلبات</h2>
 <table>
@@ -873,8 +912,8 @@ const SystemGuide: React.FC = () => {
   <li>وغيرها...</li>
 </ul>
 
-<!-- ═══════════════════════════ 8. سجل الإفراغات ═══════════════════════════ -->
-<h1>8. سجل الإفراغات (CX)</h1>
+<!-- ═══════════════════════════ 9. سجل الإفراغات ═══════════════════════════ -->
+<h1>9. سجل الإفراغات (CX)</h1>
 
 <h2>8.1 أنواع طلبات الإفراغ</h2>
 <table>
@@ -897,8 +936,8 @@ const SystemGuide: React.FC = () => {
   <strong>✨ ميزة فريدة:</strong> عند إدخال رقم هوية العميل (10 أرقام)، يقوم النظام تلقائياً بالبحث في أرشيف العملاء وملء جميع البيانات المتوفرة (الاسم، الجوال، المشروع، الوحدة، البنك، إلخ)، مما يوفر وقتاً كبيراً ويقلل الأخطاء.
 </div>
 
-<!-- ═══════════════════════════ 9. إسناد المهام ═══════════════════════════ -->
-<h1>9. إسناد المهام ولوحة مهامي</h1>
+<!-- ═══════════════════════════ 10. إسناد المهام ═══════════════════════════ -->
+<h1>10. إسناد المهام ولوحة مهامي</h1>
 
 <h2>9.1 إسناد المهام (ADMIN فقط)</h2>
 <div class="highlight-box-blue">
@@ -929,8 +968,8 @@ const SystemGuide: React.FC = () => {
   <tr><td>بعد 48 ساعة</td><td>تنبيه حرج — إبلاغ الإدارة</td><td>المدير + الموظف</td></tr>
 </table>
 
-<!-- ═══════════════════════════ 10. الجهات المعالجة ═══════════════════════════ -->
-<h1>10. الجهات المعالجة والمواعيد النهائية</h1>
+<!-- ═══════════════════════════ 11. الجهات المعالجة ═══════════════════════════ -->
+<h1>11. الجهات المعالجة والمواعيد النهائية</h1>
 
 <h2>10.1 ترميز الجهات المعالجة (@Handler)</h2>
 <div class="highlight-box">
@@ -956,8 +995,8 @@ const SystemGuide: React.FC = () => {
   <strong>⚠️ إلزامي:</strong> عند تعديل الموعد النهائي لعمل متأخر، يُطلب من المستخدم إدخال سبب التأخير كشرط لحفظ التاريخ الجديد. يتم توثيق المبرر والتاريخ الجديد كتعليق رسمي مع إشعار للإدارة.
 </div>
 
-<!-- ═══════════════════════════ 11. المحلل الذكي AI ═══════════════════════════ -->
-<h1>11. المحلل الذكي (AI Assistant)</h1>
+<!-- ═══════════════════════════ 12. المحلل الذكي AI ═══════════════════════════ -->
+<h1>12. المحلل الذكي (AI Assistant)</h1>
 
 <h2>11.1 التحليل الشامل</h2>
 <p>المحلل الذكي يقرأ ويحلل كل البيانات في التطبيق ويقدم تقارير شاملة:</p>
@@ -989,8 +1028,8 @@ const SystemGuide: React.FC = () => {
   <li><strong>ملخص شخصي:</strong> كل موظف يرى ملخص مهامه عند فتح المساعد</li>
 </ul>
 
-<!-- ═══════════════════════════ 12. الخريطة التفاعلية ═══════════════════════════ -->
-<h1>12. الخريطة التفاعلية للعمليات</h1>
+<!-- ═══════════════════════════ 13. الخريطة التفاعلية ═══════════════════════════ -->
+<h1>13. الخريطة التفاعلية للعمليات</h1>
 
 <p>الخريطة التفاعلية تعرض جميع مشاريع الشركة على خريطة جغرافية حية مع مؤشرات بصرية لحالة كل مشروع.</p>
 <ul>
@@ -1002,8 +1041,8 @@ const SystemGuide: React.FC = () => {
   <li>موجودة في القائمة الجانبية مباشرة تحت لوحة الإحصائيات</li>
 </ul>
 
-<!-- ═══════════════════════════ 13. الإحصائيات ═══════════════════════════ -->
-<h1>13. لوحة الإحصائيات والتقارير</h1>
+<!-- ═══════════════════════════ 14. الإحصائيات ═══════════════════════════ -->
+<h1>14. لوحة الإحصائيات والتقارير</h1>
 
 <!-- ═══ رسم بياني: توزيع حالات الطلبات ═══ -->
 <div class="chart-panel">
@@ -1045,8 +1084,24 @@ const SystemGuide: React.FC = () => {
   <li>بطاقات إحصائية بارزة بألوان مميزة</li>
 </ul>
 
-<!-- ═══════════════════════════ 14. الإشعارات ═══════════════════════════ -->
-<h1>14. نظام الإشعارات</h1>
+<!-- ═══════════════════════════ 15. التقارير التنفيذية ═══════════════════════════ -->
+<h1>15. التقارير التنفيذية السينمائية</h1>
+
+<p>منظومة تقارير تنفيذية بصرية متكاملة من 7 وحدات، تحول بيانات النظام إلى مخططات ولوحات احترافية قابلة للطباعة والتصدير. متاحة لمدير النظام والعلاقات العامة.</p>
+
+<table>
+  <tr><th>التقرير</th><th>الوصف</th></tr>
+  <tr><td>مخطط Gantt الزمني</td><td>عرض المشاريع والأعمال على محور زمني تفاعلي مع شارات الحالة</td></tr>
+  <tr><td>لوحة KPI المخصصة</td><td>مؤشرات أداء رئيسية قابلة للتخصيص مع مقارنة المستهدف والفعلي</td></tr>
+  <tr><td>مؤشر صحة المشروع</td><td>درجة صحة كل مشروع (0-100) بناءً على الإنجاز والمواعيد والمهام</td></tr>
+  <tr><td>المقارنة الشهرية</td><td>مقارنة الإنجاز شهراً بشهر بالرسوم البيانية المزدوجة</td></tr>
+  <tr><td>خريطة الحرارة</td><td>توزيع جغرافي لكثافة المشاريع ومعدل الإنجاز حسب المنطقة</td></tr>
+  <tr><td>تنبيهات SLA</td><td>رصد تجاوز الطلبات والأعمال للوقت المستهدف المحدد</td></tr>
+  <tr><td>PDF تنفيذي</td><td>توليد تقرير PDF شامل متعدد الصفحات بتصميم احترافي</td></tr>
+</table>
+
+<!-- ═══════════════════════════ 16. الإشعارات ═══════════════════════════ -->
+<h1>16. نظام الإشعارات</h1>
 
 <h2>14.1 أنواع الإشعارات</h2>
 <table>
@@ -1059,8 +1114,8 @@ const SystemGuide: React.FC = () => {
   <tr><td>استيراد إكسل</td><td>القسم المعني</td></tr>
 </table>
 
-<!-- ═══════════════════════════ 11. الفوائد والحلول ═══════════════════════════ -->
-<h1>15. الفوائد والحلول</h1>
+<!-- ═══════════════════════════ 17. الفوائد والحلول ═══════════════════════════ -->
+<h1>17. الفوائد والحلول</h1>
 
 <h2>11.1 المشاكل التي يحلها النظام</h2>
 <table>
@@ -1136,8 +1191,8 @@ const SystemGuide: React.FC = () => {
   <strong>بعد النظام:</strong> منصة واحدة = رؤية شاملة + تسلسل واضح + إشعارات فورية + سجل كامل = سرعة + شفافية + حوكمة
 </div>
 
-<!-- ═══════════════════════════ 12. دليل الاستخدام ═══════════════════════════ -->
-<h1>16. دليل الاستخدام السريع</h1>
+<!-- ═══════════════════════════ 18. دليل الاستخدام ═══════════════════════════ -->
+<h1>18. دليل الاستخدام السريع</h1>
 
 <h2>12.1 تسجيل الدخول</h2>
 <ol>
@@ -1188,9 +1243,9 @@ const SystemGuide: React.FC = () => {
   <li>انقر "تحديث كلمة المرور"</li>
 </ol>
 
-<!-- ═══════════════════════════ 13. التطويرات المستقبلية ═══════════════════════════ -->
+<!-- ═══════════════════════════ 19. التطويرات المستقبلية ═══════════════════════════ -->
 <div style="page-break-before: always;"></div>
-<h1>17. التطويرات المستقبلية المقترحة</h1>
+<h1>19. التطويرات المستقبلية المقترحة</h1>
 
 <p>يتضمن النظام خارطة طريق للتطويرات المستقبلية مقسمة إلى أربع مراحل متتالية لضمان التحسين المستمر وتلبية احتياجات الشركة المتنامية.</p>
 
@@ -1249,12 +1304,12 @@ const SystemGuide: React.FC = () => {
     <td style="width:25%; text-align:center; padding:18px 8px; background:rgba(255,255,255,0.08); border:2px solid rgba(255,255,255,0.1);"><span style="font-size:24pt; font-weight:900; display:block;">2</span><span style="font-size:10pt; font-weight:700; opacity:0.8;">المرحلة 3</span><br/><span style="font-size:8pt; opacity:0.5;">أتمتة وأرشفة</span></td>
     <td style="width:25%; text-align:center; padding:18px 8px; background:rgba(255,255,255,0.08); border:2px solid rgba(255,255,255,0.1);"><span style="font-size:24pt; font-weight:900; display:block;">1</span><span style="font-size:10pt; font-weight:700; opacity:0.8;">المرحلة 4</span><br/><span style="font-size:8pt; opacity:0.5;">تقارير آلية</span></td>
   </tr>
-  <tr><td colspan="4" style="text-align:center; padding:10px; font-size:11pt; font-weight:700; opacity:0.7; border:none;">إجمالي 6 تطويرات مخططة عبر 4 مراحل</td></tr>
+  <tr><td colspan="4" style="text-align:center; padding:10px; font-size:11pt; font-weight:700; opacity:0.7; border:none;">إجمالي 8 تطويرات مخططة عبر 4 مراحل مستقبلية — فوق ما تم تطويره بالفعل في الإصدار 2.5</td></tr>
 </table>
 
 <div class="footer-note">
   <p>شركة دار وإعمار للتطوير العقاري — نظام تتبع المشاريع الإلكتروني</p>
-  <p>الإصدار 1.0 — ${new Date().getFullYear()}</p>
+  <p>الإصدار 2.5 — ${new Date().getFullYear()}</p>
   <p>جميع الحقوق محفوظة ©</p>
 </div>
 
@@ -1283,6 +1338,7 @@ const SystemGuide: React.FC = () => {
     { id: 'roles', label: 'الأقسام والصلاحيات', icon: <Shield size={18} /> },
     { id: 'integration', label: 'الربط بين الأقسام', icon: <Link2 size={18} /> },
     { id: 'workflow', label: 'سير الموافقات', icon: <GitBranch size={18} /> },
+    { id: 'stages', label: 'مراحل سير العمل', icon: <Workflow size={18} /> },
     { id: 'projects', label: 'إدارة المشاريع', icon: <Building2 size={18} /> },
     { id: 'technical', label: 'الطلبات الفنية', icon: <Zap size={18} /> },
     { id: 'deeds', label: 'سجل الإفراغات', icon: <FileStack size={18} /> },
@@ -1291,6 +1347,7 @@ const SystemGuide: React.FC = () => {
     { id: 'ai', label: 'المحلل الذكي', icon: <Brain size={18} /> },
     { id: 'map', label: 'الخريطة التفاعلية', icon: <MapPin size={18} /> },
     { id: 'stats', label: 'الإحصائيات', icon: <BarChart3 size={18} /> },
+    { id: 'cinematic', label: 'التقارير التنفيذية', icon: <Monitor size={18} /> },
     { id: 'benefits', label: 'الفوائد والحلول', icon: <Target size={18} /> },
     { id: 'roadmap', label: 'التطويرات المستقبلية', icon: <Rocket size={18} /> },
   ];
@@ -1467,6 +1524,8 @@ const SystemGuide: React.FC = () => {
                 <FeatureCard icon={<ListChecks />} title="إسناد المهام ولوحة مهامي" description="تكليف الموظفين بمهام محددة مع متابعة 48 ساعة ولوحة مهام شخصية لكل موظف" />
                 <FeatureCard icon={<Tag />} title="الجهات المعالجة (@)" description="ترميز الجهات المسؤولة في التعليقات مع مواعيد نهائية وشارات لونية ومبررات تأخير" />
                 <FeatureCard icon={<MapPin />} title="الخريطة التفاعلية" description="عرض جغرافي لجميع المشاريع مع مؤشرات بصرية وربط مباشر بالمحلل الذكي" />
+                <FeatureCard icon={<Workflow />} title="مراحل سير العمل" description="تحديد مراحل مخصصة لكل مشروع وإدارة انتقال حالة كل مرحلة مع تتبع بصري كامل" />
+                <FeatureCard icon={<Monitor />} title="التقارير التنفيذية السينمائية" description="لوحة تنفيذية من 7 تقارير: Gantt، KPI مخصص، صحة المشروع، مقارنة شهرية، خريطة حرارة، تنبيهات SLA، وPDF تنفيذي" />
               </div>
             </GuideSection>
           )}
@@ -1630,6 +1689,65 @@ const SystemGuide: React.FC = () => {
                   3. تهاني توافق ← يتحول للوليد الدوسري<br />
                   4. الوليد يوافق ← موافقة نهائية ✓
                 </p>
+              </div>
+            </GuideSection>
+          )}
+
+          {/* ══════ مراحل سير العمل ══════ */}
+          {activeSection === 'stages' && (
+            <GuideSection title="مراحل سير العمل" icon={<Workflow />}>
+              <div className="bg-purple-50 p-5 rounded-2xl border border-purple-100 mb-6">
+                <p className="text-purple-800 font-bold text-sm leading-loose">
+                  🔀 نظام مراحل سير العمل يتيح تقسيم كل مشروع إلى مراحل مخصصة (مثل: التصميم، التراخيص، التنفيذ، الإفراغ)، مع تتبع حالة كل مرحلة وانتقالها بصرياً.
+                </p>
+              </div>
+
+              <div className="space-y-4">
+                <InfoBlock title="إدارة المراحل (WorkflowStageManager)" items={[
+                  'تحديد مراحل مخصصة لكل نوع مشروع من قِبَل المدير',
+                  'ترتيب تسلسلي للمراحل مع إمكانية إعادة الترتيب',
+                  'إضافة وصف لكل مرحلة ودور المسؤول عنها',
+                  'تعيين تاريخ مستهدف لكل مرحلة',
+                  'تفعيل/تعطيل المراحل حسب نوع العمل'
+                ]} />
+                <InfoBlock title="تحديث المراحل (StageUpdateModal)" items={[
+                  'تحديث حالة أي مرحلة من: قيد التنفيذ / مكتملة / متوقفة',
+                  'إضافة ملاحظات على تحديث المرحلة',
+                  'تسجيل تاريخ الانتقال بين المراحل تلقائياً',
+                  'إرسال إشعار بتحديث المرحلة لجميع المعنيين',
+                  'ربط المرحلة بطلبات فنية أو إفراغ معينة'
+                ]} />
+                <InfoBlock title="العرض البصري للمراحل" items={[
+                  'شريط تقدم مرئي يعرض الموقع الحالي في سلسلة المراحل',
+                  'ألوان مميزة: رمادي (لم تبدأ) / أزرق (قيد التنفيذ) / أخضر (مكتملة) / أحمر (متوقفة)',
+                  'النسبة المئوية للإنجاز تُحسب من المراحل المكتملة تلقائياً',
+                  'سجل تاريخي لجميع تحديثات المراحل في كل مشروع'
+                ]} />
+                <InfoBlock title="إدارة الوحدات (UnitProcessModal)" items={[
+                  'معالجة وحدات المشروع بشكل منفرد أو دفعي',
+                  'تتبع حالة كل وحدة: جاهزة / قيد المعالجة / مكتملة',
+                  'ربط الوحدة بطلب إفراغ أو عمل مشروع',
+                  'تسجيل معلومات العميل وبيانات التمويل لكل وحدة'
+                ]} />
+              </div>
+
+              {/* مخطط مراحل العمل */}
+              <div className="mt-6 bg-gradient-to-l from-purple-50 to-white rounded-2xl p-6 border border-purple-100">
+                <h4 className="font-black text-[#1B2B48] mb-4 text-center text-lg">مثال على مراحل مشروع عقاري</h4>
+                <div className="flex flex-wrap justify-center gap-2">
+                  {[
+                    { label: 'التصميم المعماري', color: 'bg-gray-200 text-gray-600', status: '✅ مكتمل' },
+                    { label: 'التراخيص والرخص', color: 'bg-blue-500 text-white', status: '⏳ جارٍ' },
+                    { label: 'الأعمال الإنشائية', color: 'bg-gray-100 text-gray-400', status: '⚪ لم تبدأ' },
+                    { label: 'التشطيبات', color: 'bg-gray-100 text-gray-400', status: '⚪ لم تبدأ' },
+                    { label: 'الإفراغ والتسليم', color: 'bg-gray-100 text-gray-400', status: '⚪ لم تبدأ' },
+                  ].map((s, i) => (
+                    <div key={i} className={`px-4 py-3 rounded-xl text-center min-w-[120px] ${s.color}`}>
+                      <p className="font-black text-xs">{s.label}</p>
+                      <p className="text-[10px] mt-1 opacity-80">{s.status}</p>
+                    </div>
+                  ))}
+                </div>
               </div>
             </GuideSection>
           )}
@@ -1868,6 +1986,40 @@ const SystemGuide: React.FC = () => {
             </GuideSection>
           )}
 
+          {/* ══════ التقارير التنفيذية السينمائية ══════ */}
+          {activeSection === 'cinematic' && (
+            <GuideSection title="التقارير التنفيذية السينمائية" icon={<Monitor />}>
+              <div className="bg-gradient-to-l from-[#1B2B48] to-[#2d4a7a] text-white p-6 rounded-2xl mb-6">
+                <h4 className="font-black text-lg mb-2 flex items-center gap-2">
+                  <Monitor size={20} className="text-[#E95D22]" />
+                  لوحة التقارير التنفيذية CinematicLayout
+                </h4>
+                <p className="text-gray-300 font-bold text-sm leading-loose">
+                  منظومة تقارير تنفيذية بصرية متكاملة من 7 وحدات، تحول بيانات النظام إلى مخططات ولوحات احترافية قابلة للتصدير.
+                </p>
+              </div>
+
+              <div className="grid gap-4">
+                <FeatureCard icon={<BarChart3 />} title="مخطط Gantt الزمني (GanttTimeline)" description="مخطط زمني تفاعلي يعرض جميع مشاريع وأعمال الشركة على محور زمني واحد مع شارات الحالة والتأخير" />
+                <FeatureCard icon={<Target />} title="لوحة KPI المخصصة (CustomKPIDashboard)" description="مؤشرات أداء رئيسية قابلة للتخصيص مع مقارنة بالمستهدف وتحليل الانحرافات وتوقعات النهاية" />
+                <FeatureCard icon={<Shield />} title="مؤشر صحة المشروع (ProjectHealthScore)" description="حساب ذكي لدرجة صحة كل مشروع (0-100) بناءً على: الالتزام بالمواعيد، الإنجاز، الطلبات، والمهام" />
+                <FeatureCard icon={<BarChart2 />} title="المقارنة الشهرية (MonthlyComparison)" description="مقارنة إنجاز الأعمال والطلبات شهراً بشهر مع رسم بياني مزدوج وحساب التغير النسبي" />
+                <FeatureCard icon={<Globe />} title="خريطة الحرارة (AreaHeatMap)" description="عرض مناطق الرياض وكثافة المشاريع فيها مع تدريج لوني حسب معدل الإنجاز ونشاط الطلبات" />
+                <FeatureCard icon={<Bell />} title="تنبيهات SLA (SLANotifications)" description="رصد ومتابعة اتفاقيات مستوى الخدمة: تنبيه عند تجاوز أي طلب أو عمل للوقت المستهدف" />
+                <FeatureCard icon={<Download />} title="تقرير PDF تنفيذي (ExecutivePDFReport)" description="توليد تقرير PDF شامل بصفحات متعددة: ملخص تنفيذي، إحصائيات، رسوم بيانية، تفاصيل المشاريع بتصميم احترافي" />
+              </div>
+
+              <div className="mt-6 bg-orange-50 rounded-2xl p-5 border border-orange-100">
+                <h4 className="font-black text-orange-800 mb-2">كيفية الوصول</h4>
+                <p className="text-orange-700 font-bold text-sm leading-loose">
+                  • متاحة لمدير النظام (ADMIN) ومدير العلاقات العامة (PR_MANAGER) فقط<br />
+                  • الوصول عبر القائمة الجانبية: "لوحة الإحصائيات" ← تبويبات التقارير التنفيذية<br />
+                  • يمكن تصدير أي تقرير كـ PDF أو طباعته مباشرة
+                </p>
+              </div>
+            </GuideSection>
+          )}
+
           {/* الفوائد */}
           {activeSection === 'benefits' && (
             <GuideSection title="الفوائد والحلول" icon={<Target />}>
@@ -2039,7 +2191,7 @@ const SystemGuide: React.FC = () => {
                     <p className="text-[9px] opacity-60">تقارير آلية</p>
                   </div>
                 </div>
-                <p className="text-center text-xs font-bold mt-4 opacity-70">إجمالي 6 تطويرات مخططة عبر 4 مراحل</p>
+                <p className="text-center text-xs font-bold mt-4 opacity-70">إجمالي 8 تطويرات مخططة عبر 4 مراحل مستقبلية</p>
               </div>
             </GuideSection>
           )}
