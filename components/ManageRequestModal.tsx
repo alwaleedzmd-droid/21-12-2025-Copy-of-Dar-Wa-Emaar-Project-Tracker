@@ -63,45 +63,7 @@ const ManageRequestModal: React.FC<ManageRequestModalProps> = ({
   }, [isOpen, request]);
 
   // مزامنة تلقائية: عند فتح المودال لطلب معتمد سبقاً ولم يُسجَّل بعد
-  useEffect(() => {
-    if (!isOpen || !request || isClearance) return;
-    const req = request as TechnicalRequest;
-    if (!FINAL_STATUSES.includes(req.status || '')) return;
-    if (!req.project_id) return;
-
-    // تنفيذ المزامنة فوراً بشكل صامت (بدون alert)
-    const runSync = async () => {
-      setAutoSyncStatus('syncing');
-      try {
-        const projectName = req.project_name || 'مشروع';
-        await syncApprovedRequestToProjectWork({
-          requestId: Number(req.id),
-          projectId: Number(req.project_id),
-          projectName,
-          taskName: `${req.service_type} - طلب تقني مقبول`,
-          authority: req.reviewing_entity || 'غير محدد',
-          department: req.scope || 'قسم فني',
-          notes: `طلب تقني مقبول - ${req.service_type} | رقم الطلب: #${req.id}`,
-          matchKeywords: [req.service_type, projectName],
-        });
-        // ضمان حالة completed و progress=100 في قاعدة البيانات
-        await supabase.from('technical_requests')
-          .update({ status: 'completed', progress: 100 })
-          .eq('id', Number(req.id));
-        setTimeout(() => updateProjectProgress(Number(req.project_id)), 600);
-        setAutoSyncStatus('done');
-        setCurrentStatus('completed');
-      } catch (err: any) {
-        console.error('❌ فشل المزامنة التلقائية:', err.message);
-        setAutoSyncStatus('error');
-      }
-    };
-
-    // تأخير بسيط لضمان لود المودال أولاً
-    const t = setTimeout(runSync, 600);
-    return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, request?.id, syncRetry]);
+  // تم إلغاء التحويل التلقائي للحالة عند فتح العمل المتأخر بناءً على طلب العميل
 
   const fetchComments = async () => {
     if (!request?.id) return;
@@ -376,9 +338,9 @@ const ManageRequestModal: React.FC<ManageRequestModalProps> = ({
         {/* ─── حالة المزامنة التلقائية مع سجل أعمال المشروع ─── */}
         {!isClearance && FINAL_STATUSES.includes(currentStatus) && (request as TechnicalRequest)?.project_id && (
           <div className={`p-3 rounded-2xl flex items-center gap-3 text-sm font-bold transition-all ${autoSyncStatus === 'syncing' ? 'bg-blue-50 border border-blue-200 text-blue-700' :
-              autoSyncStatus === 'done' ? 'bg-green-50 border border-green-200 text-green-700' :
-                autoSyncStatus === 'error' ? 'bg-red-50 border border-red-200 text-red-700' :
-                  'hidden'
+            autoSyncStatus === 'done' ? 'bg-green-50 border border-green-200 text-green-700' :
+              autoSyncStatus === 'error' ? 'bg-red-50 border border-red-200 text-red-700' :
+                'hidden'
             }`}>
             {autoSyncStatus === 'syncing' && <Loader2 className="w-4 h-4 animate-spin shrink-0" />}
             {autoSyncStatus === 'done' && <CheckCircle2 className="w-4 h-4 shrink-0" />}
@@ -465,8 +427,8 @@ const ManageRequestModal: React.FC<ManageRequestModalProps> = ({
                         <div className="flex items-center gap-2">
                           <p className="text-xs font-black text-[#1B2B48]">{stage.stage_title}</p>
                           <span className={`text-[9px] px-2 py-0.5 rounded-full ${status === 'completed' ? 'bg-green-50 text-green-700' :
-                              status === 'in_progress' ? 'bg-blue-50 text-blue-700' :
-                                'bg-gray-50 text-gray-500'
+                            status === 'in_progress' ? 'bg-blue-50 text-blue-700' :
+                              'bg-gray-50 text-gray-500'
                             } font-bold`}>
                             {statusText}
                           </span>
