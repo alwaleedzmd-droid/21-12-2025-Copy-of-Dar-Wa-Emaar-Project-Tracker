@@ -118,15 +118,16 @@ export const syncApprovedRequestToProjectWork = async ({
       ? existingNotes
       : `${existingNotes}${existingNotes ? ' | ' : ''}${exactTag} | تمت الموافقة النهائية`;
 
+    // تحديث فقط الملاحظات دون تغيير الحالة
     const { error: updateError } = await supabase
       .from('project_works')
-      .update({ status: 'completed', notes: mergedNotes })
+      .update({ notes: mergedNotes })
       .eq('id', matchedWork.id);
 
     if (updateError) {
       console.error('❌ فشل تحديث سجل عمل المشروع:', updateError.message);
     } else {
-      console.log(`✅ تم تحديث سجل عمل المشروع #${matchedWork.id} → منجز`);
+      console.log(`✅ تم تحديث ملاحظات سجل عمل المشروع #${matchedWork.id}`);
     }
     return;
   }
@@ -137,7 +138,7 @@ export const syncApprovedRequestToProjectWork = async ({
   const baseInsertPayload: any = {
     task_name: taskName,
     project_name: projectName || `مشروع #${resolvedProjectId}`,
-    status: 'completed',
+    // status: 'completed', // لا يتم تعيين الحالة تلقائياً
     authority: authority || 'غير محدد',
     department: department || 'عام',
     notes,
