@@ -23,10 +23,10 @@ interface ManageRequestModalProps {
 }
 
 const ManageRequestModal: React.FC<ManageRequestModalProps> = ({
-  isOpen, 
-  onClose, 
-  request, 
-  currentUser, 
+  isOpen,
+  onClose,
+  request,
+  currentUser,
   onUpdateStatus
 }) => {
   const [comments, setComments] = useState<Comment[]>([]);
@@ -55,7 +55,7 @@ const ManageRequestModal: React.FC<ManageRequestModalProps> = ({
       setAutoSyncStatus('idle');
       fetchComments();
       // جلب مراحل سير العمل
-      const requestTypeCode = isClearance 
+      const requestTypeCode = isClearance
         ? (request as any).request_type || 'DEED_CLEARANCE'
         : 'TECHNICAL_SECTION';
       fetchWorkflowProgress(requestTypeCode, request.id);
@@ -100,7 +100,7 @@ const ManageRequestModal: React.FC<ManageRequestModalProps> = ({
     // تأخير بسيط لضمان لود المودال أولاً
     const t = setTimeout(runSync, 600);
     return () => clearTimeout(t);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, request?.id, syncRetry]);
 
   const fetchComments = async () => {
@@ -113,7 +113,7 @@ const ManageRequestModal: React.FC<ManageRequestModalProps> = ({
         .eq('request_id', request?.id)
         .eq('request_type', requestType)
         .order('created_at', { ascending: true });
-      
+
       if (error) {
         setComments([]);
       } else {
@@ -139,7 +139,7 @@ const ManageRequestModal: React.FC<ManageRequestModalProps> = ({
         .limit(1);
 
       const routeData = routeRows?.[0];
-      
+
       if (routeError || !routeData) {
         console.warn('No workflow route found for:', requestTypeCode);
         return;
@@ -152,7 +152,7 @@ const ManageRequestModal: React.FC<ManageRequestModalProps> = ({
         .eq('workflow_route_id', routeData.id)
         .eq('is_active', true)
         .order('stage_order', { ascending: true });
-      
+
       if (stagesError) throw stagesError;
       setWorkflowStages(stagesData || []);
 
@@ -162,7 +162,7 @@ const ManageRequestModal: React.FC<ManageRequestModalProps> = ({
         .select('*')
         .eq('request_id', requestId)
         .eq('request_type', requestTypeCode);
-      
+
       if (progressError) throw progressError;
 
       if ((progressData || []).length === 0 && (stagesData || []).length > 0) {
@@ -202,7 +202,7 @@ const ManageRequestModal: React.FC<ManageRequestModalProps> = ({
         user_name: currentUser?.name || currentUser?.email,
         content: newComment.trim()
       }]);
-      
+
       if (error) throw error;
 
       // تنبيه الجهات المعنية عند إضافة تعليق
@@ -217,8 +217,8 @@ const ManageRequestModal: React.FC<ManageRequestModalProps> = ({
         currentUser?.name
       );
 
-      setNewComment(''); 
-      await fetchComments(); 
+      setNewComment('');
+      await fetchComments();
     } catch (err: any) {
       console.error("Failed to post comment:", err);
     } finally {
@@ -244,17 +244,17 @@ const ManageRequestModal: React.FC<ManageRequestModalProps> = ({
   };
 
   const getStatusInfo = (status: string) => {
-    switch(status) {
-      case 'completed': 
+    switch (status) {
+      case 'completed':
       case 'منجز':
         return { label: 'منجز ✅', color: 'bg-green-100 text-green-700 border-green-200' };
-      case 'rejected': 
+      case 'rejected':
       case 'مرفوض':
         return { label: 'مرفوض ❌', color: 'bg-red-100 text-red-700 border-red-200' };
-      case 'pending_modification': 
+      case 'pending_modification':
       case 'مطلوب تعديل':
         return { label: 'مطلوب تعديل ⚠️', color: 'bg-orange-100 text-orange-700 border-orange-200' };
-      case 'pending': 
+      case 'pending':
       case 'متابعة':
         return { label: 'قيد المتابعة ⏳', color: 'bg-blue-100 text-blue-700 border-blue-200' };
       case 'in_progress':
@@ -267,7 +267,7 @@ const ManageRequestModal: React.FC<ManageRequestModalProps> = ({
       case 'cancelled':
       case 'ملغي':
         return { label: 'ملغي 🚫', color: 'bg-gray-100 text-gray-700 border-gray-200' };
-      default: 
+      default:
         return { label: 'جديد 🆕', color: 'bg-gray-100 text-gray-700 border-gray-200' };
     }
   };
@@ -280,7 +280,7 @@ const ManageRequestModal: React.FC<ManageRequestModalProps> = ({
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="تفاصيل ومتابعة الطلب">
       <div className="space-y-6 text-right font-cairo overflow-visible">
-        
+
         <div className={`p-5 rounded-[25px] border shadow-sm transition-all duration-300 ${statusInfo.color}`}>
           <div className="flex justify-between items-center">
             <div>
@@ -302,112 +302,116 @@ const ManageRequestModal: React.FC<ManageRequestModalProps> = ({
               <UserIcon size={16} className="text-[#E95D22]" /> بيانات العميل والصفقة
             </h3>
             <div className="grid grid-cols-2 gap-4 text-right">
-               <div>
-                 <label className="text-[10px] text-gray-400 font-bold block">اسم العميل</label>
-                 <p className="font-bold text-[#1B2B48] text-sm">{(request as ClearanceRequest)?.client_name || '-'}</p>
-               </div>
-               <div>
-                 <label className="text-[10px] text-gray-400 font-bold block">رقم الجوال</label>
-                 <p className="font-bold text-[#1B2B48] text-sm flex items-center gap-1 justify-end" dir="ltr">
-                   {(request as ClearanceRequest)?.mobile || '-'} <Phone size={12} className="text-gray-400"/>
-                 </p>
-               </div>
-               <div>
-                 <label className="text-[10px] text-gray-400 font-bold block">تم الإنشاء بواسطة</label>
-                 <p className="font-bold text-[#E95D22] text-sm flex items-center gap-1 justify-end">
-                   {(request as ClearanceRequest)?.submitted_by || '-'} <UserCheck size={12}/>
-                 </p>
-               </div>
-               <div>
-                 <label className="text-[10px] text-gray-400 font-bold block">قيمة الصفقة</label>
-                 <p className="font-bold text-green-600 text-sm flex items-center gap-1 justify-end">
-                   {(request as ClearanceRequest)?.sale_price ? parseFloat((request as ClearanceRequest)?.sale_price || '0').toLocaleString() : '-'} ر.س 
-                   <CreditCard size={12}/>
-                 </p>
-               </div>
-               <div>
-                 <label className="text-[10px] text-gray-400 font-bold block">البنك</label>
-                 <p className="font-bold text-[#1B2B48] text-sm flex items-center gap-1 justify-end">
-                   {(request as ClearanceRequest)?.bank_name || '-'} <Landmark size={12} className="text-gray-400"/>
-                 </p>
-               </div>
-               <div>
-                 <label className="text-[10px] text-gray-400 font-bold block">رقم الصك</label>
-                 <p className="font-bold text-[#1B2B48] text-xs font-mono bg-gray-50 p-1 rounded w-fit mr-auto">
-                   {(request as ClearanceRequest)?.deed_number || '-'}
-                 </p>
-               </div>
+              <div>
+                <label className="text-[10px] text-gray-400 font-bold block">اسم العميل</label>
+                <p className="font-bold text-[#1B2B48] text-sm">{(request as ClearanceRequest)?.client_name || '-'}</p>
+              </div>
+              <div>
+                <label className="text-[10px] text-gray-400 font-bold block">رقم الجوال</label>
+                <p className="font-bold text-[#1B2B48] text-sm flex items-center gap-1 justify-end" dir="ltr">
+                  {(request as ClearanceRequest)?.mobile || '-'} <Phone size={12} className="text-gray-400" />
+                </p>
+              </div>
+              <div>
+                <label className="text-[10px] text-gray-400 font-bold block">تم الإنشاء بواسطة</label>
+                <p className="font-bold text-[#E95D22] text-sm flex items-center gap-1 justify-end">
+                  {(request as ClearanceRequest)?.submitted_by || '-'} <UserCheck size={12} />
+                </p>
+              </div>
+              <div>
+                <label className="text-[10px] text-gray-400 font-bold block">قيمة الصفقة</label>
+                <p className="font-bold text-green-600 text-sm flex items-center gap-1 justify-end">
+                  {(request as ClearanceRequest)?.sale_price ? parseFloat((request as ClearanceRequest)?.sale_price || '0').toLocaleString() : '-'} ر.س
+                  <CreditCard size={12} />
+                </p>
+              </div>
+              <div>
+                <label className="text-[10px] text-gray-400 font-bold block">البنك</label>
+                <p className="font-bold text-[#1B2B48] text-sm flex items-center gap-1 justify-end">
+                  {(request as ClearanceRequest)?.bank_name || '-'} <Landmark size={12} className="text-gray-400" />
+                </p>
+              </div>
+              <div>
+                <label className="text-[10px] text-gray-400 font-bold block">رقم الصك</label>
+                <p className="font-bold text-[#1B2B48] text-xs font-mono bg-gray-50 p-1 rounded w-fit mr-auto">
+                  {(request as ClearanceRequest)?.deed_number || '-'}
+                </p>
+              </div>
             </div>
           </div>
         ) : (
-           <div className="bg-white p-5 rounded-[25px] border border-gray-100 shadow-sm">
-             <h3 className="font-black text-[#1B2B48] flex items-center gap-2 text-sm border-b pb-2 mb-3">
-               <FileText size={16} className="text-[#E95D22]" /> تفاصيل العمل الفني
-             </h3>
-             <div className="space-y-4">
-               <div className="grid grid-cols-2 gap-4">
-                 <div>
-                   <label className="text-[10px] text-gray-400 font-bold block">بيان العمل</label>
-                   <p className="font-bold text-[#1B2B48] text-sm">{(request as TechnicalRequest)?.service_type}</p>
-                 </div>
-                 <div>
-                   <label className="text-[10px] text-gray-400 font-bold block">جهة المراجعة</label>
-                   <p className="font-bold text-[#1B2B48] text-sm">{(request as TechnicalRequest)?.reviewing_entity || '-'}</p>
-                 </div>
-               </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-[10px] text-gray-400 font-bold block">المسؤول المباشر</label>
-                    <p className="font-bold text-[#1B2B48] text-sm">{(request as TechnicalRequest)?.assigned_to || '-'}</p>
-                  </div>
-                  <div>
-                    <label className="text-[10px] text-gray-400 font-bold block">نسخة للعلم (CC)</label>
-                    <p className="font-bold text-[#1B2B48] text-sm">{(request as any)?.workflow_cc || '-'}</p>
-                  </div>
+          <div className="bg-white p-5 rounded-[25px] border border-gray-100 shadow-sm">
+            <h3 className="font-black text-[#1B2B48] flex items-center gap-2 text-sm border-b pb-2 mb-3">
+              <FileText size={16} className="text-[#E95D22]" /> تفاصيل العمل الفني
+            </h3>
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-[10px] text-gray-400 font-bold block">بيان العمل</label>
+                  <p className="font-bold text-[#1B2B48] text-sm">{(request as TechnicalRequest)?.service_type}</p>
                 </div>
-               <div>
-                 <label className="text-[10px] text-gray-400 font-bold block">التفاصيل</label>
-                 <p className="text-xs text-gray-600 font-bold leading-relaxed">{(request as TechnicalRequest)?.details || 'لا توجد تفاصيل إضافية'}</p>
-               </div>
-             </div>
-           </div>
+                <div>
+                  <label className="text-[10px] text-gray-400 font-bold block">جهة المراجعة</label>
+                  <p className="font-bold text-[#1B2B48] text-sm">{(request as TechnicalRequest)?.reviewing_entity || '-'}</p>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-[10px] text-gray-400 font-bold block">المسؤول المباشر</label>
+                  <p className="font-bold text-[#1B2B48] text-sm">{(request as TechnicalRequest)?.assigned_to || '-'}</p>
+                </div>
+                <div>
+                  <label className="text-[10px] text-gray-400 font-bold block">نسخة للعلم (CC)</label>
+                  <p className="font-bold text-[#1B2B48] text-sm">{(request as any)?.workflow_cc || '-'}</p>
+                </div>
+              </div>
+              <div>
+                <label className="text-[10px] text-gray-400 font-bold block">التفاصيل</label>
+                <p className="text-xs text-gray-600 font-bold leading-relaxed">{(request as TechnicalRequest)?.details || 'لا توجد تفاصيل إضافية'}</p>
+              </div>
+            </div>
+          </div>
         )}
 
-          {/* ─── حالة المزامنة التلقائية مع سجل أعمال المشروع ─── */}
-          {!isClearance && FINAL_STATUSES.includes(currentStatus) && (request as TechnicalRequest)?.project_id && (
-            <div className={`p-3 rounded-2xl flex items-center gap-3 text-sm font-bold transition-all ${
-              autoSyncStatus === 'syncing' ? 'bg-blue-50 border border-blue-200 text-blue-700' :
-              autoSyncStatus === 'done'    ? 'bg-green-50 border border-green-200 text-green-700' :
-              autoSyncStatus === 'error'   ? 'bg-red-50 border border-red-200 text-red-700' :
-              'hidden'
+        {/* ─── حالة المزامنة التلقائية مع سجل أعمال المشروع ─── */}
+        {!isClearance && FINAL_STATUSES.includes(currentStatus) && (request as TechnicalRequest)?.project_id && (
+          <div className={`p-3 rounded-2xl flex items-center gap-3 text-sm font-bold transition-all ${autoSyncStatus === 'syncing' ? 'bg-blue-50 border border-blue-200 text-blue-700' :
+              autoSyncStatus === 'done' ? 'bg-green-50 border border-green-200 text-green-700' :
+                autoSyncStatus === 'error' ? 'bg-red-50 border border-red-200 text-red-700' :
+                  'hidden'
             }`}>
-              {autoSyncStatus === 'syncing' && <Loader2 className="w-4 h-4 animate-spin shrink-0" />}
-              {autoSyncStatus === 'done'    && <CheckCircle2 className="w-4 h-4 shrink-0" />}
-              {autoSyncStatus === 'error'   && <span className="text-base shrink-0">⚠️</span>}
-              <span>
-                {autoSyncStatus === 'syncing' && 'جاري التسجيل في سجل أعمال المشروع...'}
-                {autoSyncStatus === 'done'    && 'تم التسجيل في سجل أعمال المشروع'}
-                {autoSyncStatus === 'error'   && (
-                  <>
-                    فشل التسجيل التلقائي —{' '}
-                    <button
-                      className="underline"
-                      onClick={() => { setAutoSyncStatus('idle'); setSyncRetry(n => n + 1); }}
-                    >إعادة المحاولة</button>
-                  </>
-                )}
-              </span>
-            </div>
-          )}
+            {autoSyncStatus === 'syncing' && <Loader2 className="w-4 h-4 animate-spin shrink-0" />}
+            {autoSyncStatus === 'done' && <CheckCircle2 className="w-4 h-4 shrink-0" />}
+            {autoSyncStatus === 'error' && <span className="text-base shrink-0">⚠️</span>}
+            <span>
+              {autoSyncStatus === 'syncing' && 'جاري التسجيل في سجل أعمال المشروع...'}
+              {autoSyncStatus === 'done' && 'تم التسجيل في سجل أعمال المشروع'}
+              {autoSyncStatus === 'error' && (
+                <>
+                  فشل التسجيل التلقائي —{' '}
+                  <button
+                    className="underline"
+                    onClick={() => { setAutoSyncStatus('idle'); setSyncRetry(n => n + 1); }}
+                  >إعادة المحاولة</button>
+                </>
+              )}
+            </span>
+          </div>
+        )}
 
-          {isDirectApprover && !['approved', 'معتمد', 'completed', 'منجز', 'مكتمل'].includes(currentStatus) && (
+        {/* إخفاء لوحة الاعتماد إذا كانت الحالة متابعة تلقائي */}
+        {isDirectApprover &&
+          !['approved', 'معتمد', 'completed', 'منجز', 'مكتمل', 'pending_followup', 'متابعة تلقائي'].includes(currentStatus) && (
             <ApprovalPanel
               title="لوحة اعتماد المسؤول المباشر"
               onApprove={(reason) => changeStatusWithReason('approved', reason)}
               onReject={(reason) => changeStatusWithReason('rejected', reason)}
             />
           )}
-          {isDirectApprover && ['approved', 'معتمد', 'completed', 'منجز', 'مكتمل'].includes(currentStatus) && currentUser?.role !== 'ADMIN' && (
+        {isDirectApprover &&
+          ['approved', 'معتمد', 'completed', 'منجز', 'مكتمل'].includes(currentStatus) &&
+          currentUser?.role !== 'ADMIN' &&
+          !['pending_followup', 'متابعة تلقائي'].includes(currentStatus) && (
             <ApprovalPanel
               title="لوحة اعتماد المسؤول المباشر"
               onApprove={(reason) => changeStatusWithReason('approved', reason)}
@@ -415,20 +419,20 @@ const ManageRequestModal: React.FC<ManageRequestModalProps> = ({
             />
           )}
 
-          {/* سير الموافقات - Approval Chain Tracker */}
-          <ApprovalChainTracker
-            requestType={isClearance 
-              ? ((request as any)?.request_type || 'DEED_CLEARANCE')
-              : ((request as any)?.request_type || 'TECHNICAL_SECTION')}
-            assignedTo={(request as any)?.assigned_to}
-            requestStatus={currentStatus}
-            submittedBy={(request as any)?.submitted_by}
-            createdAt={(request as any)?.created_at}
-            comments={comments}
-          />
+        {/* سير الموافقات - Approval Chain Tracker */}
+        <ApprovalChainTracker
+          requestType={isClearance
+            ? ((request as any)?.request_type || 'DEED_CLEARANCE')
+            : ((request as any)?.request_type || 'TECHNICAL_SECTION')}
+          assignedTo={(request as any)?.assigned_to}
+          requestStatus={currentStatus}
+          submittedBy={(request as any)?.submitted_by}
+          createdAt={(request as any)?.created_at}
+          comments={comments}
+        />
 
-          {/* مراحل سير العمل الفنية (إن وجدت) */}
-          {workflowStages.length > 0 && (
+        {/* مراحل سير العمل الفنية (إن وجدت) */}
+        {workflowStages.length > 0 && (
           <div className="bg-white p-5 rounded-[25px] border border-gray-100 shadow-sm space-y-3">
             <h3 className="font-black text-[#1B2B48] text-sm flex items-center gap-2">
               <GitBranch size={16} className="text-[#E95D22]" />
@@ -436,121 +440,120 @@ const ManageRequestModal: React.FC<ManageRequestModalProps> = ({
             </h3>
             <div className="space-y-3">
               {workflowStages.map((stage: any) => {
-                  const progress = stageProgress.find((p: any) => p.stage_id === stage.id);
-                  const status = progress?.status || 'pending';
-                  
-                  let statusColor = 'bg-gray-300';
-                  let statusText = 'في الانتظار';
-                  let displayTime = null;
-                  
-                  if (status === 'in_progress') {
-                    statusColor = 'bg-blue-500';
-                    statusText = 'قيد التنفيذ';
-                    displayTime = progress?.started_at;
-                  } else if (status === 'completed') {
-                    statusColor = 'bg-green-600';
-                    statusText = 'مكتمل';
-                    displayTime = progress?.completed_at;
-                  }
+                const progress = stageProgress.find((p: any) => p.stage_id === stage.id);
+                const status = progress?.status || 'pending';
 
-                  return (
-                    <div key={stage.id} className="flex items-start gap-3">
-                      <div className={`w-2 h-2 rounded-full ${statusColor} mt-2`} />
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 justify-between">
-                          <div className="flex items-center gap-2">
-                            <p className="text-xs font-black text-[#1B2B48]">{stage.stage_title}</p>
-                            <span className={`text-[9px] px-2 py-0.5 rounded-full ${
-                              status === 'completed' ? 'bg-green-50 text-green-700' :
+                let statusColor = 'bg-gray-300';
+                let statusText = 'في الانتظار';
+                let displayTime = null;
+
+                if (status === 'in_progress') {
+                  statusColor = 'bg-blue-500';
+                  statusText = 'قيد التنفيذ';
+                  displayTime = progress?.started_at;
+                } else if (status === 'completed') {
+                  statusColor = 'bg-green-600';
+                  statusText = 'مكتمل';
+                  displayTime = progress?.completed_at;
+                }
+
+                return (
+                  <div key={stage.id} className="flex items-start gap-3">
+                    <div className={`w-2 h-2 rounded-full ${statusColor} mt-2`} />
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 justify-between">
+                        <div className="flex items-center gap-2">
+                          <p className="text-xs font-black text-[#1B2B48]">{stage.stage_title}</p>
+                          <span className={`text-[9px] px-2 py-0.5 rounded-full ${status === 'completed' ? 'bg-green-50 text-green-700' :
                               status === 'in_progress' ? 'bg-blue-50 text-blue-700' :
-                              'bg-gray-50 text-gray-500'
+                                'bg-gray-50 text-gray-500'
                             } font-bold`}>
-                              {statusText}
-                            </span>
-                          </div>
-                          <button
-                            onClick={() => handleOpenStageUpdate(stage, progress)}
-                            className="p-1 hover:bg-orange-50 rounded-lg transition-colors"
-                            title="تحديث حالة المرحلة"
-                          >
-                            <Edit size={14} className="text-[#E95D22]" />
-                          </button>
+                            {statusText}
+                          </span>
                         </div>
-                        <p className="text-[11px] text-gray-500 font-bold mt-0.5">
-                          المسؤول: {stage.responsible_party}
-                          {stage.platform_name && ` • ${stage.platform_name}`}
-                        </p>
-                        {displayTime && (
-                          <p className="text-[10px] text-gray-400 font-bold mt-0.5" dir="ltr">
-                            {new Date(displayTime).toLocaleString('ar-EG')}
-                          </p>
-                        )}
-                        {progress?.notes && (
-                          <p className="text-[10px] text-gray-600 font-bold mt-1 bg-gray-50 p-2 rounded-lg">
-                            {progress.notes}
-                          </p>
-                        )}
-                        {progress?.completed_by && status === 'completed' && (
-                          <p className="text-[10px] text-green-600 font-bold mt-0.5">
-                            ✓ تم بواسطة: {progress.completed_by}
-                          </p>
-                        )}
+                        <button
+                          onClick={() => handleOpenStageUpdate(stage, progress)}
+                          className="p-1 hover:bg-orange-50 rounded-lg transition-colors"
+                          title="تحديث حالة المرحلة"
+                        >
+                          <Edit size={14} className="text-[#E95D22]" />
+                        </button>
                       </div>
+                      <p className="text-[11px] text-gray-500 font-bold mt-0.5">
+                        المسؤول: {stage.responsible_party}
+                        {stage.platform_name && ` • ${stage.platform_name}`}
+                      </p>
+                      {displayTime && (
+                        <p className="text-[10px] text-gray-400 font-bold mt-0.5" dir="ltr">
+                          {new Date(displayTime).toLocaleString('ar-EG')}
+                        </p>
+                      )}
+                      {progress?.notes && (
+                        <p className="text-[10px] text-gray-600 font-bold mt-1 bg-gray-50 p-2 rounded-lg">
+                          {progress.notes}
+                        </p>
+                      )}
+                      {progress?.completed_by && status === 'completed' && (
+                        <p className="text-[10px] text-green-600 font-bold mt-0.5">
+                          ✓ تم بواسطة: {progress.completed_by}
+                        </p>
+                      )}
                     </div>
-                  );
-                })}
+                  </div>
+                );
+              })}
             </div>
           </div>
-          )}
+        )}
 
         <div className="border-t border-gray-100 pt-6">
-            <h3 className="font-black text-[#1B2B48] mb-4 flex items-center gap-2">
-              <MessageSquare size={18} className="text-[#E95D22]" /> التحديثات والملاحظات
-            </h3>
-            
-            <div className="bg-gray-50 rounded-2xl p-4 h-64 overflow-y-auto space-y-3 mb-4 border border-gray-100 shadow-inner relative custom-scrollbar">
-                {fetchLoading ? (
-                  <div className="h-full flex items-center justify-center">
-                    <Loader2 size={24} className="animate-spin text-blue-500" />
-                  </div>
-                ) : (!comments || comments?.length === 0) ? (
-                  <div className="h-full flex flex-col items-center justify-center opacity-40">
-                    <MessageSquare size={40} className="mb-2 text-gray-400" />
-                    <p className="text-xs font-bold text-gray-400">لا توجد ملاحظات</p>
-                  </div>
-                ) : (
-                  comments?.map((c: any) => (
-                    <div key={c?.id} className={`p-3 rounded-xl shadow-sm max-w-[85%] ${c?.user_name === currentUser?.name ? 'bg-blue-50 mr-auto border border-blue-100' : 'bg-white ml-auto border border-gray-100'}`}>
-                        <div className="flex justify-between items-center mb-1 gap-4">
-                            <span className="font-black text-[10px] text-[#1B2B48]">{c?.user_name}</span>
-                            <div className="flex items-center gap-1 text-[9px] text-gray-400 font-bold">
-                              <span dir="ltr">{c?.created_at ? new Date(c?.created_at).toLocaleTimeString('ar-EG', { hour: '2-digit', minute:'2-digit' }) : ''}</span>
-                            </div>
-                        </div>
-                        <p className="text-xs text-gray-700 font-bold leading-relaxed whitespace-pre-wrap">{c?.content}</p>
-                    </div>
-                  ))
-                )}
-                <div ref={commentsEndRef} />
-            </div>
+          <h3 className="font-black text-[#1B2B48] mb-4 flex items-center gap-2">
+            <MessageSquare size={18} className="text-[#E95D22]" /> التحديثات والملاحظات
+          </h3>
 
-            <div className="flex gap-2 p-2 bg-white rounded-2xl border border-gray-200 focus-within:border-[#E95D22] focus-within:ring-2 focus-within:ring-[#E95D22]/10 transition-all shadow-sm">
-                <input 
-                  value={newComment} 
-                  onChange={e => setNewComment(e.target.value)} 
-                  onKeyDown={e => e.key === 'Enter' && !loading && handleSendComment()} 
-                  placeholder="اكتب ملاحظة أو تحديثاً..." 
-                  className="flex-1 bg-transparent border-none p-2 outline-none text-sm font-bold placeholder:text-gray-300"
-                  disabled={loading}
-                />
-                <button 
-                  onClick={handleSendComment} 
-                  disabled={loading || !newComment.trim()}
-                  className="bg-[#1B2B48] text-white p-3 rounded-xl hover:bg-[#E95D22] transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center"
-                >
-                  {loading ? <Loader2 size={16} className="animate-spin" /> : <Send size={16}/>}
-                </button>
-            </div>
+          <div className="bg-gray-50 rounded-2xl p-4 h-64 overflow-y-auto space-y-3 mb-4 border border-gray-100 shadow-inner relative custom-scrollbar">
+            {fetchLoading ? (
+              <div className="h-full flex items-center justify-center">
+                <Loader2 size={24} className="animate-spin text-blue-500" />
+              </div>
+            ) : (!comments || comments?.length === 0) ? (
+              <div className="h-full flex flex-col items-center justify-center opacity-40">
+                <MessageSquare size={40} className="mb-2 text-gray-400" />
+                <p className="text-xs font-bold text-gray-400">لا توجد ملاحظات</p>
+              </div>
+            ) : (
+              comments?.map((c: any) => (
+                <div key={c?.id} className={`p-3 rounded-xl shadow-sm max-w-[85%] ${c?.user_name === currentUser?.name ? 'bg-blue-50 mr-auto border border-blue-100' : 'bg-white ml-auto border border-gray-100'}`}>
+                  <div className="flex justify-between items-center mb-1 gap-4">
+                    <span className="font-black text-[10px] text-[#1B2B48]">{c?.user_name}</span>
+                    <div className="flex items-center gap-1 text-[9px] text-gray-400 font-bold">
+                      <span dir="ltr">{c?.created_at ? new Date(c?.created_at).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }) : ''}</span>
+                    </div>
+                  </div>
+                  <p className="text-xs text-gray-700 font-bold leading-relaxed whitespace-pre-wrap">{c?.content}</p>
+                </div>
+              ))
+            )}
+            <div ref={commentsEndRef} />
+          </div>
+
+          <div className="flex gap-2 p-2 bg-white rounded-2xl border border-gray-200 focus-within:border-[#E95D22] focus-within:ring-2 focus-within:ring-[#E95D22]/10 transition-all shadow-sm">
+            <input
+              value={newComment}
+              onChange={e => setNewComment(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && !loading && handleSendComment()}
+              placeholder="اكتب ملاحظة أو تحديثاً..."
+              className="flex-1 bg-transparent border-none p-2 outline-none text-sm font-bold placeholder:text-gray-300"
+              disabled={loading}
+            />
+            <button
+              onClick={handleSendComment}
+              disabled={loading || !newComment.trim()}
+              className="bg-[#1B2B48] text-white p-3 rounded-xl hover:bg-[#E95D22] transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center"
+            >
+              {loading ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
+            </button>
+          </div>
         </div>
 
         {/* modal تحديث المرحلة */}
@@ -562,7 +565,7 @@ const ManageRequestModal: React.FC<ManageRequestModalProps> = ({
           currentUserName={currentUser?.name || 'مستخدم'}
           currentUserEmail={currentUser?.email || ''}
           onUpdate={() => {
-            const requestTypeCode = isClearance 
+            const requestTypeCode = isClearance
               ? (request as any).request_type || 'DEED_CLEARANCE'
               : 'TECHNICAL_SECTION';
             fetchWorkflowProgress(requestTypeCode, request?.id || 0);
