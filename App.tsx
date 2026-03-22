@@ -1,5 +1,4 @@
-﻿
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+﻿import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Routes, Route, useNavigate, useLocation, useParams, Navigate } from 'react-router-dom';
 import {
   AlertTriangle, Loader2, Plus,
@@ -882,8 +881,10 @@ const ProjectDetailWrapper = ({ projects = [], currentUser }: any) => {
                     </span>
                   )}
                   {work.expected_completion_date && (() => {
-                    const today = new Date(); today.setHours(0, 0, 0, 0);
-                    const target = new Date(work.expected_completion_date); target.setHours(0, 0, 0, 0);
+                    const today = new Date();
+                    today.setHours(0, 0, 0, 0);
+                    const target = new Date(work.expected_completion_date);
+                    target.setHours(0, 0, 0, 0);
                     const diffDays = Math.ceil((target.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
                     const isCompleted = work.status === 'completed';
                     const isOverdue = diffDays < 0 && !isCompleted;
@@ -1179,193 +1180,37 @@ const ProjectDetailWrapper = ({ projects = [], currentUser }: any) => {
               </div>
             )}
             {/* تعديل/إضافة تاريخ الإنجاز المتوقع — للمدير و PR */}
-            {isManager && selectedWork.status !== 'completed' && (() => {
-              const hasDate = !!selectedWork.expected_completion_date;
-              const isOverdueNow = hasDate && (() => {
-                const today = new Date(); today.setHours(0, 0, 0, 0);
-                const target = new Date(selectedWork.expected_completion_date!); target.setHours(0, 0, 0, 0);
-                return target < today;
-              })();
-              const overdueDays = isOverdueNow ? (() => {
-                const today = new Date(); today.setHours(0, 0, 0, 0);
-                const target = new Date(selectedWork.expected_completion_date!); target.setHours(0, 0, 0, 0);
-                return Math.abs(Math.ceil((target.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)));
-              })() : 0;
-
-              // ─── حفظ تاريخ جديد مع إشعارات ───
-              const handleSaveDate = async (date: string, justification?: string) => {
-                if (!date) return;
-                setIsSavingDeadline(true);
-                try {
-                  // حفظ في قاعدة البيانات
-                  const { error } = await supabase.from('project_works').update({ expected_completion_date: date }).eq('id', selectedWork.id);
-                  if (error && !error.message?.includes('schema cache')) throw error;
-
-                  const dateStr = new Date(date).toLocaleDateString('ar-EG');
-                  const projectName = project?.name || selectedWork.project_name || 'مشروع';
-
-                  // تسجيل كتعليق (يحفظ دائماً حتى لو الأعمدة غير موجودة)
-                  const commentContent = justification
-                    ? `⚠️📅 تبرير التأخير — ${selectedWork.task_name}\nالموعد السابق: ${new Date(selectedWork.expected_completion_date!).toLocaleDateString('ar-EG')}\nالموعد الجديد: ${dateStr}\n📝 السبب: ${justification}`
-                    : `📅 تم تسجيل تاريخ الإنجاز المتوقع: ${dateStr}`;
-
-                  await supabase.from('work_comments').insert({
-                    work_id: selectedWork.id,
-                    user_name: currentUser?.name || 'النظام',
-                    content: commentContent
-                  });
-
-                  // إرسال إشعارات
-                  const handlerInfo = selectedWork.current_handler ? ` (لدى @${selectedWork.current_handler})` : '';
-                  const notification = justification
-                    ? `⚠️ تبرير التأخير: "${selectedWork.task_name}" في ${projectName}${handlerInfo}\nالموعد الجديد: ${dateStr}\nالسبب: ${justification}`
-                    : `📅 تم تحديد موعد إنجاز "${selectedWork.task_name}"${handlerInfo}: ${dateStr}`;
-
-                  activityLogService.log({ userId: currentUser?.id || '', userName: currentUser?.name || '', userRole: currentUser?.role || '', actionType: justification ? 'justify_delay' : 'deadline_change', entityType: 'work', entityId: String(selectedWork.id), entityName: selectedWork.task_name, description: justification ? `تبرير تأخير "${selectedWork.task_name}": ${justification}` : `تحديد موعد إنجاز "${selectedWork.task_name}": ${dateStr}`, oldValue: { expected_completion_date: selectedWork.expected_completion_date }, newValue: { expected_completion_date: date }, metadata: { projectName, justification } });
-
-                  // إشعار المدير والعلاقات العامة
-                  notificationService.send(['ADMIN', 'PR_MANAGER'], notification, `/projects/${id}`, currentUser?.name);
-
-                  // إشعار الموظف المُسند إليه
-                  if (selectedWork.assigned_to) {
-                    notificationService.send('TECHNICAL', notification, `/projects/${id}`, currentUser?.name);
-                    notificationService.send('CONVEYANCE', notification, `/projects/${id}`, currentUser?.name);
-                  }
-
-                  setSelectedWork({ ...selectedWork, expected_completion_date: date });
-                  setShowJustificationForm(false);
-                  setJustificationText('');
-                  setNewDeadlineDate('');
-                  setLocalWorksFetched(false);
-                  fetchWorkComments(selectedWork.id);
-                  refreshData();
-                } catch (err: any) {
-                  alert('فشل حفظ التاريخ: ' + err.message);
-                } finally {
-                  setIsSavingDeadline(false);
-                }
-              };
-
-              return (
-                <div className="space-y-3">
-                  {/* ─── تحذير فوري للأعمال المتأخرة ─── */}
-                  {isOverdueNow && !showJustificationForm && (
-                    <div className="bg-red-500/10 border-2 border-red-400 p-4 rounded-2xl animate-pulse">
-                      <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center gap-2">
-                          <div className="w-8 h-8 bg-red-500 rounded-lg flex items-center justify-center">
-                            <AlertCircle size={18} className="text-white" />
-                          </div>
-                          <div>
-                            <h4 className="font-black text-sm text-red-700">⚠️ هذا العمل متأخر عن الموعد!</h4>
-                            <p className="text-[10px] font-bold text-red-500">
-                              الموعد المحدد: {new Date(selectedWork.expected_completion_date!).toLocaleDateString('ar-EG')} — متأخر {overdueDays} يوم
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => { setShowJustificationForm(true); setNewDeadlineDate(''); setJustificationText(''); }}
-                        className="w-full py-3 bg-red-600 text-white rounded-xl font-black text-sm flex items-center justify-center gap-2 hover:bg-red-700 transition-colors shadow-lg shadow-red-200"
-                      >
-                        <FileWarning size={16} /> تقديم مبرر التأخير وتحديد موعد جديد
-                      </button>
-                    </div>
-                  )}
-
-                  {/* ─── الحالة العادية: تعيين/تعديل تاريخ (غير متأخر) ─── */}
-                  {!isOverdueNow && !showJustificationForm && (
-                    <div className="bg-gray-50 p-4 rounded-2xl border">
-                      <div className="flex items-center gap-3 mb-3">
-                        <Calendar size={16} className="text-[#E95D22] flex-shrink-0" />
-                        <label className="text-xs font-black text-gray-500">{hasDate ? 'تعديل تاريخ الإنجاز المتوقع:' : 'تحديد تاريخ الإنجاز المتوقع:'}</label>
-                      </div>
-                      <input
-                        type="date"
-                        title="تاريخ الإنجاز المتوقع"
-                        className="w-full p-2.5 bg-white border rounded-xl font-bold text-sm outline-none focus:border-[#E95D22]"
-                        value={selectedWork.expected_completion_date || ''}
-                        min={new Date().toISOString().split('T')[0]}
-                        onChange={(e) => handleSaveDate(e.target.value)}
-                      />
-                    </div>
-                  )}
-
-                  {/* ─── نموذج تبرير التأخير (يفتح تلقائياً للأعمال المتأخرة) ─── */}
-                  {showJustificationForm && (
-                    <div className="bg-red-50 p-5 rounded-2xl border-2 border-red-300 space-y-4 shadow-lg shadow-red-100/50">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <div className="w-8 h-8 bg-red-500 rounded-lg flex items-center justify-center">
-                            <FileWarning size={16} className="text-white" />
-                          </div>
-                          <h4 className="font-black text-sm text-red-700">تبرير التأخير وتحديث الموعد</h4>
-                        </div>
-                        <button onClick={() => { setShowJustificationForm(false); setJustificationText(''); setNewDeadlineDate(''); }}
-                          className="text-gray-400 hover:text-red-500 font-bold text-lg transition-colors">
-                          ✕
-                        </button>
-                      </div>
-
-                      {hasDate && (
-                        <div className="bg-white p-3 rounded-xl border border-red-200 flex items-center gap-3">
-                          <Timer size={16} className="text-red-500 flex-shrink-0" />
-                          <div>
-                            <p className="text-[10px] text-red-500 font-black">الموعد السابق (متأخر {overdueDays} يوم):</p>
-                            <p className="font-bold text-sm text-red-700">{new Date(selectedWork.expected_completion_date!).toLocaleDateString('ar-EG')}</p>
-                          </div>
-                        </div>
-                      )}
-
-                      <div>
-                        <label className="text-xs font-black text-gray-600 mb-1.5 block">📝 سبب التأخير <span className="text-red-500">*</span></label>
-                        <textarea
-                          className="w-full p-3 bg-white border-2 border-red-200 rounded-xl font-bold text-sm outline-none focus:border-red-400 resize-none"
-                          rows={3}
-                          placeholder="اكتب سبب التأخير بالتفصيل..."
-                          value={justificationText}
-                          onChange={(e) => setJustificationText(e.target.value)}
-                          autoFocus
-                        />
-                      </div>
-
-                      <div>
-                        <label className="text-xs font-black text-gray-600 mb-1.5 block">📅 التاريخ الجديد المتوقع <span className="text-red-500">*</span></label>
-                        <input
-                          type="date"
-                          title="التاريخ الجديد المتوقع"
-                          className="w-full p-2.5 bg-white border-2 border-red-200 rounded-xl font-bold text-sm outline-none focus:border-red-400"
-                          value={newDeadlineDate}
-                          min={new Date().toISOString().split('T')[0]}
-                          onChange={(e) => setNewDeadlineDate(e.target.value)}
-                        />
-                      </div>
-
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => {
-                            if (!justificationText.trim()) { alert('يرجى كتابة سبب التأخير'); return; }
-                            if (!newDeadlineDate) { alert('يرجى تحديد التاريخ الجديد'); return; }
-                            handleSaveDate(newDeadlineDate, justificationText.trim());
-                          }}
-                          disabled={isSavingDeadline || !justificationText.trim() || !newDeadlineDate}
-                          className="flex-1 py-3 bg-[#1B2B48] text-white rounded-xl font-black text-sm flex items-center justify-center gap-2 hover:bg-[#243a5e] transition-colors disabled:opacity-50"
-                        >
-                          {isSavingDeadline ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />}
-                          حفظ التبرير والتاريخ الجديد
-                        </button>
-                        <button
-                          onClick={() => { setShowJustificationForm(false); setJustificationText(''); setNewDeadlineDate(''); }}
-                          className="px-4 py-3 bg-gray-200 text-gray-600 rounded-xl font-black text-sm hover:bg-gray-300 transition-colors"
-                        >
-                          إلغاء
-                        </button>
-                      </div>
-                    </div>
-                  )}
+            {isManager && selectedWork.status !== 'completed' && (
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-xs font-black text-gray-500 mb-2 flex items-center gap-1">
+                    <Calendar size={14} className="text-[#E95D22]" /> تعديل تاريخ الإنجاز المتوقع
+                  </label>
+                  <input
+                    type="date"
+                    className="w-full p-4 bg-gray-50 rounded-2xl border outline-none font-bold text-sm focus:border-[#E95D22]"
+                    value={newDeadlineDate || selectedWork.expected_completion_date || ''}
+                    onChange={e => setNewDeadlineDate(e.target.value)}
+                    min={new Date().toISOString().split('T')[0]}
+                  />
                 </div>
-              );
-            })()}
+                <div>
+                  <textarea
+                    className="w-full p-3 bg-white border rounded-xl font-bold text-sm outline-none min-h-[60px]"
+                    placeholder="سبب التمديد (اختياري)"
+                    value={justificationText}
+                    onChange={e => setJustificationText(e.target.value)}
+                  />
+                </div>
+                <button
+                  onClick={() => handleSaveDate(newDeadlineDate, justificationText)}
+                  disabled={!newDeadlineDate || isSavingDeadline}
+                >
+                  {isSavingDeadline ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />}
+                  حفظ التبرير والتاريخ الجديد
+                </button>
+              </div>
+            )}
             {isManager && (
               <div className="flex gap-2">
                 {selectedWork.status !== 'completed' ? (

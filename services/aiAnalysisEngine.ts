@@ -202,7 +202,8 @@ export const analyzeBottlenecks = (
   // فحص الطلبات الفنية
   (technicalRequests || []).forEach(req => {
     if (isCompleted(req.status)) return;
-    const lastUpdate = req.updated_at || req.created_at;
+    // استخدم followup_extended_at إذا كان موجودًا
+    const lastUpdate = (req as any).followup_extended_at || req.updated_at || req.created_at;
     const hours = hoursSince(lastUpdate);
 
     if (hours >= BOTTLENECK_THRESHOLD_HOURS) {
@@ -227,7 +228,7 @@ export const analyzeBottlenecks = (
   // فحص طلبات الإفراغ
   (clearanceRequests || []).forEach((req: any) => {
     if (isCompleted(req.status)) return;
-    const lastUpdate = req.updated_at || req.created_at;
+    const lastUpdate = req.followup_extended_at || req.updated_at || req.created_at;
     const hours = hoursSince(lastUpdate);
 
     if (hours >= BOTTLENECK_THRESHOLD_HOURS) {

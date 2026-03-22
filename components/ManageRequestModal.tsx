@@ -239,9 +239,64 @@ const ManageRequestModal: React.FC<ManageRequestModalProps> = ({
   const isDirectApprover = canApproveWorkflowRequest(currentUser?.name, (request as TechnicalRequest)?.assigned_to, currentUser?.email, currentUser?.role);
   const statusInfo = getStatusInfo(currentStatus);
 
+  // حساب الفرق بالساعات بين الآن وآخر تحديث أو إنشاء
+  function hoursSinceLastUpdate() {
+    if (!request) return 0;
+    const updatedAt = (request as any)?.updated_at || (request as any)?.created_at;
+    if (!updatedAt) return 0;
+    const last = new Date(updatedAt).getTime();
+    const now = Date.now();
+    return (now - last) / (1000 * 60 * 60);
+  }
+
+  // زر تمديد المتابعة
+  const showFollowupButton = hoursSinceLastUpdate() >= 48 && !['متابعة', 'pending_followup', 'متابعة تلقائي'].includes(currentStatus);
+
+  const handleManualFollowup = async () => {
+    if (!request?.id) return;
+    setLoading(true);
+    try {
+      // تحديث حالة الطلب
+      await onUpdateStatus('متابعة', 'تم تمديد المتابعة يدويًا من قبل المستخدم بعد مرور أكثر من يومين بدون تحديث.');
+      setCurrentStatus('متابعة');
+      // تحديث حقل followup_extended_at في قاعدة البيانات
+      await supabase
+        .from(requestType === 'technical' ? 'technical_requests' : 'deeds_requests')
+        .update({ followup_extended_at: new Date().toISOString() })
+        .eq('id', request.id);
+      // إضافة تعليق توضيحي
+      await supabase.from('request_comments').insert([
+        {
+          request_id: request.id,
+          request_type: requestType,
+          user_name: currentUser?.name || currentUser?.email,
+          content: 'تم تمديد المتابعة يدويًا من قبل المستخدم بعد مرور أكثر من يومين بدون تحديث.'
+        }
+      ]);
+      await fetchComments();
+    } catch (err) {
+      // يمكن إضافة إشعار خطأ هنا
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="تفاصيل ومتابعة الطلب">
       <div className="space-y-6 text-right font-cairo overflow-visible">
+
+        {/* زر تمديد المتابعة */}
+        {showFollowupButton && (
+          <div className="flex justify-center mb-2">
+            <button
+              className="bg-blue-600 hover:bg-blue-800 text-white font-bold py-2 px-6 rounded-xl shadow transition-all disabled:opacity-50"
+              onClick={handleManualFollowup}
+              disabled={loading}
+            >
+              تمديد المتابعة ⏳
+            </button>
+          </div>
+        )}
 
         <div className={`p-5 rounded-[25px] border shadow-sm transition-all duration-300 ${statusInfo.color}`}>
           <div className="flex justify-between items-center">
