@@ -1266,7 +1266,7 @@ export const processSmartQuery = (
   if (query.includes('موظف') || query.includes('اداء') || query.includes('عبء') || query.includes('شغل') || query.includes('عمل')) {
     // محاولة استخراج اسم الموظف من الاستعلام
     const workloads = analyzeEmployeeWorkload(technicalRequests, clearanceRequests, appUsers);
-    
+
     // البحث عن اسم موظف في الاستعلام
     const matchedEmployee = workloads.find(w => {
       const empNorm = normalizeText(w.name);

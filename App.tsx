@@ -893,9 +893,9 @@ const ProjectDetailWrapper = ({ projects = [], currentUser }: any) => {
                     const dateStr = target.toLocaleDateString('ar-EG');
                     return (
                       <span className={`px-3 py-1.5 rounded-xl font-black text-[10px] flex items-center gap-1.5 border ${isCompleted ? 'bg-green-50 text-green-600 border-green-200' :
-                          isOverdue ? 'bg-red-50 text-red-600 border-red-300' :
-                            isNear ? 'bg-amber-50 text-amber-600 border-amber-200' :
-                              'bg-blue-50 text-blue-600 border-blue-200'
+                        isOverdue ? 'bg-red-50 text-red-600 border-red-300' :
+                          isNear ? 'bg-amber-50 text-amber-600 border-amber-200' :
+                            'bg-blue-50 text-blue-600 border-blue-200'
                         }`}>
                         {isOverdue ? <AlertCircle size={11} /> : isNear ? <Timer size={11} /> : <Calendar size={11} />}
                         <span>{dateStr}</span>
@@ -999,24 +999,24 @@ const ProjectDetailWrapper = ({ projects = [], currentUser }: any) => {
               const isNear = diffDays >= 0 && diffDays <= 3 && !isCompleted;
               return (
                 <div className={`p-4 rounded-2xl border flex items-center justify-between ${isCompleted ? 'bg-green-50 border-green-200' :
-                    isOverdue ? 'bg-red-50 border-red-300' :
-                      isNear ? 'bg-amber-50 border-amber-200' :
-                        'bg-blue-50 border-blue-200'
+                  isOverdue ? 'bg-red-50 border-red-300' :
+                    isNear ? 'bg-amber-50 border-amber-200' :
+                      'bg-blue-50 border-blue-200'
                   }`}>
                   <div className="flex items-center gap-3">
                     <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${isCompleted ? 'bg-green-100' :
-                        isOverdue ? 'bg-red-100' : isNear ? 'bg-amber-100' : 'bg-blue-100'
+                      isOverdue ? 'bg-red-100' : isNear ? 'bg-amber-100' : 'bg-blue-100'
                       }`}>
                       {isOverdue ? <AlertCircle size={18} className="text-red-600" /> : <Calendar size={18} className={isCompleted ? 'text-green-600' : isNear ? 'text-amber-600' : 'text-blue-600'} />}
                     </div>
                     <div>
                       <p className={`font-black text-sm ${isCompleted ? 'text-green-700' :
-                          isOverdue ? 'text-red-700' : isNear ? 'text-amber-700' : 'text-blue-700'
+                        isOverdue ? 'text-red-700' : isNear ? 'text-amber-700' : 'text-blue-700'
                         }`}>
                         تاريخ الإنجاز المتوقع: {new Date(selectedWork.expected_completion_date).toLocaleDateString('ar-EG')}
                       </p>
                       <p className={`text-[10px] font-bold ${isCompleted ? 'text-green-500' :
-                          isOverdue ? 'text-red-500' : isNear ? 'text-amber-500' : 'text-gray-400'
+                        isOverdue ? 'text-red-500' : isNear ? 'text-amber-500' : 'text-gray-400'
                         }`}>
                         {isCompleted ? 'تم الإنجاز ✅' :
                           isOverdue ? `⚠️ متأخر ${Math.abs(diffDays)} يوم` :
@@ -1037,8 +1037,8 @@ const ProjectDetailWrapper = ({ projects = [], currentUser }: any) => {
             {selectedWork.current_handler && (
               <div className="space-y-3">
                 <div className={`p-4 rounded-2xl border ${selectedWork.handler_status === 'completed'
-                    ? 'bg-green-50 border-green-200'
-                    : 'bg-purple-50 border-purple-200'
+                  ? 'bg-green-50 border-green-200'
+                  : 'bg-purple-50 border-purple-200'
                   }`}>
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-3">
